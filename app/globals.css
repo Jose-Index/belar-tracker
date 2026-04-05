@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+:root {
+  --et: #2EA543;
+  --xt: #E4002B;
+  --ib: #FF6600;
+  --bc: #F7931A;
+  --to: #4ECDC4;
+  --gr: #2ecc8a;
+  --re: #e05555;
+  --am: #e8a030;
+  --bl: #4a8fd4;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Courier New', monospace;
+  font-size: 13px;
+  background: #0d0f11;
+  color: #f0f2f5;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #2f3540; border-radius: 2px; }
+
+/* Animaciones */
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
