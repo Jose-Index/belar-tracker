@@ -2,28 +2,20 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --etoro: #2EA543;
-  --xtb: #E4002B;
-  --ibkr: #FF6600;
-  --btc: #F7931A;
-  --gain: #16a34a;
-  --loss: #dc2626;
-}
-
-* {
-  box-sizing: border-box;
-}
-
+/* Base */
 body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
   background: #f8fafc;
   color: #1e293b;
-  -webkit-font-smoothing: antialiased;
+  font-size: 14px;
 }
 
+/* Mono font */
+.font-mono { font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace; }
+
 /* Scrollbar */
-::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
@@ -35,34 +27,40 @@ body {
 }
 
 .ticker-track {
-  animation: ticker-scroll 40s linear infinite;
+  animation: ticker-scroll 45s linear infinite;
   width: max-content;
   will-change: transform;
 }
+.ticker-track:hover { animation-play-state: paused; }
 
-.ticker-track:hover {
-  animation-play-state: paused;
+/* Section titles */
+.section-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #334155;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
-
-.ticker-track:hover {
-  animation-play-state: paused;
+.section-title::before {
+  content: '';
+  width: 3px;
+  height: 16px;
+  background: #22c55e;
+  border-radius: 2px;
+  flex-shrink: 0;
 }
 
 /* Card hover */
-.card-hover {
-  transition: box-shadow 0.2s, transform 0.15s;
-}
-.card-hover:hover {
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-  transform: translateY(-1px);
-}
+.card-hover { transition: box-shadow 0.15s, transform 0.15s; }
+.card-hover:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.06); transform: translateY(-1px); }
 
-/* Sparkline container */
-.sparkline-container {
-  height: 32px;
-  display: flex;
-  align-items: flex-end;
-  gap: 1px;
+/* Section containers */
+.bg-white.rounded-xl {
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
 
 /* Platform badge */
@@ -71,32 +69,24 @@ body {
   align-items: center;
   padding: 2px 8px;
   border-radius: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 /* Input styling */
 input[type="number"]::-webkit-inner-spin-button,
-input[type="number"]::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
+input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 input[type="number"] { -moz-appearance: textfield; }
-
-/* Section containers */
-.bg-white {
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02);
-}
 
 /* Table */
 .belar-table th {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 10px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   color: #64748b;
-  padding: 10px 14px;
+  padding: 8px 12px;
   border-bottom: 2px solid #e2e8f0;
   text-align: left;
   white-space: nowrap;
@@ -104,34 +94,27 @@ input[type="number"] { -moz-appearance: textfield; }
 }
 
 .belar-table td {
-  padding: 10px 14px;
+  padding: 8px 12px;
   border-bottom: 1px solid #f1f5f9;
-  font-size: 13px;
+  font-size: 12px;
   color: #1e293b;
+  white-space: nowrap;
 }
 
-.belar-table tr:hover td {
-  background: #f1f5f9;
+.belar-table tbody tr:hover td { background: #f8fafc; }
+
+.belar-table tfoot td {
+  padding: 10px 12px;
+  font-size: 12px;
 }
 
-/* Section */
-.section-title {
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #475569;
-  margin-bottom: 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
+/* Color utilities */
+.text-gain { color: #16a34a; }
+.text-loss { color: #dc2626; }
 
-.section-title::before {
-  content: '';
-  width: 3px;
-  height: 16px;
-  background: var(--etoro);
-  border-radius: 2px;
+/* Loading pulse */
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
-
+.animate-pulse { animation: pulse-slow 2s ease-in-out infinite; }

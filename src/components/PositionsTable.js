@@ -1,9 +1,51 @@
 'use client'
 import { BROKER_COLORS, BROKER_NAMES, CLASS_COLORS, formatCurrency, pnlColor } from '@/lib/constants'
 
-function getFavicon(ticker) {
-  const clean = ticker.replace('.L','').replace('.MC','').toLowerCase()
-  return `https://www.google.com/s2/favicons?domain=${clean}.com&sz=32`
+// Manual favicon mapping for tickers where auto-detection fails
+const FAVICON_MAP = {
+  'AROC': 'https://logo.clearbit.com/archrock.com',
+  'FIX': 'https://logo.clearbit.com/comfortSystemsusa.com',
+  'IAU': 'https://logo.clearbit.com/ishares.com',
+  'NEM': 'https://logo.clearbit.com/newmont.com',
+  'SHELL.L': 'https://logo.clearbit.com/shell.com',
+  'Thomaspj': null, // CopyTrader - no favicon, use initials
+  'DVN': 'https://logo.clearbit.com/devonenergy.com',
+  'DIA': 'https://logo.clearbit.com/spdr.com',
+  'EOG': 'https://logo.clearbit.com/eogresources.com',
+  'ICE': 'https://logo.clearbit.com/theice.com',
+  'CME': 'https://logo.clearbit.com/cmegroup.com',
+  'HWM': 'https://logo.clearbit.com/howmet.com',
+  'ROST': 'https://logo.clearbit.com/rossstores.com',
+  'MOD': 'https://logo.clearbit.com/modinesolutions.com',
+  'NOC': 'https://logo.clearbit.com/northropgrumman.com',
+  'GD': 'https://logo.clearbit.com/gd.com',
+  'AVGO': 'https://logo.clearbit.com/broadcom.com',
+  'MU': 'https://logo.clearbit.com/micron.com',
+}
+
+function TickerIcon({ ticker }) {
+  const url = FAVICON_MAP[ticker]
+  if (url === null) {
+    // Show initials badge for CopyTraders
+    return (
+      <div className="w-5 h-5 rounded-md bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center">
+        <span className="text-[8px] font-bold text-white leading-none">{ticker.substring(0, 2).toUpperCase()}</span>
+      </div>
+    )
+  }
+  const src = url || `https://logo.clearbit.com/${ticker.toLowerCase().replace('.l','')}.com`
+  return (
+    <img src={src} alt="" className="w-5 h-5 rounded-md bg-slate-100"
+      onError={e => {
+        // Fallback to Google favicon
+        if (!e.target.dataset.fallback) {
+          e.target.dataset.fallback = '1'
+          e.target.src = `https://www.google.com/s2/favicons?domain=${ticker.toLowerCase()}.com&sz=64`
+        } else {
+          e.target.style.display = 'none'
+        }
+      }} />
+  )
 }
 
 export default function PositionsTable({ positions }) {
@@ -31,7 +73,7 @@ export default function PositionsTable({ positions }) {
         <span className="text-[10px] text-slate-400 font-mono">{sorted.length} posiciones · {formatCurrency(totalValue)}</span>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full belar-table" style={{ minWidth: 820 }}>
+        <table className="w-full belar-table" style={{ minWidth: 860 }}>
           <thead>
             <tr>
               <th>Activo</th>
@@ -41,7 +83,7 @@ export default function PositionsTable({ positions }) {
               <th className="text-right">Valor</th>
               <th className="text-right">G/P $</th>
               <th className="text-right">G/P %</th>
-              <th className="text-right" style={{fontSize:9}}>%/d</th>
+              <th className="text-right" title="Rendimiento diario"><span className="text-[8px]">%/D</span></th>
               <th>Clase</th>
               <th className="text-right">Peso</th>
             </tr>
@@ -60,11 +102,10 @@ export default function PositionsTable({ positions }) {
               const classColor = CLASS_COLORS[p.class] || '#6b7280'
 
               return (
-                <tr key={p.id} className="hover:bg-slate-50/80">
+                <tr key={p.id}>
                   <td>
-                    <div className="flex items-center gap-2">
-                      <img src={getFavicon(p.ticker)} alt="" className="w-4 h-4 rounded-sm"
-                        onError={e => { e.target.style.display = 'none' }} />
+                    <div className="flex items-center gap-2.5">
+                      <TickerIcon ticker={p.ticker} />
                       <span className="font-bold text-slate-800 text-[13px]">{p.ticker}</span>
                     </div>
                   </td>
@@ -76,7 +117,7 @@ export default function PositionsTable({ positions }) {
                   <td className="text-slate-500 font-mono text-[11px]">
                     {entry.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
                   </td>
-                  <td className="text-right font-mono text-[12px] text-slate-600">{formatCurrency(invested)}</td>
+                  <td className="text-right font-mono text-[12px] text-slate-500">{formatCurrency(invested)}</td>
                   <td className="text-right font-mono text-[13px] font-bold text-slate-800">{formatCurrency(value)}</td>
                   <td className={`text-right font-mono text-[12px] font-semibold ${pnlColor(pnl)}`}>
                     {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}
@@ -101,8 +142,8 @@ export default function PositionsTable({ positions }) {
           <tfoot>
             <tr className="bg-slate-50 border-t-2 border-slate-200">
               <td colSpan={3} className="text-[11px] text-slate-500 font-semibold">{sorted.length} posiciones</td>
-              <td className="text-right font-mono text-[12px] font-semibold">{formatCurrency(totalInvested)}</td>
-              <td className="text-right font-mono text-[13px] font-bold">{formatCurrency(totalValue)}</td>
+              <td className="text-right font-mono text-[12px] font-semibold text-slate-600">{formatCurrency(totalInvested)}</td>
+              <td className="text-right font-mono text-[13px] font-bold text-slate-800">{formatCurrency(totalValue)}</td>
               <td className={`text-right font-mono text-[12px] font-bold ${pnlColor(totalPnl)}`}>
                 {totalPnl >= 0 ? '+' : ''}{formatCurrency(totalPnl)}
               </td>
