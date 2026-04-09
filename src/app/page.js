@@ -113,16 +113,16 @@ export default function Dashboard() {
           <CapitalCards snapshots={data.snapshots} brokers={data.brokers} wallets={data.wallets} onUpdateValues={handleUpdateValues} btcPrice={btcPrice} />
           <EvolutionChart snapshots={data.snapshots} />
           <PositionsTable positions={data.positions} />
+          <ResultsSummary snapshots={data.snapshots} contributions={data.contributions} />
         </>}
 
         {/* ─── HISTÓRICO TAB ─── */}
         {tab === 'historico' && <>
-          <ResultsSummary snapshots={data.snapshots} contributions={data.contributions} />
+          <YearlyResults results={data.yearlyResults} />
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
             <WeeklyHistory snapshots={data.snapshots} />
             <ContributionsTable contributions={data.contributions} onRefresh={fetchAll} />
           </div>
-          <YearlyResults results={data.yearlyResults} />
         </>}
 
         {/* ─── RADAR TAB ─── */}
