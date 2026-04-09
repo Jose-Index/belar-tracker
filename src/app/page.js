@@ -87,7 +87,17 @@ export default function Dashboard() {
       alert('Esta semana ya está cerrada.')
       return
     }
+    // Save weekly snapshot
     await supabase.from('weekly_snapshots').insert({ week_date: weekDate, year: saturday.getFullYear(), data: latest.data, total_usd: latest.total_usd })
+    // Save position history for future sparklines
+    if (data.positions.length > 0) {
+      const posSnaps = data.positions.map(p => ({
+        position_id: p.id, week_date: weekDate,
+        value: Number(p.current_value || p.invested),
+        invested: Number(p.invested),
+      }))
+      await supabase.from('position_history').insert(posSnaps).catch(() => {})
+    }
     fetchAll()
   }
 

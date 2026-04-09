@@ -106,7 +106,13 @@ export default function PositionsTable({ positions }) {
                   <td>
                     <div className="flex items-center gap-2.5">
                       <TickerIcon ticker={p.ticker} />
-                      <span className="font-bold text-slate-800 text-[13px]">{p.ticker}</span>
+                      <div>
+                        <span className="font-bold text-slate-800 text-[13px] block">{p.ticker}</span>
+                        <div className="w-16 h-1 bg-slate-100 rounded-full mt-1 overflow-hidden">
+                          <div className={`h-full rounded-full ${pct >= 0 ? 'bg-green-400' : 'bg-red-400'}`}
+                            style={{ width: `${Math.min(100, Math.abs(pct * 100) * 3)}%` }} />
+                        </div>
+                      </div>
                     </div>
                   </td>
                   <td>
