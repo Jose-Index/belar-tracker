@@ -128,3 +128,16 @@ input[type="number"] { -moz-appearance: textfield; }
   background: var(--etoro);
   border-radius: 2px;
 }
+
+/* Ticker scroll - truly cyclical */
+@keyframes ticker-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-33.333%); }
+}
+.ticker-track {
+  animation: ticker-scroll 25s linear infinite;
+  width: max-content;
+}
+.ticker-track:hover {
+  animation-play-state: paused;
+}

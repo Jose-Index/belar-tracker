@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { EVENT_TYPES, formatCurrency, formatPct, pnlColor } from '@/lib/constants'
+import { EVENT_TYPES, formatCurrency, pnlColor, BROKER_COLORS, BROKER_NAMES } from '@/lib/constants'
 import { supabase } from '@/lib/supabase'
 
 // ─── CALENDAR ────────────────────────────
@@ -22,37 +22,35 @@ export function CalendarView({ events, onRefresh }) {
     <div className="bg-white rounded-xl border border-slate-200 p-5">
       <div className="flex items-center justify-between mb-3">
         <div className="section-title !mb-0">Calendario de Vigilancia</div>
-        <button onClick={() => setShowAdd(!showAdd)} className="text-xs text-etoro font-semibold hover:underline">
+        <button onClick={() => setShowAdd(!showAdd)} className="text-[10px] font-bold text-etoro border border-green-200 px-2.5 py-1 rounded-md hover:bg-green-50 transition">
           {showAdd ? 'Cancelar' : '+ Evento'}
         </button>
       </div>
-
       {showAdd && (
-        <div className="flex flex-wrap gap-2 mb-4 p-3 bg-slate-50 rounded-lg">
-          <input type="date" className="px-2 py-1 border rounded text-xs" value={form.date} onChange={e => setForm({...form, date: e.target.value})} />
-          <select className="px-2 py-1 border rounded text-xs" value={form.event_type} onChange={e => setForm({...form, event_type: e.target.value})}>
+        <div className="flex flex-wrap gap-2 mb-4 p-3 bg-slate-50 rounded-lg border border-slate-100">
+          <input type="date" className="px-2 py-1.5 border border-slate-200 rounded-md text-xs outline-none focus:border-green-400" value={form.date} onChange={e => setForm({...form, date: e.target.value})} />
+          <select className="px-2 py-1.5 border border-slate-200 rounded-md text-xs outline-none" value={form.event_type} onChange={e => setForm({...form, event_type: e.target.value})}>
             {Object.entries(EVENT_TYPES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
           </select>
-          <input type="text" placeholder="Ticker" className="w-16 px-2 py-1 border rounded text-xs font-mono uppercase" value={form.ticker} onChange={e => setForm({...form, ticker: e.target.value.toUpperCase()})} />
-          <input type="text" placeholder="Descripción" className="flex-1 min-w-[150px] px-2 py-1 border rounded text-xs" value={form.title} onChange={e => setForm({...form, title: e.target.value})} />
-          <button onClick={handleAdd} className="px-3 py-1 bg-etoro text-white text-xs rounded font-semibold">Guardar</button>
+          <input type="text" placeholder="Ticker" className="w-16 px-2 py-1.5 border border-slate-200 rounded-md text-xs font-mono uppercase outline-none focus:border-green-400" value={form.ticker} onChange={e => setForm({...form, ticker: e.target.value.toUpperCase()})} />
+          <input type="text" placeholder="Descripción" className="flex-1 min-w-[180px] px-2 py-1.5 border border-slate-200 rounded-md text-xs outline-none focus:border-green-400" value={form.title} onChange={e => setForm({...form, title: e.target.value})} />
+          <button onClick={handleAdd} className="px-3 py-1.5 bg-etoro text-white text-[10px] font-bold rounded-md">Guardar</button>
         </div>
       )}
-
-      <div className="space-y-1.5">
-        {upcoming.length === 0 && <p className="text-sm text-slate-400">Sin eventos próximos</p>}
+      <div className="space-y-1">
+        {upcoming.length === 0 && <p className="text-sm text-slate-400 py-2">Sin eventos próximos</p>}
         {upcoming.map(e => {
           const type = EVENT_TYPES[e.event_type] || EVENT_TYPES.CUSTOM
           return (
-            <div key={e.id} className="flex items-center gap-3 text-xs py-2 border-b border-slate-100 last:border-0">
-              <span className="font-mono text-slate-400 w-16">
+            <div key={e.id} className="flex items-center gap-3 text-xs py-2.5 border-b border-slate-50 last:border-0">
+              <span className="font-mono text-slate-400 w-14 shrink-0">
                 {new Date(e.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
               </span>
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold" style={{ background: type.color + '20', color: type.color }}>
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold shrink-0" style={{ background: type.color + '15', color: type.color }}>
                 {type.label}
               </span>
-              {e.ticker && <span className="font-mono font-bold text-slate-700">{e.ticker}</span>}
-              <span className="text-slate-600 flex-1">{e.title}</span>
+              {e.ticker && <span className="font-mono font-bold text-slate-700 shrink-0">{e.ticker}</span>}
+              <span className="text-slate-600 truncate">{e.title}</span>
             </div>
           )
         })}
@@ -64,33 +62,41 @@ export function CalendarView({ events, onRefresh }) {
 // ─── WEEKLY HISTORY ────────────────────────────
 export function WeeklyHistory({ snapshots }) {
   if (!snapshots?.length) return null
-
-  const rows = [...snapshots].reverse().slice(0, 52) // Last year
+  const rows = [...snapshots].reverse().slice(0, 52)
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-      <div className="p-5 pb-3">
+    <div className="bg-white rounded-xl border border-slate-200">
+      <div className="px-5 pt-5 pb-2">
         <div className="section-title !mb-0">Histórico Semanal</div>
+        <p className="text-[10px] text-slate-400 mt-1">{rows.length} semanas</p>
       </div>
-      <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
-        <table className="w-full belar-table">
-          <thead className="sticky top-0 bg-white">
-            <tr><th>Semana</th><th className="text-right">eToro</th><th className="text-right">XTB</th><th className="text-right">IBKR</th><th className="text-right">BTC</th><th className="text-right">Total</th><th className="text-right">Var %</th></tr>
+      <div className="overflow-auto max-h-[450px]">
+        <table className="w-full text-[11px]">
+          <thead className="sticky top-0 bg-slate-50 z-10">
+            <tr>
+              <th className="text-left px-4 py-2 font-semibold text-slate-500 text-[10px] uppercase tracking-wider">Semana</th>
+              <th className="text-right px-3 py-2 font-semibold text-[10px] uppercase tracking-wider" style={{color: BROKER_COLORS.etoro}}>eToro</th>
+              <th className="text-right px-3 py-2 font-semibold text-[10px] uppercase tracking-wider" style={{color: BROKER_COLORS.xtb}}>XTB</th>
+              <th className="text-right px-3 py-2 font-semibold text-[10px] uppercase tracking-wider" style={{color: BROKER_COLORS.ibkr}}>IBKR</th>
+              <th className="text-right px-3 py-2 font-semibold text-[10px] uppercase tracking-wider" style={{color: BROKER_COLORS.btc}}>BTC</th>
+              <th className="text-right px-4 py-2 font-semibold text-slate-700 text-[10px] uppercase tracking-wider">Total</th>
+              <th className="text-right px-4 py-2 font-semibold text-slate-500 text-[10px] uppercase tracking-wider">Var%</th>
+            </tr>
           </thead>
           <tbody>
             {rows.map((s, i) => {
               const next = rows[i + 1]
               const change = next ? (s.total_usd - next.total_usd) / next.total_usd : 0
               return (
-                <tr key={s.id}>
-                  <td className="font-mono text-xs text-slate-500">{new Date(s.week_date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' })}</td>
-                  <td className="text-right font-mono text-xs">{formatCurrency(s.data?.etoro)}</td>
-                  <td className="text-right font-mono text-xs">{formatCurrency(s.data?.xtb)}</td>
-                  <td className="text-right font-mono text-xs">{formatCurrency(s.data?.ibkr)}</td>
-                  <td className="text-right font-mono text-xs">{formatCurrency(s.data?.btc_usd)}</td>
-                  <td className="text-right font-mono text-xs font-semibold">{formatCurrency(s.total_usd)}</td>
-                  <td className={`text-right font-mono text-xs font-semibold ${pnlColor(change)}`}>
-                    {next ? `${change >= 0 ? '+' : ''}${(change * 100).toFixed(2)}%` : '—'}
+                <tr key={s.id} className="border-t border-slate-50 hover:bg-slate-50/50">
+                  <td className="px-4 py-2 font-mono text-slate-500">{new Date(s.week_date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' })}</td>
+                  <td className="text-right px-3 py-2 font-mono text-slate-600">{formatCurrency(s.data?.etoro, 0)}</td>
+                  <td className="text-right px-3 py-2 font-mono text-slate-600">{formatCurrency(s.data?.xtb, 0)}</td>
+                  <td className="text-right px-3 py-2 font-mono text-slate-600">{formatCurrency(s.data?.ibkr, 0)}</td>
+                  <td className="text-right px-3 py-2 font-mono text-slate-600">{formatCurrency(s.data?.btc_usd, 0)}</td>
+                  <td className="text-right px-4 py-2 font-mono font-bold text-slate-800">{formatCurrency(s.total_usd, 0)}</td>
+                  <td className={`text-right px-4 py-2 font-mono font-semibold ${pnlColor(change)}`}>
+                    {next ? `${change >= 0 ? '+' : ''}${(change * 100).toFixed(1)}%` : '—'}
                   </td>
                 </tr>
               )
@@ -103,31 +109,92 @@ export function WeeklyHistory({ snapshots }) {
 }
 
 // ─── CONTRIBUTIONS ────────────────────────────
-export function ContributionsTable({ contributions }) {
-  if (!contributions?.length) return null
+export function ContributionsTable({ contributions, onRefresh }) {
+  const [showAdd, setShowAdd] = useState(false)
+  const [form, setForm] = useState({ date: '', platform: 'etoro', amount_eur: '', amount_usd: '' })
 
-  const total = contributions.reduce((s, c) => s + Number(c.amount_usd || 0), 0)
+  if (!contributions?.length && !showAdd) return null
+
+  const total = contributions?.reduce((s, c) => s + Number(c.amount_usd || 0), 0) || 0
+
+  const handleAdd = async () => {
+    if (!form.date || !form.amount_eur) return
+    await supabase.from('contributions').insert({
+      date: form.date,
+      platform: form.platform,
+      amount_eur: parseFloat(form.amount_eur),
+      amount_usd: parseFloat(form.amount_usd) || parseFloat(form.amount_eur) * 1.08,
+    })
+    setForm({ date: '', platform: 'etoro', amount_eur: '', amount_usd: '' })
+    setShowAdd(false)
+    onRefresh?.()
+  }
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-      <div className="p-5 pb-3">
-        <div className="section-title !mb-0">Aportaciones de Capital</div>
-        <div className="text-xs text-slate-400 mt-1">Total invertido: <span className="font-semibold text-slate-600">{formatCurrency(total)}</span></div>
+    <div className="bg-white rounded-xl border border-slate-200">
+      <div className="px-5 pt-5 pb-2 flex items-center justify-between">
+        <div>
+          <div className="section-title !mb-0">Aportaciones de Capital</div>
+          <p className="text-[10px] text-slate-400 mt-1">Total: <span className="font-semibold text-slate-600">{formatCurrency(total)}</span></p>
+        </div>
+        <button onClick={() => setShowAdd(!showAdd)} className="text-[10px] font-bold text-etoro border border-green-200 px-2.5 py-1 rounded-md hover:bg-green-50 transition">
+          {showAdd ? 'Cancelar' : '+ Aportación'}
+        </button>
       </div>
-      <div className="overflow-x-auto max-h-[300px] overflow-y-auto">
-        <table className="w-full belar-table">
-          <thead className="sticky top-0 bg-white">
-            <tr><th>Fecha</th><th>Plataforma</th><th className="text-right">EUR</th><th className="text-right">USD</th></tr>
+
+      {showAdd && (
+        <div className="mx-5 mb-3 p-3 bg-slate-50 rounded-lg border border-slate-100 flex flex-wrap gap-2 items-end">
+          <div>
+            <label className="text-[9px] text-slate-400 block mb-0.5">Fecha</label>
+            <input type="date" className="px-2 py-1.5 border border-slate-200 rounded-md text-xs outline-none focus:border-green-400" value={form.date} onChange={e => setForm({...form, date: e.target.value})} />
+          </div>
+          <div>
+            <label className="text-[9px] text-slate-400 block mb-0.5">Plataforma</label>
+            <select className="px-2 py-1.5 border border-slate-200 rounded-md text-xs outline-none" value={form.platform} onChange={e => setForm({...form, platform: e.target.value})}>
+              <option value="etoro">eToro</option>
+              <option value="xtb">XTB</option>
+              <option value="ibkr">IBKR</option>
+              <option value="btc">BTC</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-[9px] text-slate-400 block mb-0.5">EUR</label>
+            <input type="number" step="0.01" placeholder="€" className="w-20 px-2 py-1.5 border border-slate-200 rounded-md text-xs font-mono outline-none focus:border-green-400" value={form.amount_eur} onChange={e => setForm({...form, amount_eur: e.target.value})} />
+          </div>
+          <div>
+            <label className="text-[9px] text-slate-400 block mb-0.5">USD</label>
+            <input type="number" step="0.01" placeholder="$" className="w-20 px-2 py-1.5 border border-slate-200 rounded-md text-xs font-mono outline-none focus:border-green-400" value={form.amount_usd} onChange={e => setForm({...form, amount_usd: e.target.value})} />
+          </div>
+          <button onClick={handleAdd} className="px-3 py-1.5 bg-etoro text-white text-[10px] font-bold rounded-md">Guardar</button>
+        </div>
+      )}
+
+      <div className="overflow-auto max-h-[400px]">
+        <table className="w-full text-[11px]">
+          <thead className="sticky top-0 bg-slate-50 z-10">
+            <tr>
+              <th className="text-left px-4 py-2 font-semibold text-slate-500 text-[10px] uppercase tracking-wider">Fecha</th>
+              <th className="text-left px-3 py-2 font-semibold text-slate-500 text-[10px] uppercase tracking-wider">Plataforma</th>
+              <th className="text-right px-3 py-2 font-semibold text-slate-500 text-[10px] uppercase tracking-wider">EUR</th>
+              <th className="text-right px-4 py-2 font-semibold text-slate-500 text-[10px] uppercase tracking-wider">USD</th>
+            </tr>
           </thead>
           <tbody>
-            {[...contributions].reverse().map(c => (
-              <tr key={c.id}>
-                <td className="font-mono text-xs text-slate-500">{new Date(c.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' })}</td>
-                <td><span className="platform-badge" style={{ background: `var(--${c.platform})15`, color: `var(--${c.platform})` }}>{c.platform.toUpperCase()}</span></td>
-                <td className="text-right font-mono text-xs">{c.amount_eur ? `€${Number(c.amount_eur).toFixed(2)}` : '—'}</td>
-                <td className="text-right font-mono text-xs font-semibold">{formatCurrency(c.amount_usd)}</td>
-              </tr>
-            ))}
+            {[...(contributions||[])].reverse().map(c => {
+              const color = BROKER_COLORS[c.platform] || '#666'
+              return (
+                <tr key={c.id} className="border-t border-slate-50 hover:bg-slate-50/50">
+                  <td className="px-4 py-2 font-mono text-slate-500">{new Date(c.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' })}</td>
+                  <td className="px-3 py-2">
+                    <span className="platform-badge" style={{ background: color + '12', color, border: `1px solid ${color}30` }}>
+                      {BROKER_NAMES[c.platform] || c.platform}
+                    </span>
+                  </td>
+                  <td className="text-right px-3 py-2 font-mono text-slate-500">{c.amount_eur ? `€${Number(c.amount_eur).toFixed(0)}` : '—'}</td>
+                  <td className="text-right px-4 py-2 font-mono font-semibold text-slate-700">{formatCurrency(c.amount_usd, 0)}</td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
@@ -140,31 +207,46 @@ export function YearlyResults({ results }) {
   if (!results?.length) return null
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-      <div className="p-5 pb-3">
+    <div className="bg-white rounded-xl border border-slate-200">
+      <div className="px-5 pt-5 pb-3">
         <div className="section-title !mb-0">Resultados por Año</div>
       </div>
-      <table className="w-full belar-table">
-        <thead>
-          <tr><th>Año</th><th className="text-right">Invertido</th><th className="text-right">Valor Final</th><th className="text-right">G/P $</th><th className="text-right">G/P %</th></tr>
-        </thead>
-        <tbody>
-          {results.map(r => (
-            <tr key={r.year}>
-              <td className="font-semibold">{r.year}</td>
-              <td className="text-right font-mono">{formatCurrency(r.invested_total)}</td>
-              <td className="text-right font-mono font-semibold">{formatCurrency(r.final_value)}</td>
-              <td className={`text-right font-mono font-semibold ${pnlColor(r.pnl_usd)}`}>{r.pnl_usd >= 0 ? '+' : ''}{formatCurrency(r.pnl_usd)}</td>
-              <td className={`text-right font-mono font-semibold ${pnlColor(r.pnl_pct)}`}>{r.pnl_pct >= 0 ? '+' : ''}{(Number(r.pnl_pct) * 100).toFixed(2)}%</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 px-5 pb-5">
+        {[...results].reverse().map(r => {
+          const pnlUp = Number(r.pnl_usd) >= 0
+          return (
+            <div key={r.year} className={`rounded-xl border p-4 ${pnlUp ? 'border-green-200 bg-green-50/30' : 'border-red-200 bg-red-50/30'}`}>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-2xl font-bold text-slate-800">{r.year}</span>
+                <span className={`text-lg font-bold font-mono ${pnlUp ? 'text-green-600' : 'text-red-500'}`}>
+                  {pnlUp ? '+' : ''}{(Number(r.pnl_pct) * 100).toFixed(2)}%
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <div>
+                  <div className="text-slate-400">Invertido</div>
+                  <div className="font-mono font-semibold text-slate-600">{formatCurrency(r.invested_total, 0)}</div>
+                </div>
+                <div>
+                  <div className="text-slate-400">Valor final</div>
+                  <div className="font-mono font-semibold text-slate-800">{formatCurrency(r.final_value, 0)}</div>
+                </div>
+                <div className="col-span-2">
+                  <div className="text-slate-400">G/P</div>
+                  <div className={`font-mono font-bold text-base ${pnlUp ? 'text-green-600' : 'text-red-500'}`}>
+                    {pnlUp ? '+' : ''}{formatCurrency(r.pnl_usd, 0)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
 
-// ─── RESULTS SUMMARY (AYTD + GLOBAL) ────────────────────────────
+// ─── RESULTS SUMMARY (YTD + GLOBAL) ────────────────────────────
 export function ResultsSummary({ snapshots, contributions }) {
   if (!snapshots?.length || !contributions?.length) return null
 
@@ -174,45 +256,43 @@ export function ResultsSummary({ snapshots, contributions }) {
   const globalPnl = totalValue - totalInvested
   const globalPct = totalInvested > 0 ? globalPnl / totalInvested : 0
 
-  // AYTD: find first snapshot of current year
   const year = new Date().getFullYear()
   const yearSnapshots = snapshots.filter(s => new Date(s.week_date).getFullYear() === year)
   const firstOfYear = yearSnapshots.length > 0 ? yearSnapshots[0] : null
   const aytdStart = firstOfYear ? firstOfYear.total_usd : totalValue
   const ytdContribs = contributions.filter(c => new Date(c.date).getFullYear() === year).reduce((s, c) => s + Number(c.amount_usd || 0), 0)
-  const aytdPnl = totalValue - aytdStart - ytdContribs
-  const aytdPct = aytdStart > 0 ? aytdPnl / aytdStart : 0
+  const ytdPnl = totalValue - aytdStart - ytdContribs
+  const ytdPct = aytdStart > 0 ? ytdPnl / aytdStart : 0
 
   const boxes = [
-    { label: `YTD ${year}`, value: totalValue, invested: aytdStart + ytdContribs, pnl: aytdPnl, pct: aytdPct, color: '#7c3aed' },
-    { label: 'GLOBAL', value: totalValue, invested: totalInvested, pnl: globalPnl, pct: globalPct, color: '#0ea5e9' },
+    { label: `YTD ${year}`, pnl: ytdPnl, pct: ytdPct, color: '#7c3aed' },
+    { label: 'GLOBAL', pnl: globalPnl, pct: globalPct, color: '#0ea5e9' },
   ]
 
   return (
-    <div className="grid grid-cols-2 gap-3">
-      {boxes.map(b => (
-        <div key={b.label} className="bg-white rounded-xl border border-slate-200 p-5" style={{ borderTopColor: b.color, borderTopWidth: 3 }}>
-          <div className="text-[10px] font-bold tracking-widest text-slate-400 mb-2">{b.label}</div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <div className="text-[10px] text-slate-400">Valor actual</div>
-              <div className="font-mono font-bold text-lg" style={{ color: b.color }}>{formatCurrency(b.value)}</div>
-            </div>
-            <div>
-              <div className="text-[10px] text-slate-400">Invertido</div>
-              <div className="font-mono font-semibold text-slate-600">{formatCurrency(b.invested)}</div>
-            </div>
-            <div>
-              <div className="text-[10px] text-slate-400">G/P $</div>
-              <div className={`font-mono font-bold ${pnlColor(b.pnl)}`}>{b.pnl >= 0 ? '+' : ''}{formatCurrency(b.pnl)}</div>
-            </div>
-            <div>
-              <div className="text-[10px] text-slate-400">G/P %</div>
-              <div className={`font-mono font-bold ${pnlColor(b.pct)}`}>{b.pct >= 0 ? '+' : ''}{(b.pct * 100).toFixed(2)}%</div>
+    <div className="grid grid-cols-2 gap-4">
+      {boxes.map(b => {
+        const up = b.pnl >= 0
+        return (
+          <div key={b.label} className="bg-white rounded-xl border border-slate-200 p-5" style={{ borderTopColor: b.color, borderTopWidth: 3 }}>
+            <div className="text-[10px] font-bold tracking-widest text-slate-400 mb-3">{b.label}</div>
+            <div className="flex items-end justify-between">
+              <div>
+                <div className="text-[10px] text-slate-400 mb-0.5">Capital actual</div>
+                <div className="font-mono font-bold text-xl" style={{ color: b.color }}>{formatCurrency(totalValue)}</div>
+              </div>
+              <div className="text-right">
+                <div className={`font-mono font-bold text-2xl ${up ? 'text-green-600' : 'text-red-500'}`}>
+                  {up ? '+' : ''}{(b.pct * 100).toFixed(2)}%
+                </div>
+                <div className={`font-mono text-sm ${up ? 'text-green-600' : 'text-red-500'}`}>
+                  {up ? '+' : ''}{formatCurrency(b.pnl)}
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -221,39 +301,39 @@ export function ResultsSummary({ snapshots, contributions }) {
 export function Calculator() {
   const [a, setA] = useState('')
   const [b, setB] = useState('')
-  const [mode, setMode] = useState('pct') // pct: A→B=%, val: A+%=B
+  const [mode, setMode] = useState('pct')
 
   const result = mode === 'pct'
     ? (a && b ? (((Number(b) - Number(a)) / Number(a)) * 100).toFixed(4) + '%' : '—')
-    : (a && b ? (Number(a) * (1 + Number(b) / 100)).toFixed(2) : '—')
+    : (a && b ? '$' + (Number(a) * (1 + Number(b) / 100)).toFixed(2) : '—')
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-5">
       <div className="section-title">Calculadora %</div>
       <div className="flex gap-2 mb-4">
-        <button onClick={() => { setMode('pct'); setA(''); setB('') }} className={`text-[10px] font-semibold px-3 py-1.5 rounded ${mode === 'pct' ? 'bg-etoro text-white' : 'bg-slate-100 text-slate-500'}`}>
+        <button onClick={() => { setMode('pct'); setA(''); setB('') }} className={`text-[10px] font-semibold px-3 py-1.5 rounded-md transition ${mode === 'pct' ? 'bg-etoro text-white' : 'bg-slate-100 text-slate-500'}`}>
           A → B = %
         </button>
-        <button onClick={() => { setMode('val'); setA(''); setB('') }} className={`text-[10px] font-semibold px-3 py-1.5 rounded ${mode === 'val' ? 'bg-etoro text-white' : 'bg-slate-100 text-slate-500'}`}>
-          A + % = B
+        <button onClick={() => { setMode('val'); setA(''); setB('') }} className={`text-[10px] font-semibold px-3 py-1.5 rounded-md transition ${mode === 'val' ? 'bg-etoro text-white' : 'bg-slate-100 text-slate-500'}`}>
+          Cantidad + % = Resultado
         </button>
       </div>
       <div className="space-y-3">
         <div className="flex items-center gap-3">
-          <label className="text-[10px] text-slate-400 w-8 shrink-0">{mode === 'pct' ? 'A' : 'Cant.'}</label>
-          <input type="number" step="any" placeholder={mode === 'pct' ? 'Valor A' : 'Cantidad'}
-            className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono bg-slate-50 outline-none focus:border-green-400 min-w-0"
+          <label className="text-[10px] text-slate-400 w-12 shrink-0 text-right">{mode === 'pct' ? 'Valor A' : 'Cantidad'}</label>
+          <input type="number" step="any" placeholder="0.00"
+            className="flex-1 px-3 py-2.5 border border-slate-200 rounded-lg text-sm font-mono bg-white outline-none focus:border-green-400 focus:ring-1 focus:ring-green-100"
             value={a} onChange={e => setA(e.target.value)} />
         </div>
         <div className="flex items-center gap-3">
-          <label className="text-[10px] text-slate-400 w-8 shrink-0">{mode === 'pct' ? 'B' : '%'}</label>
-          <input type="number" step="any" placeholder={mode === 'pct' ? 'Valor B' : 'Porcentaje'}
-            className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono bg-slate-50 outline-none focus:border-green-400 min-w-0"
+          <label className="text-[10px] text-slate-400 w-12 shrink-0 text-right">{mode === 'pct' ? 'Valor B' : '%'}</label>
+          <input type="number" step="any" placeholder="0.00"
+            className="flex-1 px-3 py-2.5 border border-slate-200 rounded-lg text-sm font-mono bg-white outline-none focus:border-green-400 focus:ring-1 focus:ring-green-100"
             value={b} onChange={e => setB(e.target.value)} />
         </div>
         <div className="flex items-center gap-3">
-          <label className="text-[10px] text-slate-400 w-8 shrink-0">=</label>
-          <div className="flex-1 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-sm font-mono font-bold text-green-800">{result}</div>
+          <label className="text-[10px] text-slate-400 w-12 shrink-0 text-right">=</label>
+          <div className="flex-1 px-3 py-2.5 bg-green-50 border border-green-200 rounded-lg text-sm font-mono font-bold text-green-800 min-h-[40px] flex items-center">{result}</div>
         </div>
       </div>
     </div>
@@ -266,20 +346,19 @@ export function Footer({ quotes }) {
 
   useEffect(() => {
     if (quotes?.length) {
-      const random = quotes[Math.floor(Math.random() * quotes.length)]
-      setQuote(random)
+      setQuote(quotes[Math.floor(Math.random() * quotes.length)])
     }
   }, [quotes])
 
   if (!quote) return null
 
   return (
-    <footer className="text-center py-6 border-t border-slate-200 mt-8">
-      <p className="text-xs text-slate-400 italic max-w-lg mx-auto">
-        "{quote.text}"
-        {quote.author && <span className="not-italic font-semibold"> — {quote.author}</span>}
+    <footer className="text-center py-8 mt-6">
+      <p className="text-[11px] text-slate-400 italic max-w-lg mx-auto leading-relaxed">
+        &ldquo;{quote.text}&rdquo;
+        {quote.author && <span className="not-italic font-semibold block mt-1"> — {quote.author}</span>}
       </p>
-      <p className="text-[10px] text-slate-300 mt-2">BELAR Tracker v9 · Capa JOSE · Ecosistema IA Personal</p>
+      <p className="text-[9px] text-slate-300 mt-3 tracking-wider">BELAR Tracker v9 · Capa JOSE · Ecosistema IA Personal</p>
     </footer>
   )
 }
