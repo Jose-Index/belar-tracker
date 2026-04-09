@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import Header from '@/components/Header'
+import TickerBar from '@/components/TickerBar'
 import CapitalCards from '@/components/CapitalCards'
 import EvolutionChart from '@/components/EvolutionChart'
 import PositionsTable from '@/components/PositionsTable'
@@ -43,16 +44,11 @@ export default function Dashboard() {
     ])
 
     setData({
-      brokers: brokers || [],
-      wallets: wallets || [],
-      snapshots: snapshots || [],
-      positions: positions || [],
-      contributions: contributions || [],
-      yearlyResults: yearlyResults || [],
-      radarBelar: radarBelar || [],
-      radarJose: radarJose || [],
-      calendarEvents: calendarEvents || [],
-      quotes: quotes || [],
+      brokers: brokers || [], wallets: wallets || [],
+      snapshots: snapshots || [], positions: positions || [],
+      contributions: contributions || [], yearlyResults: yearlyResults || [],
+      radarBelar: radarBelar || [], radarJose: radarJose || [],
+      calendarEvents: calendarEvents || [], quotes: quotes || [],
     })
     setLoading(false)
   }, [])
@@ -63,58 +59,34 @@ export default function Dashboard() {
     if (!data.snapshots.length) return
     const latest = data.snapshots[data.snapshots.length - 1]
     const newData = { ...latest.data }
-
-    if (code === 'btc') {
-      newData.btc_usd = value
-    } else {
-      newData[code] = value
-    }
-
+    if (code === 'btc') { newData.btc_usd = value } else { newData[code] = value }
     const newTotal = (newData.etoro || 0) + (newData.xtb || 0) + (newData.ibkr || 0) + (newData.btc_usd || 0)
-
-    await supabase.from('weekly_snapshots').update({
-      data: newData,
-      total_usd: newTotal
-    }).eq('id', latest.id)
-
+    await supabase.from('weekly_snapshots').update({ data: newData, total_usd: newTotal }).eq('id', latest.id)
     fetchAll()
   }
 
   const handleCloseWeek = async () => {
     const now = new Date()
-    // Get most recent Saturday
     const day = now.getDay()
     const saturday = new Date(now)
-    if (day !== 6) {
-      saturday.setDate(now.getDate() - ((day + 1) % 7))
-    }
+    if (day !== 6) saturday.setDate(now.getDate() - ((day + 1) % 7))
     const weekDate = saturday.toISOString().split('T')[0]
-
     const latest = data.snapshots[data.snapshots.length - 1]
     if (!latest) return
-
-    // Check if already exists
     const exists = data.snapshots.some(s => s.week_date === weekDate)
-    if (exists) {
-      alert('Esta semana ya está cerrada.')
-      return
-    }
-
+    if (exists) { alert('Esta semana ya est\u00e1 cerrada.'); return }
     await supabase.from('weekly_snapshots').insert({
-      week_date: weekDate,
-      year: saturday.getFullYear(),
-      data: latest.data,
-      total_usd: latest.total_usd,
+      week_date: weekDate, year: saturday.getFullYear(),
+      data: latest.data, total_usd: latest.total_usd,
     })
-
     fetchAll()
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
-          <div className="text-2xl font-bold text-etoro tracking-widest mb-2">BELAR</div>
+          <div className="text-2xl font-bold text-etoro tracking-widest mb-2 animate-pulse">BELAR</div>
           <div className="text-xs text-slate-400">Cargando datos...</div>
         </div>
       </div>
@@ -124,27 +96,22 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-slate-50">
       <Header />
+      <TickerBar />
 
-      <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-5 space-y-5">
         {/* Capital Cards */}
-        <CapitalCards
-          snapshots={data.snapshots}
-          brokers={data.brokers}
-          wallets={data.wallets}
-          onUpdateValues={handleUpdateValues}
-        />
+        <CapitalCards snapshots={data.snapshots} brokers={data.brokers} wallets={data.wallets} onUpdateValues={handleUpdateValues} />
 
-        {/* Close Week button */}
-        <div className="flex justify-end">
-          <button
-            onClick={handleCloseWeek}
-            className="px-4 py-2 bg-etoro text-white text-xs font-bold rounded-lg hover:bg-green-600 transition-colors tracking-wide">
+        {/* AYTD & GLOBAL + Close Week */}
+        <div className="flex items-start gap-5">
+          <div className="flex-1">
+            <ResultsSummary snapshots={data.snapshots} contributions={data.contributions} />
+          </div>
+          <button onClick={handleCloseWeek}
+            className="px-5 py-3 bg-etoro text-white text-xs font-bold rounded-lg hover:bg-green-600 transition-colors tracking-widest shadow-sm mt-1">
             CERRAR SEMANA
           </button>
         </div>
-
-        {/* Results Summary - AYTD & GLOBAL */}
-        <ResultsSummary snapshots={data.snapshots} contributions={data.contributions} />
 
         {/* Evolution Chart */}
         <EvolutionChart snapshots={data.snapshots} />
@@ -152,29 +119,29 @@ export default function Dashboard() {
         {/* Positions */}
         <PositionsTable positions={data.positions} />
 
-        {/* Radar + Calendar row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Radar + Notes */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <RadarBelar items={data.radarBelar} onRefresh={fetchAll} />
           <RadarJose items={data.radarJose} onRefresh={fetchAll} />
         </div>
 
+        {/* Calendar */}
         <CalendarView events={data.calendarEvents} onRefresh={fetchAll} />
 
         {/* Weekly History + Contributions */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <WeeklyHistory snapshots={data.snapshots} />
           <ContributionsTable contributions={data.contributions} />
         </div>
 
         {/* Yearly Results + Calculator */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <div className="lg:col-span-2">
             <YearlyResults results={data.yearlyResults} />
           </div>
           <Calculator />
         </div>
 
-        {/* Footer */}
         <Footer quotes={data.quotes} />
       </main>
     </div>
