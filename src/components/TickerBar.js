@@ -1,27 +1,51 @@
 'use client'
-
-const TICKERS = [
-  { label: 'S&P 500', symbol: '^GSPC', color: '#2563eb' },
-  { label: 'NASDAQ', symbol: '^IXIC', color: '#7c3aed' },
-  { label: 'IBEX 35', symbol: '^IBEX', color: '#dc2626' },
-  { label: 'EUROSTOXX', symbol: '^STOXX50E', color: '#0891b2' },
-  { label: 'ORO', symbol: 'GC=F', color: '#d97706' },
-  { label: 'VIX', symbol: '^VIX', color: '#be123c' },
-  { label: 'EUR/USD', symbol: 'EURUSD=X', color: '#059669' },
-]
+import { useState, useEffect } from 'react'
 
 export default function TickerBar() {
+  const [tickers, setTickers] = useState([])
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch('/api/tickers')
+        const data = await res.json()
+        setTickers(data)
+      } catch (e) { /* silent */ }
+    }
+    load()
+    const id = setInterval(load, 60000)
+    return () => clearInterval(id)
+  }, [])
+
+  if (!tickers.length) return <div className="h-8 bg-white border-b border-slate-100" />
+
+  const items = [...tickers, ...tickers, ...tickers]
+
   return (
-    <div className="bg-white border-b border-slate-100 overflow-hidden">
-      <div className="ticker-track flex items-center gap-12 py-2 px-4 whitespace-nowrap">
-        {[...TICKERS, ...TICKERS].map((t, i) => (
-          <a key={i} href={`https://finance.yahoo.com/quote/${t.symbol}`}
-            target="_blank" rel="noopener"
-            className="flex items-center gap-1.5 text-xs hover:opacity-70 transition-opacity">
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: t.color }} />
-            <span className="font-semibold" style={{ color: t.color }}>{t.label}</span>
-          </a>
-        ))}
+    <div className="bg-white border-b border-slate-100 overflow-hidden h-8 flex items-center">
+      <div className="ticker-track flex items-center gap-10 px-4 whitespace-nowrap">
+        {items.map((t, i) => {
+          const up = t.changePct != null ? t.changePct >= 0 : null
+          return (
+            <a key={i} href={`https://finance.yahoo.com/quote/${t.symbol}`}
+              target="_blank" rel="noopener"
+              className="flex items-center gap-2 text-[11px] hover:opacity-70 transition-opacity shrink-0">
+              <span className="font-semibold text-slate-600">{t.label}</span>
+              {t.price != null ? (
+                <>
+                  <span className="font-mono font-bold text-slate-800">
+                    {t.symbol === 'EURUSD=X' ? t.price.toFixed(4) : t.price.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                  </span>
+                  <span className={`font-mono text-[10px] font-bold ${up ? 'text-green-600' : 'text-red-500'}`}>
+                    {up ? '▲' : '▼'}{Math.abs(t.changePct || 0).toFixed(2)}%
+                  </span>
+                </>
+              ) : (
+                <span className="text-slate-300">—</span>
+              )}
+            </a>
+          )
+        })}
       </div>
     </div>
   )

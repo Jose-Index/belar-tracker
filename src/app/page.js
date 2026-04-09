@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import Header from '@/components/Header'
 import TickerBar from '@/components/TickerBar'
+import TabNav from '@/components/TabNav'
 import CapitalCards from '@/components/CapitalCards'
 import EvolutionChart from '@/components/EvolutionChart'
 import PositionsTable from '@/components/PositionsTable'
@@ -11,6 +12,8 @@ import { CalendarView, WeeklyHistory, ContributionsTable, YearlyResults, Results
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(true)
+  const [tab, setTab] = useState('dashboard')
+  const [btcPrice, setBtcPrice] = useState(null)
   const [data, setData] = useState({
     brokers: [], wallets: [], snapshots: [], positions: [],
     contributions: [], yearlyResults: [], radarBelar: [],
@@ -20,15 +23,9 @@ export default function Dashboard() {
   const fetchAll = useCallback(async () => {
     setLoading(true)
     const [
-      { data: brokers },
-      { data: wallets },
-      { data: snapshots },
-      { data: positions },
-      { data: contributions },
-      { data: yearlyResults },
-      { data: radarBelar },
-      { data: radarJose },
-      { data: calendarEvents },
+      { data: brokers }, { data: wallets }, { data: snapshots },
+      { data: positions }, { data: contributions }, { data: yearlyResults },
+      { data: radarBelar }, { data: radarJose }, { data: calendarEvents },
       { data: quotes },
     ] = await Promise.all([
       supabase.from('brokers').select('*').eq('active', true).order('sort_order'),
@@ -42,25 +39,38 @@ export default function Dashboard() {
       supabase.from('calendar_events').select('*').order('date'),
       supabase.from('quotes').select('*').eq('is_active', true),
     ])
-
-    setData({
-      brokers: brokers || [], wallets: wallets || [],
-      snapshots: snapshots || [], positions: positions || [],
-      contributions: contributions || [], yearlyResults: yearlyResults || [],
-      radarBelar: radarBelar || [], radarJose: radarJose || [],
-      calendarEvents: calendarEvents || [], quotes: quotes || [],
-    })
+    setData({ brokers: brokers||[], wallets: wallets||[], snapshots: snapshots||[], positions: positions||[], contributions: contributions||[], yearlyResults: yearlyResults||[], radarBelar: radarBelar||[], radarJose: radarJose||[], calendarEvents: calendarEvents||[], quotes: quotes||[] })
     setLoading(false)
+  }, [])
+
+  // Fetch BTC price from ticker API
+  useEffect(() => {
+    const loadBtc = async () => {
+      try {
+        const res = await fetch('/api/tickers')
+        const tickers = await res.json()
+        const btc = tickers.find(t => t.symbol === 'BTC-USD')
+        if (btc?.price) setBtcPrice(btc.price)
+      } catch(e) {}
+    }
+    loadBtc()
+    const id = setInterval(loadBtc, 60000)
+    return () => clearInterval(id)
   }, [])
 
   useEffect(() => { fetchAll() }, [fetchAll])
 
-  const handleUpdateValues = async (code, value) => {
+  const handleUpdateValues = async (key, value) => {
     if (!data.snapshots.length) return
     const latest = data.snapshots[data.snapshots.length - 1]
     const newData = { ...latest.data }
-    if (code === 'btc') { newData.btc_usd = value } else { newData[code] = value }
-    const newTotal = (newData.etoro || 0) + (newData.xtb || 0) + (newData.ibkr || 0) + (newData.btc_usd || 0)
+    if (key === 'btc_qty') {
+      newData.btc_qty = value
+      newData.btc_usd = btcPrice ? value * btcPrice : newData.btc_usd
+    } else {
+      newData[key] = value
+    }
+    const newTotal = (newData.etoro||0) + (newData.xtb||0) + (newData.ibkr||0) + (newData.btc_usd||0)
     await supabase.from('weekly_snapshots').update({ data: newData, total_usd: newTotal }).eq('id', latest.id)
     fetchAll()
   }
@@ -73,74 +83,75 @@ export default function Dashboard() {
     const weekDate = saturday.toISOString().split('T')[0]
     const latest = data.snapshots[data.snapshots.length - 1]
     if (!latest) return
-    const exists = data.snapshots.some(s => s.week_date === weekDate)
-    if (exists) { alert('Esta semana ya est\u00e1 cerrada.'); return }
-    await supabase.from('weekly_snapshots').insert({
-      week_date: weekDate, year: saturday.getFullYear(),
-      data: latest.data, total_usd: latest.total_usd,
-    })
+    if (data.snapshots.some(s => s.week_date === weekDate)) {
+      alert('Esta semana ya está cerrada.')
+      return
+    }
+    await supabase.from('weekly_snapshots').insert({ week_date: weekDate, year: saturday.getFullYear(), data: latest.data, total_usd: latest.total_usd })
     fetchAll()
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="text-center">
-          <div className="text-2xl font-bold text-etoro tracking-widest mb-2 animate-pulse">BELAR</div>
-          <div className="text-xs text-slate-400">Cargando datos...</div>
-        </div>
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="text-center">
+        <div className="text-2xl font-bold text-etoro tracking-widest mb-2 animate-pulse">BELAR</div>
+        <div className="text-xs text-slate-400">Cargando datos...</div>
       </div>
-    )
-  }
+    </div>
+  )
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <Header />
+      <Header onCloseWeek={handleCloseWeek} />
       <TickerBar />
+      <TabNav active={tab} onChange={setTab} />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-5 space-y-5">
-        {/* Capital Cards */}
-        <CapitalCards snapshots={data.snapshots} brokers={data.brokers} wallets={data.wallets} onUpdateValues={handleUpdateValues} />
 
-        {/* AYTD & GLOBAL + Close Week */}
-        <div className="flex items-start gap-5">
-          <div className="flex-1">
-            <ResultsSummary snapshots={data.snapshots} contributions={data.contributions} />
+        {/* ─── DASHBOARD TAB ─── */}
+        {tab === 'dashboard' && <>
+          <CapitalCards snapshots={data.snapshots} brokers={data.brokers} wallets={data.wallets} onUpdateValues={handleUpdateValues} btcPrice={btcPrice} />
+          <EvolutionChart snapshots={data.snapshots} />
+          <PositionsTable positions={data.positions} />
+        </>}
+
+        {/* ─── HISTÓRICO TAB ─── */}
+        {tab === 'historico' && <>
+          <ResultsSummary snapshots={data.snapshots} contributions={data.contributions} />
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+            <WeeklyHistory snapshots={data.snapshots} />
+            <ContributionsTable contributions={data.contributions} onRefresh={fetchAll} />
           </div>
-          <button onClick={handleCloseWeek}
-            className="px-5 py-3 bg-etoro text-white text-xs font-bold rounded-lg hover:bg-green-600 transition-colors tracking-widest shadow-sm mt-1">
-            CERRAR SEMANA
-          </button>
-        </div>
+          <YearlyResults results={data.yearlyResults} />
+        </>}
 
-        {/* Evolution Chart */}
-        <EvolutionChart snapshots={data.snapshots} />
-
-        {/* Positions */}
-        <PositionsTable positions={data.positions} />
-
-        {/* Radar + Notes */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <RadarBelar items={data.radarBelar} onRefresh={fetchAll} />
-          <RadarJose items={data.radarJose} onRefresh={fetchAll} />
-        </div>
-
-        {/* Calendar */}
-        <CalendarView events={data.calendarEvents} onRefresh={fetchAll} />
-
-        {/* Weekly History + Contributions */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <WeeklyHistory snapshots={data.snapshots} />
-          <ContributionsTable contributions={data.contributions} />
-        </div>
-
-        {/* Yearly Results + Calculator */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <div className="lg:col-span-2">
-            <YearlyResults results={data.yearlyResults} />
+        {/* ─── RADAR TAB ─── */}
+        {tab === 'radar' && <>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <RadarBelar items={data.radarBelar} onRefresh={fetchAll} />
+            <RadarJose items={data.radarJose} onRefresh={fetchAll} />
           </div>
-          <Calculator />
-        </div>
+          <CalendarView events={data.calendarEvents} onRefresh={fetchAll} />
+        </>}
+
+        {/* ─── HERRAMIENTAS TAB ─── */}
+        {tab === 'tools' && <>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <Calculator />
+            <div className="bg-white rounded-xl border border-slate-200 p-5">
+              <div className="section-title">Backup / Exportar</div>
+              <p className="text-sm text-slate-500 mb-4">Descarga un snapshot completo de tu portfolio.</p>
+              <div className="flex gap-3">
+                <button className="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-200 transition-colors">
+                  📄 Exportar PDF
+                </button>
+                <button className="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-200 transition-colors">
+                  📊 Exportar Excel
+                </button>
+              </div>
+            </div>
+          </div>
+        </>}
 
         <Footer quotes={data.quotes} />
       </main>

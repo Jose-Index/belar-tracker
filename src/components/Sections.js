@@ -184,7 +184,7 @@ export function ResultsSummary({ snapshots, contributions }) {
   const aytdPct = aytdStart > 0 ? aytdPnl / aytdStart : 0
 
   const boxes = [
-    { label: `AYTD ${year}`, value: totalValue, invested: aytdStart + ytdContribs, pnl: aytdPnl, pct: aytdPct, color: '#7c3aed' },
+    { label: `YTD ${year}`, value: totalValue, invested: aytdStart + ytdContribs, pnl: aytdPnl, pct: aytdPct, color: '#7c3aed' },
     { label: 'GLOBAL', value: totalValue, invested: totalInvested, pnl: globalPnl, pct: globalPct, color: '#0ea5e9' },
   ]
 
@@ -230,20 +230,31 @@ export function Calculator() {
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-5">
       <div className="section-title">Calculadora %</div>
-      <div className="flex gap-2 mb-3">
-        <button onClick={() => setMode('pct')} className={`text-[10px] font-semibold px-3 py-1 rounded ${mode === 'pct' ? 'bg-etoro text-white' : 'bg-slate-100 text-slate-500'}`}>
+      <div className="flex gap-2 mb-4">
+        <button onClick={() => { setMode('pct'); setA(''); setB('') }} className={`text-[10px] font-semibold px-3 py-1.5 rounded ${mode === 'pct' ? 'bg-etoro text-white' : 'bg-slate-100 text-slate-500'}`}>
           A → B = %
         </button>
-        <button onClick={() => setMode('val')} className={`text-[10px] font-semibold px-3 py-1 rounded ${mode === 'val' ? 'bg-etoro text-white' : 'bg-slate-100 text-slate-500'}`}>
+        <button onClick={() => { setMode('val'); setA(''); setB('') }} className={`text-[10px] font-semibold px-3 py-1.5 rounded ${mode === 'val' ? 'bg-etoro text-white' : 'bg-slate-100 text-slate-500'}`}>
           A + % = B
         </button>
       </div>
-      <div className="flex items-center gap-2">
-        <input type="number" step="any" placeholder={mode === 'pct' ? 'Valor A' : 'Cantidad'} className="flex-1 px-3 py-2 border rounded text-sm font-mono bg-slate-50" value={a} onChange={e => setA(e.target.value)} />
-        <span className="text-slate-400 text-xs">{mode === 'pct' ? '→' : '+'}</span>
-        <input type="number" step="any" placeholder={mode === 'pct' ? 'Valor B' : '%'} className="flex-1 px-3 py-2 border rounded text-sm font-mono bg-slate-50" value={b} onChange={e => setB(e.target.value)} />
-        <span className="text-slate-400 text-xs">=</span>
-        <div className="flex-1 px-3 py-2 bg-slate-100 rounded text-sm font-mono font-bold text-slate-800">{result}</div>
+      <div className="space-y-3">
+        <div className="flex items-center gap-3">
+          <label className="text-[10px] text-slate-400 w-8 shrink-0">{mode === 'pct' ? 'A' : 'Cant.'}</label>
+          <input type="number" step="any" placeholder={mode === 'pct' ? 'Valor A' : 'Cantidad'}
+            className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono bg-slate-50 outline-none focus:border-green-400 min-w-0"
+            value={a} onChange={e => setA(e.target.value)} />
+        </div>
+        <div className="flex items-center gap-3">
+          <label className="text-[10px] text-slate-400 w-8 shrink-0">{mode === 'pct' ? 'B' : '%'}</label>
+          <input type="number" step="any" placeholder={mode === 'pct' ? 'Valor B' : 'Porcentaje'}
+            className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono bg-slate-50 outline-none focus:border-green-400 min-w-0"
+            value={b} onChange={e => setB(e.target.value)} />
+        </div>
+        <div className="flex items-center gap-3">
+          <label className="text-[10px] text-slate-400 w-8 shrink-0">=</label>
+          <div className="flex-1 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-sm font-mono font-bold text-green-800">{result}</div>
+        </div>
       </div>
     </div>
   )
