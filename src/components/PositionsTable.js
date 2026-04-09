@@ -1,5 +1,7 @@
 'use client'
+import { useState } from 'react'
 import { BROKER_COLORS, BROKER_NAMES, CLASS_COLORS, formatCurrency, pnlColor } from '@/lib/constants'
+import { supabase } from '@/lib/supabase'
 
 // Manual favicon mapping for tickers where auto-detection fails
 const FAVICON_MAP = {
@@ -48,7 +50,19 @@ function TickerIcon({ ticker }) {
   )
 }
 
-export default function PositionsTable({ positions }) {
+export default function PositionsTable({ positions, onRefresh }) {
+  const [editing, setEditing] = useState(null)
+  const [editVal, setEditVal] = useState('')
+
+  const handleSaveValue = async (id) => {
+    const val = parseFloat(editVal)
+    if (!isNaN(val)) {
+      await supabase.from('positions').update({ current_value: val }).eq('id', id)
+      onRefresh?.()
+    }
+    setEditing(null)
+  }
+
   if (!positions?.length) return (
     <div className="bg-white rounded-xl border border-slate-200 p-5">
       <div className="section-title">Posiciones Abiertas</div>
@@ -124,7 +138,18 @@ export default function PositionsTable({ positions }) {
                     {entry.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
                   </td>
                   <td className="text-right font-mono text-[12px] text-slate-500">{formatCurrency(invested)}</td>
-                  <td className="text-right font-mono text-[13px] font-bold text-slate-800">{formatCurrency(value)}</td>
+                  <td className="text-right cursor-pointer" onClick={() => { setEditing(p.id); setEditVal(String(value)) }}>
+                    {editing === p.id ? (
+                      <input autoFocus type="number" step="0.01"
+                        className="w-24 text-right px-1 py-0.5 border border-green-400 rounded text-[13px] font-mono font-bold outline-none bg-green-50"
+                        value={editVal} onChange={e => setEditVal(e.target.value)}
+                        onBlur={() => handleSaveValue(p.id)}
+                        onKeyDown={e => e.key === 'Enter' && handleSaveValue(p.id)}
+                        onClick={e => e.stopPropagation()} />
+                    ) : (
+                      <span className="font-mono text-[13px] font-bold text-slate-800 hover:text-green-600 transition-colors">{formatCurrency(value)}</span>
+                    )}
+                  </td>
                   <td className={`text-right font-mono text-[12px] font-semibold ${pnlColor(pnl)}`}>
                     {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}
                   </td>

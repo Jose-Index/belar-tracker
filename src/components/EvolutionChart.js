@@ -12,7 +12,7 @@ const SERIES = [
 ]
 
 export default function EvolutionChart({ snapshots }) {
-  const [visible, setVisible] = useState({ etoro: true, xtb: true, ibkr: true, btc_usd: true, total: true })
+  const [visible, setVisible] = useState({ etoro: true, xtb: true, ibkr: true, btc_usd: false, total: true })
 
   if (!snapshots?.length) return null
 

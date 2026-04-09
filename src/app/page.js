@@ -123,7 +123,7 @@ export default function Dashboard() {
         {tab === 'dashboard' && <>
           <CapitalCards snapshots={data.snapshots} brokers={data.brokers} wallets={data.wallets} onUpdateValues={handleUpdateValues} btcPrice={btcPrice} />
           <EvolutionChart snapshots={data.snapshots} />
-          <PositionsTable positions={data.positions} />
+          <PositionsTable positions={data.positions} onRefresh={fetchAll} />
           <ResultsSummary snapshots={data.snapshots} contributions={data.contributions} />
         </>}
 
