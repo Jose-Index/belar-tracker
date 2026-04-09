@@ -9,6 +9,7 @@ import EvolutionChart from '@/components/EvolutionChart'
 import PositionsTable from '@/components/PositionsTable'
 import { RadarBelar, RadarJose } from '@/components/RadarModules'
 import { CalendarView, WeeklyHistory, ContributionsTable, YearlyResults, ResultsSummary, Calculator, BackupExport, Footer } from '@/components/Sections'
+import AdminPanel from '@/components/AdminPanel'
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(true)
@@ -151,6 +152,7 @@ export default function Dashboard() {
             <Calculator />
             <BackupExport snapshots={data.snapshots} positions={data.positions} contributions={data.contributions} yearlyResults={data.yearlyResults} />
           </div>
+          <AdminPanel positions={data.positions} onRefresh={fetchAll} />
         </>}
 
         <Footer quotes={data.quotes} />

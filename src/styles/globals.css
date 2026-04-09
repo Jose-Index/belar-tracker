@@ -137,3 +137,34 @@ footer {
 @keyframes fadeIn {
   to { opacity: 1; }
 }
+
+/* Mobile improvements */
+@media (max-width: 768px) {
+  .section-title {
+    font-size: 12px !important;
+  }
+  .belar-table th, .belar-table td {
+    padding: 8px 10px;
+    font-size: 11px;
+  }
+}
+
+/* Tab active state emphasis */
+nav button[class*="border-slate-800"] {
+  background: rgba(0,0,0,0.02);
+}
+
+/* Smooth transitions for tab content */
+main > * {
+  animation: fadeSlideIn 0.2s ease-out;
+}
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Selection color */
+::selection {
+  background: #22c55e30;
+  color: #166534;
+}
