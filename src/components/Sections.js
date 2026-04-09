@@ -340,6 +340,85 @@ export function Calculator() {
   )
 }
 
+// ─── BACKUP EXPORT ────────────────────────────
+export function BackupExport({ snapshots, positions, contributions, yearlyResults }) {
+  const [exporting, setExporting] = useState(false)
+
+  const exportExcel = async () => {
+    setExporting(true)
+    try {
+      const XLSX = (await import('xlsx')).default
+
+      const wb = XLSX.utils.book_new()
+
+      // Sheet 1: Weekly Snapshots
+      const snapData = snapshots.map(s => ({
+        Fecha: s.week_date,
+        eToro: s.data?.etoro || 0,
+        XTB: s.data?.xtb || 0,
+        IBKR: s.data?.ibkr || 0,
+        BTC: s.data?.btc_usd || 0,
+        Total: s.total_usd || 0,
+      }))
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(snapData), 'Capital')
+
+      // Sheet 2: Positions
+      const posData = positions.map(p => ({
+        Ticker: p.ticker,
+        Plataforma: p.platform,
+        Clase: p.class,
+        Entrada: p.entry_date,
+        Invertido: Number(p.invested),
+        Valor: Number(p.current_value || p.invested),
+        'G/P $': Number(p.current_value || p.invested) - Number(p.invested),
+        'G/P %': ((Number(p.current_value || p.invested) - Number(p.invested)) / Number(p.invested) * 100).toFixed(2) + '%',
+      }))
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(posData), 'Posiciones')
+
+      // Sheet 3: Contributions
+      const contData = contributions.map(c => ({
+        Fecha: c.date,
+        Plataforma: c.platform,
+        EUR: c.amount_eur,
+        USD: c.amount_usd,
+      }))
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(contData), 'Aportaciones')
+
+      // Sheet 4: Yearly Results
+      const yearData = yearlyResults.map(r => ({
+        Año: r.year,
+        Invertido: r.invested_total,
+        'Valor Final': r.final_value,
+        'G/P $': r.pnl_usd,
+        'G/P %': (Number(r.pnl_pct) * 100).toFixed(2) + '%',
+      }))
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(yearData), 'Resultados')
+
+      const date = new Date().toISOString().split('T')[0]
+      XLSX.writeFile(wb, `BELAR_Backup_${date}.xlsx`)
+    } catch (e) {
+      console.error('Export error', e)
+      alert('Error al exportar. Intenta de nuevo.')
+    }
+    setExporting(false)
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-5">
+      <div className="section-title">Backup / Exportar</div>
+      <p className="text-[11px] text-slate-500 mb-4">Descarga un snapshot completo de tu portfolio en Excel con todas las hojas de datos.</p>
+      <div className="flex gap-3">
+        <button onClick={exportExcel} disabled={exporting}
+          className="px-4 py-2.5 bg-green-600 text-white text-xs font-bold rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center gap-2">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h8"/></svg>
+          {exporting ? 'Exportando...' : 'Exportar Excel'}
+        </button>
+      </div>
+      <p className="text-[9px] text-slate-400 mt-3">Incluye: Capital semanal · Posiciones · Aportaciones · Resultados anuales</p>
+    </div>
+  )
+}
+
 // ─── FOOTER ────────────────────────────
 export function Footer({ quotes }) {
   const [quote, setQuote] = useState(null)
