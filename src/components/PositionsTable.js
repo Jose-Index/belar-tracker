@@ -8,7 +8,7 @@ const FAVICON_MAP = {
   'IAU': 'https://logo.clearbit.com/ishares.com',
   'NEM': 'https://logo.clearbit.com/newmont.com',
   'SHELL.L': 'https://logo.clearbit.com/shell.com',
-  'Thomaspj': null, // CopyTrader - no favicon, use initials
+  'Thomaspj': 'https://www.google.com/s2/favicons?domain=etoro.com&sz=32', // CopyTrader on eToro
   'DVN': 'https://logo.clearbit.com/devonenergy.com',
   'DIA': 'https://logo.clearbit.com/spdr.com',
   'EOG': 'https://logo.clearbit.com/eogresources.com',

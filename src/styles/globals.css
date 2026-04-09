@@ -118,3 +118,22 @@ input[type="number"] { -moz-appearance: textfield; }
   50% { opacity: 0.5; }
 }
 .animate-pulse { animation: pulse-slow 2s ease-in-out infinite; }
+
+/* Better hover effects */
+.card-hover {
+  transition: box-shadow 0.2s ease, transform 0.1s ease;
+}
+.card-hover:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  transform: translateY(-1px);
+}
+
+/* Footer quote animation */
+footer {
+  opacity: 0;
+  animation: fadeIn 1s ease-out forwards;
+  animation-delay: 0.3s;
+}
+@keyframes fadeIn {
+  to { opacity: 1; }
+}
