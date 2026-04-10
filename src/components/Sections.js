@@ -438,3 +438,54 @@ export function Footer({ quotes }) {
     </footer>
   )
 }
+
+// ─── SETTINGS ────────────────────────────
+export function Settings({ quotes, onRefresh }) {
+  const [newQuote, setNewQuote] = useState({ text: '', author: '' })
+
+  const handleAddQuote = async () => {
+    if (!newQuote.text.trim()) return
+    await supabase.from('quotes').insert({ text: newQuote.text.trim(), author: newQuote.author.trim() || null, is_active: true })
+    setNewQuote({ text: '', author: '' })
+    onRefresh?.()
+  }
+
+  const handleDeleteQuote = async (id) => {
+    await supabase.from('quotes').update({ is_active: false }).eq('id', id)
+    onRefresh?.()
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-5">
+      <div className="section-title">Configuración</div>
+
+      <div className="mb-6">
+        <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-3">Frases del footer ({quotes?.length || 0})</h3>
+        <div className="flex gap-2 mb-3">
+          <input type="text" placeholder="Texto de la frase..." className="flex-1 px-3 py-1.5 border border-slate-200 rounded-md text-xs outline-none focus:border-green-400"
+            value={newQuote.text} onChange={e => setNewQuote({...newQuote, text: e.target.value})} />
+          <input type="text" placeholder="Autor" className="w-32 px-3 py-1.5 border border-slate-200 rounded-md text-xs outline-none focus:border-green-400"
+            value={newQuote.author} onChange={e => setNewQuote({...newQuote, author: e.target.value})} />
+          <button onClick={handleAddQuote} className="px-3 py-1.5 bg-etoro text-white text-[10px] font-bold rounded-md">+ Añadir</button>
+        </div>
+        <div className="max-h-[200px] overflow-y-auto space-y-1">
+          {quotes?.map(q => (
+            <div key={q.id} className="flex items-start gap-2 py-1.5 px-2 rounded hover:bg-slate-50 group text-[10px]">
+              <span className="flex-1 text-slate-600 italic">&ldquo;{q.text}&rdquo; {q.author && <span className="not-italic font-semibold">— {q.author}</span>}</span>
+              <button onClick={() => handleDeleteQuote(q.id)} className="text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">✕</button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Info técnica</h3>
+        <div className="text-[10px] text-slate-400 space-y-1">
+          <p>Supabase: ruqgzfoperkfmahpbpcv · GitHub: Jose-Index/belar-tracker</p>
+          <p>API Belar: /api/belar (POST) · API Tickers: /api/tickers (GET)</p>
+          <p>Versión: v9.11 · Stack: Next.js 14 + Supabase + Recharts + Tailwind</p>
+        </div>
+      </div>
+    </div>
+  )
+}

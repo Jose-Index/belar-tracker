@@ -8,7 +8,7 @@ import CapitalCards from '@/components/CapitalCards'
 import EvolutionChart from '@/components/EvolutionChart'
 import PositionsTable from '@/components/PositionsTable'
 import { RadarBelar, RadarJose } from '@/components/RadarModules'
-import { CalendarView, WeeklyHistory, ContributionsTable, YearlyResults, ResultsSummary, Calculator, BackupExport, Footer } from '@/components/Sections'
+import { CalendarView, WeeklyHistory, ContributionsTable, YearlyResults, ResultsSummary, Calculator, BackupExport, Settings, Footer } from '@/components/Sections'
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(true)
@@ -151,6 +151,7 @@ export default function Dashboard() {
             <Calculator />
             <BackupExport snapshots={data.snapshots} positions={data.positions} contributions={data.contributions} yearlyResults={data.yearlyResults} />
           </div>
+          <Settings quotes={data.quotes} onRefresh={fetchAll} />
         </>}
 
         <Footer quotes={data.quotes} />
