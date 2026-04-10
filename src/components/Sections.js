@@ -344,7 +344,7 @@ export function BackupExport({ snapshots, positions, contributions, yearlyResult
   const exportExcel = async () => {
     setExporting(true)
     try {
-      const XLSX = (await import('xlsx')).default
+      const XLSX = await import('xlsx')
 
       const wb = XLSX.utils.book_new()
 

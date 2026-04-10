@@ -3,26 +3,25 @@ import { useState } from 'react'
 import { BROKER_COLORS, BROKER_NAMES, CLASS_COLORS, formatCurrency, pnlColor } from '@/lib/constants'
 import { supabase } from '@/lib/supabase'
 
-// Manual favicon mapping for tickers where auto-detection fails
+// Favicon sources: stockanalysis.com is most reliable for stock logos
 const FAVICON_MAP = {
-  'AROC': 'https://logo.clearbit.com/archrock.com',
-  'FIX': 'https://logo.clearbit.com/comfortSystemsusa.com',
-  'IAU': 'https://logo.clearbit.com/ishares.com',
-  'NEM': 'https://logo.clearbit.com/newmont.com',
+  'AROC': 'https://stockanalysis.com/img/s/AROC-80.png',
+  'FIX': 'https://stockanalysis.com/img/s/FIX-80.png',
+  'IAU': 'https://stockanalysis.com/img/s/IAU-80.png',
+  'NEM': 'https://stockanalysis.com/img/s/NEM-80.png',
   'SHELL.L': 'https://logo.clearbit.com/shell.com',
-  'Thomaspj': 'https://www.google.com/s2/favicons?domain=etoro.com&sz=32', // CopyTrader on eToro
-  'DVN': 'https://logo.clearbit.com/devonenergy.com',
-  'DIA': 'https://logo.clearbit.com/spdr.com',
-  'EOG': 'https://logo.clearbit.com/eogresources.com',
-  'ICE': 'https://logo.clearbit.com/theice.com',
-  'CME': 'https://logo.clearbit.com/cmegroup.com',
-  'HWM': 'https://logo.clearbit.com/howmet.com',
-  'ROST': 'https://logo.clearbit.com/rossstores.com',
-  'MOD': 'https://logo.clearbit.com/modinesolutions.com',
-  'NOC': 'https://logo.clearbit.com/northropgrumman.com',
-  'GD': 'https://logo.clearbit.com/gd.com',
-  'AVGO': 'https://logo.clearbit.com/broadcom.com',
-  'MU': 'https://logo.clearbit.com/micron.com',
+  'Thomaspj': null, // CopyTrader - initials badge
+  'DVN': 'https://stockanalysis.com/img/s/DVN-80.png',
+  'DIA': 'https://stockanalysis.com/img/s/DIA-80.png',
+  'EOG': 'https://stockanalysis.com/img/s/EOG-80.png',
+  'ICE': 'https://stockanalysis.com/img/s/ICE-80.png',
+  'CME': 'https://stockanalysis.com/img/s/CME-80.png',
+  'HWM': 'https://stockanalysis.com/img/s/HWM-80.png',
+  'ROST': 'https://stockanalysis.com/img/s/ROST-80.png',
+  'MU': 'https://stockanalysis.com/img/s/MU-80.png',
+  'NVDA': 'https://stockanalysis.com/img/s/NVDA-80.png',
+  'AVGO': 'https://stockanalysis.com/img/s/AVGO-80.png',
+  'PUIG': 'https://logo.clearbit.com/puig.com',
 }
 
 function TickerIcon({ ticker }) {

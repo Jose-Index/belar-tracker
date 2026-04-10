@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 
-export default function Header({ onCloseWeek }) {
+export default function Header({ onCloseWeek, onCloseYear }) {
   const [time, setTime] = useState('')
 
   useEffect(() => {
@@ -24,7 +24,13 @@ export default function Header({ onCloseWeek }) {
         <h1 className="text-lg font-bold tracking-widest text-etoro">BELAR</h1>
         <span className="text-[10px] text-slate-400 tracking-wide">TRACKER v9 · Capa JOSE</span>
       </div>
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
+        {onCloseYear && (
+          <button onClick={onCloseYear}
+            className="px-2.5 py-1 text-[9px] font-bold tracking-wider text-red-500 border border-red-200 rounded hover:bg-red-50 transition-colors">
+            CERRAR AÑO
+          </button>
+        )}
         {onCloseWeek && (
           <button onClick={onCloseWeek}
             className="px-3 py-1 text-[10px] font-bold tracking-wider text-etoro border border-green-300 rounded hover:bg-green-50 transition-colors">

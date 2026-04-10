@@ -102,6 +102,48 @@ export default function Dashboard() {
     fetchAll()
   }
 
+  const handleCloseYear = async () => {
+    const year = new Date().getFullYear()
+    if (!confirm(`¿Cerrar el año ${year}?\nEsto cerrará los resultados anuales y creará el año ${year + 1}.`)) return
+    if (!confirm(`SEGUNDA CONFIRMACIÓN: ¿Estás seguro de cerrar ${year}? Esta acción no se puede deshacer.`)) return
+
+    const latest = data.snapshots[data.snapshots.length - 1]
+    if (!latest) return
+
+    // Calculate year results
+    const yearSnapshots = data.snapshots.filter(s => new Date(s.week_date).getFullYear() === year)
+    const firstOfYear = yearSnapshots[0]
+    const ytdContribs = data.contributions.filter(c => new Date(c.date).getFullYear() === year).reduce((s, c) => s + Number(c.amount_usd || 0), 0)
+
+    // Update current year result
+    const existingYear = data.yearlyResults.find(r => r.year === year)
+    const yearData = {
+      year,
+      invested_total: ytdContribs,
+      final_value: latest.total_usd,
+      pnl_usd: latest.total_usd - (firstOfYear?.total_usd || 0) - ytdContribs,
+      pnl_pct: firstOfYear ? ((latest.total_usd - firstOfYear.total_usd - ytdContribs) / firstOfYear.total_usd) : 0,
+    }
+
+    if (existingYear) {
+      await supabase.from('yearly_results').update(yearData).eq('year', year)
+    } else {
+      await supabase.from('yearly_results').insert(yearData)
+    }
+
+    // Create next year entry
+    const nextYear = year + 1
+    const existingNext = data.yearlyResults.find(r => r.year === nextYear)
+    if (!existingNext) {
+      await supabase.from('yearly_results').insert({
+        year: nextYear, invested_total: 0, final_value: latest.total_usd, pnl_usd: 0, pnl_pct: 0,
+      })
+    }
+
+    alert(`Año ${year} cerrado. Año ${nextYear} creado.`)
+    fetchAll()
+  }
+
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
       <div className="text-center">
@@ -113,7 +155,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <Header onCloseWeek={handleCloseWeek} />
+      <Header onCloseWeek={handleCloseWeek} onCloseYear={handleCloseYear} />
       <TickerBar />
       <TabNav active={tab} onChange={setTab} />
 
