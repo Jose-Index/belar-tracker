@@ -157,7 +157,7 @@ export default function PositionsTable({ positions, onRefresh }) {
                     {pct >= 0 ? '+' : ''}{(pct * 100).toFixed(2)}%
                   </td>
                   <td className={`text-right font-mono text-[9px] ${pnlColor(dailyPct)}`}>
-                    {dailyPct >= 0 ? '+' : ''}{(dailyPct * 100).toFixed(3)}%
+                    {dailyPct >= 0 ? '+' : ''}{(dailyPct * 100).toFixed(2)}%
                   </td>
                   <td>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-md"

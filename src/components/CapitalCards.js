@@ -36,7 +36,7 @@ export default function CapitalCards({ snapshots, brokers, wallets, onUpdateValu
   const handleSave = (card) => { const val = parseFloat(editValue); if (!isNaN(val) && onUpdateValues) onUpdateValues(card.editKey, val); setEditing(null) }
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
       {cards.map(c => {
         const change = c.prevValue > 0 ? (c.value - c.prevValue) / c.prevValue : 0
         const isEditing = editing === c.editKey

@@ -212,7 +212,7 @@ export function YearlyResults({ results }) {
         <div className="section-title !mb-0">Resultados por Año</div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 px-5 pb-5">
-        {[...results].reverse().map(r => {
+        {results.map(r => {
           const pnlUp = Number(r.pnl_usd) >= 0
           return (
             <div key={r.year} className={`rounded-xl border p-4 ${pnlUp ? 'border-green-200 bg-green-50/30' : 'border-red-200 bg-red-50/30'}`}>
@@ -259,14 +259,16 @@ export function ResultsSummary({ snapshots, contributions }) {
   const year = new Date().getFullYear()
   const yearSnapshots = snapshots.filter(s => new Date(s.week_date).getFullYear() === year)
   const firstOfYear = yearSnapshots.length > 0 ? yearSnapshots[0] : null
-  const aytdStart = firstOfYear ? firstOfYear.total_usd : totalValue
+  const startOfYear = firstOfYear ? firstOfYear.total_usd : totalValue
   const ytdContribs = contributions.filter(c => new Date(c.date).getFullYear() === year).reduce((s, c) => s + Number(c.amount_usd || 0), 0)
-  const ytdPnl = totalValue - aytdStart - ytdContribs
-  const ytdPct = aytdStart > 0 ? ytdPnl / aytdStart : 0
+  const ytdPnl = totalValue - startOfYear - ytdContribs
+  const ytdPct = startOfYear > 0 ? ytdPnl / startOfYear : 0
 
   const boxes = [
-    { label: `YTD ${year}`, pnl: ytdPnl, pct: ytdPct, color: '#7c3aed' },
-    { label: 'GLOBAL', pnl: globalPnl, pct: globalPct, color: '#0ea5e9' },
+    { label: `YTD ${year}`, pnl: ytdPnl, pct: ytdPct, color: '#7c3aed',
+      sub: `Inicio año: ${formatCurrency(startOfYear)} · Aportado: ${formatCurrency(ytdContribs)}` },
+    { label: 'GLOBAL', pnl: globalPnl, pct: globalPct, color: '#0ea5e9',
+      sub: `Invertido total: ${formatCurrency(totalInvested)}` },
   ]
 
   return (
@@ -275,21 +277,16 @@ export function ResultsSummary({ snapshots, contributions }) {
         const up = b.pnl >= 0
         return (
           <div key={b.label} className="bg-white rounded-xl border border-slate-200 p-5" style={{ borderTopColor: b.color, borderTopWidth: 3 }}>
-            <div className="text-[10px] font-bold tracking-widest text-slate-400 mb-3">{b.label}</div>
-            <div className="flex items-end justify-between">
-              <div>
-                <div className="text-[10px] text-slate-400 mb-0.5">Capital actual</div>
-                <div className="font-mono font-bold text-xl" style={{ color: b.color }}>{formatCurrency(totalValue)}</div>
-              </div>
-              <div className="text-right">
-                <div className={`font-mono font-bold text-2xl ${up ? 'text-green-600' : 'text-red-500'}`}>
-                  {up ? '+' : ''}{(b.pct * 100).toFixed(2)}%
-                </div>
-                <div className={`font-mono text-sm ${up ? 'text-green-600' : 'text-red-500'}`}>
-                  {up ? '+' : ''}{formatCurrency(b.pnl)}
-                </div>
-              </div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-bold tracking-widest text-slate-400">{b.label}</span>
+              <span className={`font-mono font-bold text-2xl ${up ? 'text-green-600' : 'text-red-500'}`}>
+                {up ? '+' : ''}{(b.pct * 100).toFixed(2)}%
+              </span>
             </div>
+            <div className={`font-mono font-bold text-lg ${up ? 'text-green-600' : 'text-red-500'}`}>
+              {up ? '+' : ''}{formatCurrency(b.pnl)}
+            </div>
+            <div className="text-[9px] text-slate-400 mt-2">{b.sub}</div>
           </div>
         )
       })}
