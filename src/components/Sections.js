@@ -483,7 +483,7 @@ export function Settings({ quotes, onRefresh }) {
         <div className="text-[10px] text-slate-400 space-y-1">
           <p>Supabase: ruqgzfoperkfmahpbpcv · GitHub: Jose-Index/belar-tracker</p>
           <p>API Belar: /api/belar (POST) · API Tickers: /api/tickers (GET)</p>
-          <p>Versión: v9.11 · Stack: Next.js 14 + Supabase + Recharts + Tailwind</p>
+          <p>Versión: v9.13 · Stack: Next.js 14 + Supabase + Recharts + Tailwind</p>
         </div>
       </div>
     </div>
