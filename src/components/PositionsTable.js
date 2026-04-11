@@ -1,7 +1,29 @@
 'use client'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
+import { LineChart, Line, ResponsiveContainer, ReferenceLine } from 'recharts'
 import { BROKER_COLORS, BROKER_NAMES, CLASS_COLORS, formatCurrency, pnlColor } from '@/lib/constants'
 import { supabase } from '@/lib/supabase'
+
+function Sparkline({ data }) {
+  if (!data || data.length < 2) return (
+    <div className="w-20 h-5 bg-slate-50 rounded flex items-center justify-center">
+      <span className="text-[7px] text-slate-300">sin datos</span>
+    </div>
+  )
+  const firstVal = data[0].value
+  const lastVal = data[data.length - 1].value
+  const color = lastVal >= firstVal ? '#22c55e' : '#ef4444'
+  return (
+    <div className="w-20 h-5">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data}>
+          <ReferenceLine y={data[0].invested} stroke="#cbd5e1" strokeDasharray="2 2" />
+          <Line type="monotone" dataKey="value" stroke={color} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
 
 // Favicon sources: stockanalysis.com is most reliable for stock logos
 const FAVICON_MAP = {
@@ -27,7 +49,6 @@ const FAVICON_MAP = {
 function TickerIcon({ ticker }) {
   const url = FAVICON_MAP[ticker]
   if (url === null) {
-    // Show initials badge for CopyTraders
     return (
       <div className="w-5 h-5 rounded-md bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center">
         <span className="text-[8px] font-bold text-white leading-none">{ticker.substring(0, 2).toUpperCase()}</span>
@@ -38,7 +59,6 @@ function TickerIcon({ ticker }) {
   return (
     <img src={src} alt="" className="w-5 h-5 rounded-md bg-slate-100"
       onError={e => {
-        // Fallback to Google favicon
         if (!e.target.dataset.fallback) {
           e.target.dataset.fallback = '1'
           e.target.src = `https://www.google.com/s2/favicons?domain=${ticker.toLowerCase()}.com&sz=64`
@@ -49,9 +69,21 @@ function TickerIcon({ ticker }) {
   )
 }
 
-export default function PositionsTable({ positions, onRefresh }) {
+export default function PositionsTable({ positions, positionHistory, onRefresh }) {
   const [editing, setEditing] = useState(null)
   const [editVal, setEditVal] = useState('')
+
+  // Group history by position_id
+  const historyMap = useMemo(() => {
+    const map = {}
+    if (positionHistory?.length) {
+      positionHistory.forEach(h => {
+        if (!map[h.position_id]) map[h.position_id] = []
+        map[h.position_id].push({ week_date: h.week_date, value: Number(h.value), invested: Number(h.invested) })
+      })
+    }
+    return map
+  }, [positionHistory])
 
   const handleSaveValue = async (id) => {
     const val = parseFloat(editVal)
@@ -121,10 +153,7 @@ export default function PositionsTable({ positions, onRefresh }) {
                       <TickerIcon ticker={p.ticker} />
                       <div>
                         <span className="font-bold text-slate-800 text-[13px] block">{p.ticker}</span>
-                        <div className="w-16 h-1 bg-slate-100 rounded-full mt-1 overflow-hidden">
-                          <div className={`h-full rounded-full ${pct >= 0 ? 'bg-green-400' : 'bg-red-400'}`}
-                            style={{ width: `${Math.min(100, Math.abs(pct * 100) * 3)}%` }} />
-                        </div>
+                        <Sparkline data={historyMap[p.id]} />
                       </div>
                     </div>
                   </td>
