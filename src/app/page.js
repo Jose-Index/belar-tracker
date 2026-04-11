@@ -39,7 +39,7 @@ export default function Dashboard() {
       supabase.from('radar_jose').select('*').eq('is_active', true).order('created_at', { ascending: false }),
       supabase.from('calendar_events').select('*').order('date'),
       supabase.from('quotes').select('*').eq('is_active', true),
-      supabase.from('position_history').select('position_id,week_date,value,invested').order('week_date'),
+      supabase.from('position_history').select('position_id,week_date,value,invested,event,event_amount').order('week_date'),
     ])
     setData({ brokers: brokers||[], wallets: wallets||[], snapshots: snapshots||[], positions: positions||[], contributions: contributions||[], yearlyResults: yearlyResults||[], radarBelar: radarBelar||[], radarJose: radarJose||[], calendarEvents: calendarEvents||[], quotes: quotes||[], positionHistory: positionHistory||[] })
     setLoading(false)
