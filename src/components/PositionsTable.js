@@ -29,7 +29,7 @@ function SparklineSVG({ data, width, height, showDots, showLabels }) {
       <line x1={pad} y1={invY} x2={width - pad} y2={invY} stroke="#94a3b8" strokeWidth="0.5" strokeDasharray="2 2" opacity="0.5" />
       <polyline points={points} fill="none" stroke={color} strokeWidth={showDots ? 1.5 : 1.2} strokeLinejoin="round" strokeLinecap="round" />
       {showDots && values.map((v, i) => (
-        <circle key={i} cx={xFn(i)} cy={yFn(v)} r="2.5" fill={v >= invested ? '#22c55e' : '#ef4444'} stroke="#1e293b" strokeWidth="1" />
+        <circle key={i} cx={xFn(i)} cy={yFn(v)} r="2.5" fill={v >= invested ? '#22c55e' : '#ef4444'} stroke="#fff" strokeWidth="1" />
       ))}
       {showLabels && (
         <>
@@ -90,23 +90,23 @@ function SparkTooltip({ data, ticker, broker, invested, tooltipPos }) {
 
   return (
     <div className="fixed z-[9999] pointer-events-none" style={{ left: tooltipPos.x, top: tooltipPos.y }}>
-      <div className="bg-slate-900 border border-slate-700 rounded-xl p-3.5 shadow-2xl" style={{ minWidth: 290 }}>
+      <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-xl ring-1 ring-slate-100" style={{ minWidth: 290 }}>
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
-            <span className="text-[13px] font-bold text-white font-mono">{ticker}</span>
-            <span className="text-[9px] text-slate-500 font-mono uppercase">{broker}</span>
+            <span className="text-[13px] font-bold text-slate-800 font-mono">{ticker}</span>
+            <span className="text-[9px] text-slate-400 font-mono uppercase">{broker}</span>
           </div>
           <span className={`text-[13px] font-bold font-mono ${isUp ? 'text-green-400' : 'text-red-400'}`}>
             {isUp ? '+' : ''}{totalPct}%
           </span>
         </div>
 
-        <div className="bg-slate-800/60 rounded-lg p-2 mb-2.5">
+        <div className="bg-slate-50 rounded-lg p-2 mb-2.5">
           <SparklineSVG data={data} width={262} height={80} showDots={true} showLabels={true} />
         </div>
 
         <div className="space-y-0">
-          <div className="flex items-center justify-between text-[8px] font-mono text-slate-600 pb-1 mb-1 border-b border-slate-800">
+          <div className="flex items-center justify-between text-[8px] font-mono text-slate-400 pb-1 mb-1 border-b border-slate-200">
             <span>FECHA</span>
             <span>VALOR</span>
             <span>SEMANAL</span>
@@ -115,9 +115,9 @@ function SparkTooltip({ data, ticker, broker, invested, tooltipPos }) {
             const isWeekUp = d.weekPct >= 0
             const dateStr = new Date(d.week_date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' })
             return (
-              <div key={i} className="flex items-center justify-between text-[9px] font-mono py-[3px] border-b border-slate-800/50 last:border-0">
-                <span className="text-slate-500 w-[70px]">{dateStr}</span>
-                <span className="text-slate-300 w-[60px] text-right">${d.value.toFixed(0)}</span>
+              <div key={i} className="flex items-center justify-between text-[9px] font-mono py-[3px] border-b border-slate-100 last:border-0">
+                <span className="text-slate-400 w-[70px]">{dateStr}</span>
+                <span className="text-slate-700 w-[60px] text-right">${d.value.toFixed(0)}</span>
                 <span className={`w-[55px] text-right font-semibold ${isWeekUp ? 'text-green-400' : 'text-red-400'}`}>
                   {isWeekUp ? '+' : ''}{d.weekPct.toFixed(2)}%
                 </span>
@@ -126,9 +126,9 @@ function SparkTooltip({ data, ticker, broker, invested, tooltipPos }) {
           })}
         </div>
 
-        <div className="mt-2 pt-2 border-t border-slate-700 flex justify-between text-[8px] font-mono text-slate-500">
+        <div className="mt-2 pt-2 border-t border-slate-200 flex justify-between text-[8px] font-mono text-slate-400">
           <span>Inv: ${invested.toFixed(0)}</span>
-          <span>G/P: <span className={isUp ? 'text-green-400' : 'text-red-400'}>${(lastVal - invested).toFixed(0)}</span></span>
+          <span>G/P: <span className={isUp ? 'text-green-600' : 'text-red-500'}>${(lastVal - invested).toFixed(0)}</span></span>
           <span>{data.length} sem</span>
         </div>
       </div>
