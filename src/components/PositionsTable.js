@@ -1,5 +1,5 @@
 'use client'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { BROKER_COLORS, BROKER_NAMES, CLASS_COLORS, formatCurrency, pnlColor } from '@/lib/constants'
 import { supabase } from '@/lib/supabase'
 
@@ -61,6 +61,18 @@ function SparklineSVG({ data, width, height, showDots, showLabels, showEvents })
 // ── Mini sparkline for table row ──
 function Sparkline({ data, ticker, broker, invested }) {
   const [hovered, setHovered] = useState(false)
+  const [pos, setPos] = useState({ x: 0, y: 0 })
+  const wrapperRef = useRef(null)
+
+  useEffect(() => {
+    if (hovered && wrapperRef.current) {
+      const rect = wrapperRef.current.getBoundingClientRect()
+      setPos({
+        x: Math.min(rect.left, window.innerWidth - 310),
+        y: rect.bottom + 6
+      })
+    }
+  }, [hovered])
 
   if (!data || data.length < 2) return (
     <div className="w-[88px] h-[22px] bg-slate-50 rounded flex items-center justify-center">
@@ -68,13 +80,21 @@ function Sparkline({ data, ticker, broker, invested }) {
     </div>
   )
 
+  const handleLeave = (e) => {
+    if (wrapperRef.current && wrapperRef.current.contains(e.relatedTarget)) return
+    setHovered(false)
+  }
+
   return (
-    <div className="relative" onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+    <div ref={wrapperRef} className="relative" onMouseEnter={() => setHovered(true)} onMouseLeave={handleLeave}>
       <div className="cursor-pointer">
         <SparklineSVG data={data} width={72} height={20} showDots={false} showLabels={false} showEvents={true} />
       </div>
       {hovered && (
-        <SparkTooltip data={data} ticker={ticker} broker={broker} invested={invested} />
+        <div className="fixed z-[9999]" style={{ left: pos.x, top: pos.y }}
+          onMouseLeave={handleLeave}>
+          <SparkTooltip data={data} ticker={ticker} broker={broker} invested={invested} />
+        </div>
       )}
     </div>
   )
@@ -97,7 +117,6 @@ function SparkTooltip({ data, ticker, broker, invested }) {
   const recent = changes.slice(-10)
 
   return (
-    <div className="absolute z-[9999] left-0 top-full mt-1">
       <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-xl ring-1 ring-slate-100" style={{ minWidth: 290 }}>
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
@@ -140,7 +159,6 @@ function SparkTooltip({ data, ticker, broker, invested }) {
           <span>{data.length} sem</span>
         </div>
       </div>
-    </div>
   )
 }
 
