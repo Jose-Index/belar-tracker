@@ -192,11 +192,11 @@ export function ContributionsTable({ contributions, onRefresh }) {
 }
 
 // ─── YEARLY RESULTS ────────────────────────────
-export function YearlyResults({ results, contributions }) {
+export function YearlyResults({ results, contributions, snapshots }) {
   if (!results?.length) return null
 
-  // Calculate cumulative invested per year for context
   const totalInvested = contributions?.reduce((s, c) => s + Number(c.amount_usd || 0), 0) || 0
+  const currentYear = new Date().getFullYear()
 
   return (
     <div className="bg-white rounded-xl border border-slate-200">
@@ -205,11 +205,19 @@ export function YearlyResults({ results, contributions }) {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 px-5 pb-5">
         {results.map(r => {
-          const pnl = Number(r.pnl_usd)
-          const pnlPct = Number(r.pnl_pct)
-          // Use pnlPct as source of truth for positive/negative
+          let pnl = Number(r.pnl_usd)
+          let pnlPct = Number(r.pnl_pct)
+          const isCurrentYear = r.year === currentYear
+          // For current year: recalculate dynamically from snapshots
+          if (isCurrentYear && snapshots?.length) {
+            const yearSnaps = snapshots.filter(s => new Date(s.week_date).getFullYear() === currentYear)
+            const startVal = yearSnaps.length > 0 ? yearSnaps[0].total_usd : 0
+            const currentVal = snapshots[snapshots.length - 1]?.total_usd || 0
+            const ytdC = contributions?.filter(c => new Date(c.date).getFullYear() === currentYear).reduce((s, c) => s + Number(c.amount_usd || 0), 0) || 0
+            pnl = currentVal - startVal - ytdC
+            pnlPct = startVal > 0 ? pnl / startVal : 0
+          }
           const pnlUp = pnlPct >= 0
-          const isCurrentYear = r.year === new Date().getFullYear()
           return (
             <div key={r.year} className={`rounded-xl border p-4 ${pnlUp ? 'border-green-200 bg-green-50/30' : 'border-red-200 bg-red-50/30'} ${isCurrentYear ? 'ring-2 ring-offset-1 ring-slate-300' : ''}`}>
               <div className="flex items-center justify-between mb-3">
@@ -228,7 +236,7 @@ export function YearlyResults({ results, contributions }) {
                 </div>
                 <div>
                   <div className="text-slate-400">{isCurrentYear ? 'Valor actual' : 'Valor final'}</div>
-                  <div className="font-mono font-semibold text-slate-800">{formatCurrency(r.final_value, 0)}</div>
+                  <div className="font-mono font-semibold text-slate-800">{formatCurrency(isCurrentYear && snapshots?.length ? snapshots[snapshots.length-1].total_usd : r.final_value, 0)}</div>
                 </div>
                 <div className="col-span-2">
                   <div className="text-slate-400">G/P</div>

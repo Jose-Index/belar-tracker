@@ -22,7 +22,7 @@ export default function Header({ onCloseWeek, onCloseYear }) {
     <header className="bg-white border-b border-slate-200 px-4 sm:px-6 py-2.5 flex items-center justify-between flex-wrap gap-3">
       <div className="flex items-baseline gap-3">
         <h1 className="text-lg font-bold tracking-widest text-etoro">BELAR</h1>
-        <span className="text-[10px] text-slate-400 tracking-wide">TRACKER v9 · Capa JOSE</span>
+        <span className="text-[10px] text-slate-400 tracking-wide">TRACKER v9</span>
       </div>
       <div className="flex items-center gap-3">
         {onCloseYear && (

@@ -171,7 +171,7 @@ export default function Dashboard() {
 
         {/* ─── HISTÓRICO TAB ─── */}
         {tab === 'historico' && <>
-          <YearlyResults results={data.yearlyResults} contributions={data.contributions} />
+          <YearlyResults results={data.yearlyResults} contributions={data.contributions} snapshots={data.snapshots} />
           <EvolutionChart snapshots={data.snapshots} storageKey="historico" />
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
             <WeeklyHistory snapshots={data.snapshots} />
