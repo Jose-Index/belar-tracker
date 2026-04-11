@@ -96,7 +96,7 @@ function SparkTooltip({ data, ticker, broker, invested, tooltipPos }) {
   const recent = changes.slice(-10)
 
   return (
-    <div className="fixed z-[9999]" onMouseEnter={tooltipPos.onEnter} onMouseLeave={tooltipPos.onLeave} style={{ left: tooltipPos.x, top: tooltipPos.y }}>
+    <div className="fixed z-[9999]" style={{ padding: "12px 0 12px 20px", margin: "-12px 0 -12px -20px" }} onMouseEnter={tooltipPos.onEnter} onMouseLeave={tooltipPos.onLeave} style={{ left: tooltipPos.x, top: tooltipPos.y }}>
       <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-xl ring-1 ring-slate-100" style={{ minWidth: 290 }}>
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
@@ -214,8 +214,8 @@ export default function PositionsTable({ positions, positionHistory, onRefresh }
   const handleSparkEnter = useCallback((e, p) => {
     if (window._ttTimer) clearTimeout(window._ttTimer)
     const rect = e.currentTarget.getBoundingClientRect()
-    const x = rect.right + 16
-    const y = rect.top - 60
+    const x = rect.right + 4
+    const y = rect.top - 20
     setTooltip({
       posId: p.id, ticker: p.ticker,
       broker: BROKER_NAMES[p.platform] || p.platform,
@@ -223,11 +223,11 @@ export default function PositionsTable({ positions, positionHistory, onRefresh }
       x: Math.min(x, window.innerWidth - 320),
       y: Math.max(8, Math.min(y, window.innerHeight - 350)),
       onEnter: () => { if (window._ttTimer) clearTimeout(window._ttTimer) },
-      onLeave: () => { window._ttTimer = setTimeout(() => setTooltip(null), 200) }
+      onLeave: () => { window._ttTimer = setTimeout(() => setTooltip(null), 400) }
     })
   }, [])
 
-  const handleSparkLeave = useCallback(() => { window._ttTimer = setTimeout(() => setTooltip(null), 200) }, [])
+  const handleSparkLeave = useCallback(() => { window._ttTimer = setTimeout(() => setTooltip(null), 400) }, [])
 
   if (!positions?.length) return (
     <div className="bg-white rounded-xl border border-slate-200 p-5">
