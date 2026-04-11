@@ -259,7 +259,7 @@ export default function PositionsTable({ positions, positionHistory, onRefresh }
               <th className="text-right">Valor</th>
               <th className="text-right">G/P $</th>
               <th className="text-right">G/P %</th>
-              <th className="text-right" title="Rendimiento diario"><span className="text-[8px]">%/D</span></th>
+              <th className="text-right" title="Rendimiento diario">%/D</th>
               <th>Clase</th>
               <th className="text-right">Peso</th>
             </tr>
