@@ -4,7 +4,7 @@ import { BROKER_COLORS, BROKER_NAMES, CLASS_COLORS, formatCurrency, pnlColor } f
 import { supabase } from '@/lib/supabase'
 
 // ── SVG Sparkline with area fill ──
-function SparklineSVG({ data, width, height, showDots, showLabels }) {
+function SparklineSVG({ data, width, height, showDots, showLabels, showEvents }) {
   if (!data || data.length < 2) return null
   const values = data.map(d => d.value)
   const invested = data[0].invested
@@ -44,6 +44,16 @@ function SparklineSVG({ data, width, height, showDots, showLabels }) {
           </text>
         </>
       )}
+
+      {showEvents && data.filter(d => d.event).map((d, idx) => {
+        const i = data.indexOf(d)
+        const ex = (i / (values.length - 1) * (width - pad * 2) + pad)
+        const ey = Number(yFn(d.value))
+        const isAmp = d.event === 'xAMPLIAR'
+        const marker = isAmp ? '\u25B2' : '\u25BC'
+        const mColor = isAmp ? '#3b82f6' : '#f59e0b'
+        return <text key={'ev'+idx} x={ex} y={ey - (showDots ? 8 : 5)} fontSize={showDots ? '9' : '6'} fill={mColor} textAnchor="middle" fontWeight="bold">{marker}</text>
+      })}
     </svg>
   )
 }
@@ -63,10 +73,7 @@ function Sparkline({ data, onMouseEnter, onMouseLeave }) {
   return (
     <div className="relative cursor-pointer" onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
       <div className="flex items-center gap-0.5">
-        <SparklineSVG data={data} width={72} height={20} showDots={false} showLabels={false} />
-        <span className={`text-[7px] font-mono font-bold leading-none ${isUp ? 'text-green-500' : 'text-red-500'}`}>
-          {isUp ? '\u25B2' : '\u25BC'}
-        </span>
+        <SparklineSVG data={data} width={72} height={20} showDots={false} showLabels={false} showEvents={true} />
       </div>
     </div>
   )
@@ -89,7 +96,7 @@ function SparkTooltip({ data, ticker, broker, invested, tooltipPos }) {
   const recent = changes.slice(-10)
 
   return (
-    <div className="fixed z-[9999] pointer-events-none" style={{ left: tooltipPos.x, top: tooltipPos.y }}>
+    <div className="fixed z-[9999]" onMouseEnter={tooltipPos.onEnter} onMouseLeave={tooltipPos.onLeave} style={{ left: tooltipPos.x, top: tooltipPos.y }}>
       <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-xl ring-1 ring-slate-100" style={{ minWidth: 290 }}>
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
@@ -102,7 +109,7 @@ function SparkTooltip({ data, ticker, broker, invested, tooltipPos }) {
         </div>
 
         <div className="bg-slate-50 rounded-lg p-2 mb-2.5">
-          <SparklineSVG data={data} width={262} height={80} showDots={true} showLabels={true} />
+          <SparklineSVG data={data} width={262} height={80} showDots={true} showLabels={true} showEvents={true} />
         </div>
 
         <div className="space-y-0">
@@ -116,7 +123,7 @@ function SparkTooltip({ data, ticker, broker, invested, tooltipPos }) {
             const dateStr = new Date(d.week_date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' })
             return (
               <div key={i} className="flex items-center justify-between text-[9px] font-mono py-[3px] border-b border-slate-100 last:border-0">
-                <span className="text-slate-400 w-[70px]">{dateStr}</span>
+                <span className="text-slate-400 w-[70px]">{d.event ? (d.event === 'xAMPLIAR' ? '\u25B2 ' : '\u25BC ') : ''}{dateStr}</span>
                 <span className="text-slate-700 w-[60px] text-right">${d.value.toFixed(0)}</span>
                 <span className={`w-[55px] text-right font-semibold ${isWeekUp ? 'text-green-400' : 'text-red-400'}`}>
                   {isWeekUp ? '+' : ''}{d.weekPct.toFixed(2)}%
@@ -189,7 +196,7 @@ export default function PositionsTable({ positions, positionHistory, onRefresh }
     if (positionHistory?.length) {
       positionHistory.forEach(h => {
         if (!map[h.position_id]) map[h.position_id] = []
-        map[h.position_id].push({ week_date: h.week_date, value: Number(h.value), invested: Number(h.invested) })
+        map[h.position_id].push({ week_date: h.week_date, value: Number(h.value), invested: Number(h.invested), event: h.event, event_amount: h.event_amount })
       })
     }
     return map
@@ -205,6 +212,7 @@ export default function PositionsTable({ positions, positionHistory, onRefresh }
   }
 
   const handleSparkEnter = useCallback((e, p) => {
+    if (window._ttTimer) clearTimeout(window._ttTimer)
     const rect = e.currentTarget.getBoundingClientRect()
     const x = rect.right + 16
     const y = rect.top - 60
@@ -213,11 +221,13 @@ export default function PositionsTable({ positions, positionHistory, onRefresh }
       broker: BROKER_NAMES[p.platform] || p.platform,
       invested: Number(p.invested),
       x: Math.min(x, window.innerWidth - 320),
-      y: Math.max(8, Math.min(y, window.innerHeight - 350))
+      y: Math.max(8, Math.min(y, window.innerHeight - 350)),
+      onEnter: () => { if (window._ttTimer) clearTimeout(window._ttTimer) },
+      onLeave: () => { window._ttTimer = setTimeout(() => setTooltip(null), 200) }
     })
   }, [])
 
-  const handleSparkLeave = useCallback(() => setTooltip(null), [])
+  const handleSparkLeave = useCallback(() => { window._ttTimer = setTimeout(() => setTooltip(null), 200) }, [])
 
   if (!positions?.length) return (
     <div className="bg-white rounded-xl border border-slate-200 p-5">
