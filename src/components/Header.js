@@ -27,13 +27,13 @@ export default function Header({ onCloseWeek, onCloseYear }) {
       <div className="flex items-center gap-3">
         {onCloseYear && (
           <button onClick={onCloseYear}
-            className="px-2.5 py-1 text-[9px] font-bold tracking-wider text-red-500 border border-red-200 rounded hover:bg-red-50 transition-colors">
+            className="px-2 py-0.5 text-[8px] font-semibold tracking-wider text-red-400 border border-red-100 rounded hover:bg-red-50 hover:text-red-600 transition-colors">
             CERRAR AÑO
           </button>
         )}
         {onCloseWeek && (
           <button onClick={onCloseWeek}
-            className="px-3 py-1 text-[10px] font-bold tracking-wider text-etoro border border-green-300 rounded hover:bg-green-50 transition-colors">
+            className="px-3 py-1.5 text-[10px] font-bold tracking-wider text-etoro border border-green-300 rounded-md hover:bg-green-50 transition-colors">
             CERRAR SEMANA
           </button>
         )}

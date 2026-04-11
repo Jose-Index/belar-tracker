@@ -136,11 +136,11 @@ export function ContributionsTable({ contributions, onRefresh }) {
       <div className="mx-5 mb-3 p-3 bg-slate-50 rounded-lg border border-slate-100 flex flex-wrap gap-2 items-end">
         <div>
           <label className="text-[9px] text-slate-400 block mb-0.5">Fecha</label>
-          <input type="date" className="px-2 py-1.5 border border-slate-200 rounded-md text-xs outline-none focus:border-green-400" value={form.date} onChange={e => setForm({...form, date: e.target.value})} />
+          <input type="date" className="h-[30px] px-2 py-1 border border-slate-200 rounded-md text-xs outline-none focus:border-green-400" value={form.date} onChange={e => setForm({...form, date: e.target.value})} />
         </div>
         <div>
           <label className="text-[9px] text-slate-400 block mb-0.5">Plataforma</label>
-          <select className="px-2 py-1.5 border border-slate-200 rounded-md text-xs outline-none" value={form.platform} onChange={e => setForm({...form, platform: e.target.value})}>
+          <select className="h-[30px] px-2 py-1 border border-slate-200 rounded-md text-xs outline-none bg-white" value={form.platform} onChange={e => setForm({...form, platform: e.target.value})}>
             <option value="etoro">eToro</option>
             <option value="xtb">XTB</option>
             <option value="ibkr">IBKR</option>
@@ -149,13 +149,13 @@ export function ContributionsTable({ contributions, onRefresh }) {
         </div>
         <div>
           <label className="text-[9px] text-slate-400 block mb-0.5">EUR</label>
-          <input type="number" step="0.01" placeholder="€" className="w-20 px-2 py-1.5 border border-slate-200 rounded-md text-xs font-mono outline-none focus:border-green-400" value={form.amount_eur} onChange={e => setForm({...form, amount_eur: e.target.value})} />
+          <input type="number" step="0.01" placeholder="€" className="h-[30px] w-20 px-2 py-1 border border-slate-200 rounded-md text-xs font-mono outline-none focus:border-green-400" value={form.amount_eur} onChange={e => setForm({...form, amount_eur: e.target.value})} />
         </div>
         <div>
           <label className="text-[9px] text-slate-400 block mb-0.5">USD</label>
-          <input type="number" step="0.01" placeholder="$" className="w-20 px-2 py-1.5 border border-slate-200 rounded-md text-xs font-mono outline-none focus:border-green-400" value={form.amount_usd} onChange={e => setForm({...form, amount_usd: e.target.value})} />
+          <input type="number" step="0.01" placeholder="$" className="h-[30px] w-20 px-2 py-1 border border-slate-200 rounded-md text-xs font-mono outline-none focus:border-green-400" value={form.amount_usd} onChange={e => setForm({...form, amount_usd: e.target.value})} />
         </div>
-        <button onClick={handleAdd} className="px-3 py-1.5 bg-etoro text-white text-[10px] font-bold rounded-md hover:bg-green-600 transition-colors">Guardar</button>
+        <button onClick={handleAdd} className="h-[30px] px-3 bg-etoro text-white text-[10px] font-bold rounded-md hover:bg-green-600 transition-colors">Guardar</button>
       </div>
 
       <div className="overflow-auto max-h-[400px]">
@@ -207,7 +207,8 @@ export function YearlyResults({ results, contributions }) {
         {results.map(r => {
           const pnl = Number(r.pnl_usd)
           const pnlPct = Number(r.pnl_pct)
-          const pnlUp = pnl >= 0
+          // Use pnlPct as source of truth for positive/negative
+          const pnlUp = pnlPct >= 0
           const isCurrentYear = r.year === new Date().getFullYear()
           return (
             <div key={r.year} className={`rounded-xl border p-4 ${pnlUp ? 'border-green-200 bg-green-50/30' : 'border-red-200 bg-red-50/30'} ${isCurrentYear ? 'ring-2 ring-offset-1 ring-slate-300' : ''}`}>
@@ -232,7 +233,7 @@ export function YearlyResults({ results, contributions }) {
                 <div className="col-span-2">
                   <div className="text-slate-400">G/P</div>
                   <div className={`font-mono font-bold text-base ${pnlUp ? 'text-green-600' : 'text-red-500'}`}>
-                    {pnl > 0 ? '+' : ''}{formatCurrency(pnl, 0)}
+                    {pnlUp ? '+' : ''}{formatCurrency(pnl, 0)}
                   </div>
                 </div>
               </div>
@@ -432,12 +433,12 @@ export function Footer({ quotes }) {
   if (!quote) return null
 
   return (
-    <footer className="text-center py-8 mt-6">
-      <p className="text-[11px] text-slate-400 italic max-w-lg mx-auto leading-relaxed">
+    <footer className="text-center py-10 mt-8">
+      <p className="text-[13px] text-slate-400 italic max-w-xl mx-auto leading-relaxed">
         &ldquo;{quote.text}&rdquo;
-        {quote.author && <span className="not-italic font-semibold block mt-1"> — {quote.author}</span>}
+        {quote.author && <span className="not-italic font-semibold block mt-1.5 text-slate-500"> — {quote.author}</span>}
       </p>
-      <p className="text-[9px] text-slate-300 mt-3 tracking-wider">BELAR Tracker v9 · Capa JOSE · Ecosistema IA Personal</p>
+      <p className="text-[10px] text-slate-300 mt-4 tracking-wider">BELAR Tracker v9 · Capa JOSE · Ecosistema IA Personal</p>
     </footer>
   )
 }
