@@ -17,7 +17,8 @@ export default function Dashboard() {
   const [data, setData] = useState({
     brokers: [], wallets: [], snapshots: [], positions: [],
     contributions: [], yearlyResults: [], radarBelar: [],
-    radarJose: [], calendarEvents: [], quotes: []
+    radarJose: [], calendarEvents: [], quotes: [],
+    positionHistory: []
   })
 
   const fetchAll = useCallback(async () => {
@@ -26,7 +27,7 @@ export default function Dashboard() {
       { data: brokers }, { data: wallets }, { data: snapshots },
       { data: positions }, { data: contributions }, { data: yearlyResults },
       { data: radarBelar }, { data: radarJose }, { data: calendarEvents },
-      { data: quotes },
+      { data: quotes }, { data: positionHistory },
     ] = await Promise.all([
       supabase.from('brokers').select('*').eq('active', true).order('sort_order'),
       supabase.from('wallets').select('*').eq('active', true).order('sort_order'),
@@ -38,12 +39,12 @@ export default function Dashboard() {
       supabase.from('radar_jose').select('*').eq('is_active', true).order('created_at', { ascending: false }),
       supabase.from('calendar_events').select('*').order('date'),
       supabase.from('quotes').select('*').eq('is_active', true),
+      supabase.from('position_history').select('position_id,week_date,value,invested').order('week_date'),
     ])
-    setData({ brokers: brokers||[], wallets: wallets||[], snapshots: snapshots||[], positions: positions||[], contributions: contributions||[], yearlyResults: yearlyResults||[], radarBelar: radarBelar||[], radarJose: radarJose||[], calendarEvents: calendarEvents||[], quotes: quotes||[] })
+    setData({ brokers: brokers||[], wallets: wallets||[], snapshots: snapshots||[], positions: positions||[], contributions: contributions||[], yearlyResults: yearlyResults||[], radarBelar: radarBelar||[], radarJose: radarJose||[], calendarEvents: calendarEvents||[], quotes: quotes||[], positionHistory: positionHistory||[] })
     setLoading(false)
   }, [])
 
-  // Fetch BTC price from ticker API
   useEffect(() => {
     const loadBtc = async () => {
       try {
@@ -84,13 +85,11 @@ export default function Dashboard() {
     const latest = data.snapshots[data.snapshots.length - 1]
     if (!latest) return
     if (data.snapshots.some(s => s.week_date === weekDate)) {
-      alert('Esta semana ya está cerrada.')
+      alert('Esta semana ya esta cerrada.')
       return
     }
-    if (!confirm(`¿Cerrar semana del ${weekDate}?\nTotal: $${latest.total_usd?.toLocaleString()}`)) return
-    // Save weekly snapshot
+    if (!confirm('Cerrar semana del ' + weekDate + '? Total: $' + latest.total_usd?.toLocaleString())) return
     await supabase.from('weekly_snapshots').insert({ week_date: weekDate, year: saturday.getFullYear(), data: latest.data, total_usd: latest.total_usd })
-    // Save position history for future sparklines
     if (data.positions.length > 0) {
       const posSnaps = data.positions.map(p => ({
         position_id: p.id, week_date: weekDate,
@@ -104,43 +103,27 @@ export default function Dashboard() {
 
   const handleCloseYear = async () => {
     const year = new Date().getFullYear()
-    if (!confirm(`¿Cerrar el año ${year}?\nEsto cerrará los resultados anuales y creará el año ${year + 1}.`)) return
-    if (!confirm(`SEGUNDA CONFIRMACIÓN: ¿Estás seguro de cerrar ${year}? Esta acción no se puede deshacer.`)) return
-
+    if (!confirm('Cerrar el anno ' + year + '? Esto cerrara los resultados anuales y creara el anno ' + (year + 1) + '.')) return
+    if (!confirm('SEGUNDA CONFIRMACION: Estas seguro de cerrar ' + year + '? Esta accion no se puede deshacer.')) return
     const latest = data.snapshots[data.snapshots.length - 1]
     if (!latest) return
-
-    // Calculate year results
     const yearSnapshots = data.snapshots.filter(s => new Date(s.week_date).getFullYear() === year)
     const firstOfYear = yearSnapshots[0]
     const ytdContribs = data.contributions.filter(c => new Date(c.date).getFullYear() === year).reduce((s, c) => s + Number(c.amount_usd || 0), 0)
-
-    // Update current year result
     const existingYear = data.yearlyResults.find(r => r.year === year)
     const yearData = {
-      year,
-      invested_total: ytdContribs,
-      final_value: latest.total_usd,
+      year, invested_total: ytdContribs, final_value: latest.total_usd,
       pnl_usd: latest.total_usd - (firstOfYear?.total_usd || 0) - ytdContribs,
       pnl_pct: firstOfYear ? ((latest.total_usd - firstOfYear.total_usd - ytdContribs) / firstOfYear.total_usd) : 0,
     }
-
-    if (existingYear) {
-      await supabase.from('yearly_results').update(yearData).eq('year', year)
-    } else {
-      await supabase.from('yearly_results').insert(yearData)
-    }
-
-    // Create next year entry
+    if (existingYear) { await supabase.from('yearly_results').update(yearData).eq('year', year) }
+    else { await supabase.from('yearly_results').insert(yearData) }
     const nextYear = year + 1
     const existingNext = data.yearlyResults.find(r => r.year === nextYear)
     if (!existingNext) {
-      await supabase.from('yearly_results').insert({
-        year: nextYear, invested_total: 0, final_value: latest.total_usd, pnl_usd: 0, pnl_pct: 0,
-      })
+      await supabase.from('yearly_results').insert({ year: nextYear, invested_total: 0, final_value: latest.total_usd, pnl_usd: 0, pnl_pct: 0 })
     }
-
-    alert(`Año ${year} cerrado. Año ${nextYear} creado.`)
+    alert('Anno ' + year + ' cerrado. Anno ' + nextYear + ' creado.')
     fetchAll()
   }
 
@@ -158,18 +141,13 @@ export default function Dashboard() {
       <Header onCloseWeek={handleCloseWeek} onCloseYear={handleCloseYear} />
       <TickerBar />
       <TabNav active={tab} onChange={setTab} />
-
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-5 space-y-5">
-
-        {/* ─── DASHBOARD TAB ─── */}
         {tab === 'dashboard' && <>
           <CapitalCards snapshots={data.snapshots} brokers={data.brokers} wallets={data.wallets} onUpdateValues={handleUpdateValues} btcPrice={btcPrice} />
           <EvolutionChart snapshots={data.snapshots} />
-          <PositionsTable positions={data.positions} onRefresh={fetchAll} />
+          <PositionsTable positions={data.positions} positionHistory={data.positionHistory} onRefresh={fetchAll} />
           <ResultsSummary snapshots={data.snapshots} contributions={data.contributions} />
         </>}
-
-        {/* ─── HISTÓRICO TAB ─── */}
         {tab === 'historico' && <>
           <YearlyResults results={data.yearlyResults} contributions={data.contributions} snapshots={data.snapshots} />
           <EvolutionChart snapshots={data.snapshots} storageKey="historico" />
@@ -178,8 +156,6 @@ export default function Dashboard() {
             <ContributionsTable contributions={data.contributions} onRefresh={fetchAll} />
           </div>
         </>}
-
-        {/* ─── RADAR TAB ─── */}
         {tab === 'radar' && <>
           <RadarBelar items={data.radarBelar} onRefresh={fetchAll} />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -187,8 +163,6 @@ export default function Dashboard() {
             <CalendarView events={data.calendarEvents} onRefresh={fetchAll} />
           </div>
         </>}
-
-        {/* ─── HERRAMIENTAS TAB ─── */}
         {tab === 'tools' && <>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <Calculator />
@@ -196,7 +170,6 @@ export default function Dashboard() {
           </div>
           <Settings quotes={data.quotes} onRefresh={fetchAll} />
         </>}
-
         <Footer quotes={data.quotes} />
       </main>
     </div>
