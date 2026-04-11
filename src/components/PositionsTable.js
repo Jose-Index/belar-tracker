@@ -1,38 +1,148 @@
 'use client'
-import { useState, useMemo } from 'react'
-import { LineChart, Line, ResponsiveContainer, ReferenceLine } from 'recharts'
+import { useState, useMemo, useCallback } from 'react'
 import { BROKER_COLORS, BROKER_NAMES, CLASS_COLORS, formatCurrency, pnlColor } from '@/lib/constants'
 import { supabase } from '@/lib/supabase'
 
-function Sparkline({ data }) {
+// ── SVG Sparkline with area fill ──
+function SparklineSVG({ data, width, height, showDots, showLabels }) {
+  if (!data || data.length < 2) return null
+  const values = data.map(d => d.value)
+  const invested = data[0].invested
+  const min = Math.min(...values, invested)
+  const max = Math.max(...values, invested)
+  const range = max - min || 1
+  const pad = showLabels ? 6 : 2
+
+  const xFn = (i) => (i / (values.length - 1) * (width - pad * 2) + pad).toFixed(1)
+  const yFn = (v) => (height - pad - (v - min) / range * (height - pad * 2)).toFixed(1)
+
+  const points = values.map((v, i) => `${xFn(i)},${yFn(v)}`).join(' ')
+  const lastVal = values[values.length - 1]
+  const color = lastVal >= invested ? '#22c55e' : '#ef4444'
+  const fillColor = lastVal >= invested ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)'
+  const areaPoints = `${xFn(0)},${(height - pad).toFixed(1)} ${points} ${xFn(values.length - 1)},${(height - pad).toFixed(1)}`
+  const invY = yFn(invested)
+
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ display: 'block' }}>
+      <polygon points={areaPoints} fill={fillColor} />
+      <line x1={pad} y1={invY} x2={width - pad} y2={invY} stroke="#94a3b8" strokeWidth="0.5" strokeDasharray="2 2" opacity="0.5" />
+      <polyline points={points} fill="none" stroke={color} strokeWidth={showDots ? 1.5 : 1.2} strokeLinejoin="round" strokeLinecap="round" />
+      {showDots && values.map((v, i) => (
+        <circle key={i} cx={xFn(i)} cy={yFn(v)} r="2.5" fill={v >= invested ? '#22c55e' : '#ef4444'} stroke="#1e293b" strokeWidth="1" />
+      ))}
+      {showLabels && (
+        <>
+          <text x={Number(xFn(0)) + 2} y={Number(yFn(values[0])) - 6} fontSize="8" fill="#94a3b8" textAnchor="start" fontFamily="monospace">
+            {'$' + values[0].toFixed(0)}
+          </text>
+          <text x={Number(xFn(values.length - 1)) - 2} y={Number(yFn(lastVal)) - 6} fontSize="8" fill={color} textAnchor="end" fontFamily="monospace" fontWeight="bold">
+            {'$' + lastVal.toFixed(0)}
+          </text>
+          <text x={width - pad} y={Number(invY) - 3} fontSize="7" fill="#64748b" textAnchor="end" fontFamily="monospace" opacity="0.7">
+            inv
+          </text>
+        </>
+      )}
+    </svg>
+  )
+}
+
+// ── Mini sparkline for table row ──
+function Sparkline({ data, onMouseEnter, onMouseLeave }) {
   if (!data || data.length < 2) return (
-    <div className="w-20 h-5 bg-slate-50 rounded flex items-center justify-center">
-      <span className="text-[7px] text-slate-300">sin datos</span>
+    <div className="w-[88px] h-[22px] bg-slate-50 rounded flex items-center justify-center">
+      <span className="text-[7px] text-slate-300 font-mono">sin historial</span>
     </div>
   )
-  const firstVal = data[0].value
+
   const lastVal = data[data.length - 1].value
-  const color = lastVal >= firstVal ? '#22c55e' : '#ef4444'
+  const invested = data[0].invested
+  const isUp = lastVal >= invested
+
   return (
-    <div className="w-20 h-5">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data}>
-          <ReferenceLine y={data[0].invested} stroke="#cbd5e1" strokeDasharray="2 2" />
-          <Line type="monotone" dataKey="value" stroke={color} strokeWidth={1.5} dot={false} isAnimationActive={false} />
-        </LineChart>
-      </ResponsiveContainer>
+    <div className="relative cursor-pointer" onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+      <div className="flex items-center gap-0.5">
+        <SparklineSVG data={data} width={72} height={20} showDots={false} showLabels={false} />
+        <span className={`text-[7px] font-mono font-bold leading-none ${isUp ? 'text-green-500' : 'text-red-500'}`}>
+          {isUp ? '\u25B2' : '\u25BC'}
+        </span>
+      </div>
     </div>
   )
 }
 
-// Favicon sources: stockanalysis.com is most reliable for stock logos
+// ── Expanded tooltip on hover ──
+function SparkTooltip({ data, ticker, broker, invested, tooltipPos }) {
+  if (!data || data.length < 2 || !tooltipPos) return null
+
+  const lastVal = data[data.length - 1].value
+  const totalPct = ((lastVal - invested) / invested * 100).toFixed(2)
+  const isUp = lastVal >= invested
+
+  const changes = data.map((d, i) => {
+    if (i === 0) return { ...d, weekPct: ((d.value - invested) / invested * 100) }
+    const prev = data[i - 1].value
+    return { ...d, weekPct: ((d.value - prev) / prev * 100) }
+  })
+
+  const recent = changes.slice(-10)
+
+  return (
+    <div className="fixed z-[9999] pointer-events-none" style={{ left: tooltipPos.x, top: tooltipPos.y }}>
+      <div className="bg-slate-900 border border-slate-700 rounded-xl p-3.5 shadow-2xl" style={{ minWidth: 290 }}>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[13px] font-bold text-white font-mono">{ticker}</span>
+            <span className="text-[9px] text-slate-500 font-mono uppercase">{broker}</span>
+          </div>
+          <span className={`text-[13px] font-bold font-mono ${isUp ? 'text-green-400' : 'text-red-400'}`}>
+            {isUp ? '+' : ''}{totalPct}%
+          </span>
+        </div>
+
+        <div className="bg-slate-800/60 rounded-lg p-2 mb-2.5">
+          <SparklineSVG data={data} width={262} height={80} showDots={true} showLabels={true} />
+        </div>
+
+        <div className="space-y-0">
+          <div className="flex items-center justify-between text-[8px] font-mono text-slate-600 pb-1 mb-1 border-b border-slate-800">
+            <span>FECHA</span>
+            <span>VALOR</span>
+            <span>SEMANAL</span>
+          </div>
+          {recent.map((d, i) => {
+            const isWeekUp = d.weekPct >= 0
+            const dateStr = new Date(d.week_date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' })
+            return (
+              <div key={i} className="flex items-center justify-between text-[9px] font-mono py-[3px] border-b border-slate-800/50 last:border-0">
+                <span className="text-slate-500 w-[70px]">{dateStr}</span>
+                <span className="text-slate-300 w-[60px] text-right">${d.value.toFixed(0)}</span>
+                <span className={`w-[55px] text-right font-semibold ${isWeekUp ? 'text-green-400' : 'text-red-400'}`}>
+                  {isWeekUp ? '+' : ''}{d.weekPct.toFixed(2)}%
+                </span>
+              </div>
+            )
+          })}
+        </div>
+
+        <div className="mt-2 pt-2 border-t border-slate-700 flex justify-between text-[8px] font-mono text-slate-500">
+          <span>Inv: ${invested.toFixed(0)}</span>
+          <span>G/P: <span className={isUp ? 'text-green-400' : 'text-red-400'}>${(lastVal - invested).toFixed(0)}</span></span>
+          <span>{data.length} sem</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const FAVICON_MAP = {
   'AROC': 'https://stockanalysis.com/img/s/AROC-80.png',
   'FIX': 'https://stockanalysis.com/img/s/FIX-80.png',
   'IAU': 'https://stockanalysis.com/img/s/IAU-80.png',
   'NEM': 'https://stockanalysis.com/img/s/NEM-80.png',
   'SHELL.L': 'https://logo.clearbit.com/shell.com',
-  'Thomaspj': null, // CopyTrader - initials badge
+  'Thomaspj': null,
   'DVN': 'https://stockanalysis.com/img/s/DVN-80.png',
   'DIA': 'https://stockanalysis.com/img/s/DIA-80.png',
   'EOG': 'https://stockanalysis.com/img/s/EOG-80.png',
@@ -72,8 +182,8 @@ function TickerIcon({ ticker }) {
 export default function PositionsTable({ positions, positionHistory, onRefresh }) {
   const [editing, setEditing] = useState(null)
   const [editVal, setEditVal] = useState('')
+  const [tooltip, setTooltip] = useState(null)
 
-  // Group history by position_id
   const historyMap = useMemo(() => {
     const map = {}
     if (positionHistory?.length) {
@@ -93,6 +203,21 @@ export default function PositionsTable({ positions, positionHistory, onRefresh }
     }
     setEditing(null)
   }
+
+  const handleSparkEnter = useCallback((e, p) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = rect.right + 16
+    const y = rect.top - 60
+    setTooltip({
+      posId: p.id, ticker: p.ticker,
+      broker: BROKER_NAMES[p.platform] || p.platform,
+      invested: Number(p.invested),
+      x: Math.min(x, window.innerWidth - 320),
+      y: Math.max(8, Math.min(y, window.innerHeight - 350))
+    })
+  }, [])
+
+  const handleSparkLeave = useCallback(() => setTooltip(null), [])
 
   if (!positions?.length) return (
     <div className="bg-white rounded-xl border border-slate-200 p-5">
@@ -153,7 +278,7 @@ export default function PositionsTable({ positions, positionHistory, onRefresh }
                       <TickerIcon ticker={p.ticker} />
                       <div>
                         <span className="font-bold text-slate-800 text-[13px] block">{p.ticker}</span>
-                        <Sparkline data={historyMap[p.id]} />
+                        <Sparkline data={historyMap[p.id]} onMouseEnter={(e) => handleSparkEnter(e, p)} onMouseLeave={handleSparkLeave} />
                       </div>
                     </div>
                   </td>
@@ -214,6 +339,16 @@ export default function PositionsTable({ positions, positionHistory, onRefresh }
           </tfoot>
         </table>
       </div>
+
+      {tooltip && (
+        <SparkTooltip
+          data={historyMap[tooltip.posId]}
+          ticker={tooltip.ticker}
+          broker={tooltip.broker}
+          invested={tooltip.invested}
+          tooltipPos={{ x: tooltip.x, y: tooltip.y }}
+        />
+      )}
     </div>
   )
 }
