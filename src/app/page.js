@@ -171,7 +171,8 @@ export default function Dashboard() {
 
         {/* ─── HISTÓRICO TAB ─── */}
         {tab === 'historico' && <>
-          <YearlyResults results={data.yearlyResults} />
+          <YearlyResults results={data.yearlyResults} contributions={data.contributions} />
+          <EvolutionChart snapshots={data.snapshots} storageKey="historico" />
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
             <WeeklyHistory snapshots={data.snapshots} />
             <ContributionsTable contributions={data.contributions} onRefresh={fetchAll} />
@@ -180,11 +181,11 @@ export default function Dashboard() {
 
         {/* ─── RADAR TAB ─── */}
         {tab === 'radar' && <>
+          <RadarBelar items={data.radarBelar} onRefresh={fetchAll} />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <RadarBelar items={data.radarBelar} onRefresh={fetchAll} />
             <RadarJose items={data.radarJose} onRefresh={fetchAll} />
+            <CalendarView events={data.calendarEvents} onRefresh={fetchAll} />
           </div>
-          <CalendarView events={data.calendarEvents} onRefresh={fetchAll} />
         </>}
 
         {/* ─── HERRAMIENTAS TAB ─── */}

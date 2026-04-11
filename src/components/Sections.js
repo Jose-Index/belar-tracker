@@ -110,64 +110,53 @@ export function WeeklyHistory({ snapshots }) {
 
 // ─── CONTRIBUTIONS ────────────────────────────
 export function ContributionsTable({ contributions, onRefresh }) {
-  const [showAdd, setShowAdd] = useState(false)
-  const [form, setForm] = useState({ date: '', platform: 'etoro', amount_eur: '', amount_usd: '' })
-
-  if (!contributions?.length && !showAdd) return null
+  const [form, setForm] = useState({ date: new Date().toISOString().split('T')[0], platform: 'etoro', amount_eur: '', amount_usd: '' })
 
   const total = contributions?.reduce((s, c) => s + Number(c.amount_usd || 0), 0) || 0
 
   const handleAdd = async () => {
     if (!form.date || !form.amount_eur) return
     await supabase.from('contributions').insert({
-      date: form.date,
-      platform: form.platform,
+      date: form.date, platform: form.platform,
       amount_eur: parseFloat(form.amount_eur),
       amount_usd: parseFloat(form.amount_usd) || parseFloat(form.amount_eur) * 1.08,
     })
-    setForm({ date: '', platform: 'etoro', amount_eur: '', amount_usd: '' })
-    setShowAdd(false)
+    setForm({ date: new Date().toISOString().split('T')[0], platform: 'etoro', amount_eur: '', amount_usd: '' })
     onRefresh?.()
   }
 
   return (
     <div className="bg-white rounded-xl border border-slate-200">
-      <div className="px-5 pt-5 pb-2 flex items-center justify-between">
-        <div>
-          <div className="section-title !mb-0">Aportaciones de Capital</div>
-          <p className="text-[10px] text-slate-400 mt-1">Total: <span className="font-semibold text-slate-600">{formatCurrency(total)}</span></p>
-        </div>
-        <button onClick={() => setShowAdd(!showAdd)} className="text-[10px] font-bold text-etoro border border-green-200 px-2.5 py-1 rounded-md hover:bg-green-50 transition">
-          {showAdd ? 'Cancelar' : '+ Aportación'}
-        </button>
+      <div className="px-5 pt-5 pb-2">
+        <div className="section-title !mb-0">Aportaciones de Capital</div>
+        <p className="text-[10px] text-slate-400 mt-1">Total invertido: <span className="font-semibold text-slate-600">{formatCurrency(total)}</span></p>
       </div>
 
-      {showAdd && (
-        <div className="mx-5 mb-3 p-3 bg-slate-50 rounded-lg border border-slate-100 flex flex-wrap gap-2 items-end">
-          <div>
-            <label className="text-[9px] text-slate-400 block mb-0.5">Fecha</label>
-            <input type="date" className="px-2 py-1.5 border border-slate-200 rounded-md text-xs outline-none focus:border-green-400" value={form.date} onChange={e => setForm({...form, date: e.target.value})} />
-          </div>
-          <div>
-            <label className="text-[9px] text-slate-400 block mb-0.5">Plataforma</label>
-            <select className="px-2 py-1.5 border border-slate-200 rounded-md text-xs outline-none" value={form.platform} onChange={e => setForm({...form, platform: e.target.value})}>
-              <option value="etoro">eToro</option>
-              <option value="xtb">XTB</option>
-              <option value="ibkr">IBKR</option>
-              <option value="btc">BTC</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-[9px] text-slate-400 block mb-0.5">EUR</label>
-            <input type="number" step="0.01" placeholder="€" className="w-20 px-2 py-1.5 border border-slate-200 rounded-md text-xs font-mono outline-none focus:border-green-400" value={form.amount_eur} onChange={e => setForm({...form, amount_eur: e.target.value})} />
-          </div>
-          <div>
-            <label className="text-[9px] text-slate-400 block mb-0.5">USD</label>
-            <input type="number" step="0.01" placeholder="$" className="w-20 px-2 py-1.5 border border-slate-200 rounded-md text-xs font-mono outline-none focus:border-green-400" value={form.amount_usd} onChange={e => setForm({...form, amount_usd: e.target.value})} />
-          </div>
-          <button onClick={handleAdd} className="px-3 py-1.5 bg-etoro text-white text-[10px] font-bold rounded-md">Guardar</button>
+      {/* Always visible form */}
+      <div className="mx-5 mb-3 p-3 bg-slate-50 rounded-lg border border-slate-100 flex flex-wrap gap-2 items-end">
+        <div>
+          <label className="text-[9px] text-slate-400 block mb-0.5">Fecha</label>
+          <input type="date" className="px-2 py-1.5 border border-slate-200 rounded-md text-xs outline-none focus:border-green-400" value={form.date} onChange={e => setForm({...form, date: e.target.value})} />
         </div>
-      )}
+        <div>
+          <label className="text-[9px] text-slate-400 block mb-0.5">Plataforma</label>
+          <select className="px-2 py-1.5 border border-slate-200 rounded-md text-xs outline-none" value={form.platform} onChange={e => setForm({...form, platform: e.target.value})}>
+            <option value="etoro">eToro</option>
+            <option value="xtb">XTB</option>
+            <option value="ibkr">IBKR</option>
+            <option value="btc">BTC</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-[9px] text-slate-400 block mb-0.5">EUR</label>
+          <input type="number" step="0.01" placeholder="€" className="w-20 px-2 py-1.5 border border-slate-200 rounded-md text-xs font-mono outline-none focus:border-green-400" value={form.amount_eur} onChange={e => setForm({...form, amount_eur: e.target.value})} />
+        </div>
+        <div>
+          <label className="text-[9px] text-slate-400 block mb-0.5">USD</label>
+          <input type="number" step="0.01" placeholder="$" className="w-20 px-2 py-1.5 border border-slate-200 rounded-md text-xs font-mono outline-none focus:border-green-400" value={form.amount_usd} onChange={e => setForm({...form, amount_usd: e.target.value})} />
+        </div>
+        <button onClick={handleAdd} className="px-3 py-1.5 bg-etoro text-white text-[10px] font-bold rounded-md hover:bg-green-600 transition-colors">Guardar</button>
+      </div>
 
       <div className="overflow-auto max-h-[400px]">
         <table className="w-full text-[11px]">
@@ -203,8 +192,11 @@ export function ContributionsTable({ contributions, onRefresh }) {
 }
 
 // ─── YEARLY RESULTS ────────────────────────────
-export function YearlyResults({ results }) {
+export function YearlyResults({ results, contributions }) {
   if (!results?.length) return null
+
+  // Calculate cumulative invested per year for context
+  const totalInvested = contributions?.reduce((s, c) => s + Number(c.amount_usd || 0), 0) || 0
 
   return (
     <div className="bg-white rounded-xl border border-slate-200">
@@ -213,31 +205,42 @@ export function YearlyResults({ results }) {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 px-5 pb-5">
         {results.map(r => {
-          const pnlUp = Number(r.pnl_usd) >= 0
+          const pnl = Number(r.pnl_usd)
+          const pnlPct = Number(r.pnl_pct)
+          const pnlUp = pnl >= 0
+          const isCurrentYear = r.year === new Date().getFullYear()
           return (
-            <div key={r.year} className={`rounded-xl border p-4 ${pnlUp ? 'border-green-200 bg-green-50/30' : 'border-red-200 bg-red-50/30'}`}>
+            <div key={r.year} className={`rounded-xl border p-4 ${pnlUp ? 'border-green-200 bg-green-50/30' : 'border-red-200 bg-red-50/30'} ${isCurrentYear ? 'ring-2 ring-offset-1 ring-slate-300' : ''}`}>
               <div className="flex items-center justify-between mb-3">
-                <span className="text-2xl font-bold text-slate-800">{r.year}</span>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-bold text-slate-800">{r.year}</span>
+                  {isCurrentYear && <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">En curso</span>}
+                </div>
                 <span className={`text-lg font-bold font-mono ${pnlUp ? 'text-green-600' : 'text-red-500'}`}>
-                  {pnlUp ? '+' : ''}{(Number(r.pnl_pct) * 100).toFixed(2)}%
+                  {pnlPct > 0 ? '+' : ''}{(pnlPct * 100).toFixed(2)}%
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-2 text-[11px]">
                 <div>
-                  <div className="text-slate-400">Invertido</div>
-                  <div className="font-mono font-semibold text-slate-600">{formatCurrency(r.invested_total, 0)}</div>
+                  <div className="text-slate-400">Aportado en {r.year}</div>
+                  <div className="font-mono font-semibold text-slate-600">+{formatCurrency(r.invested_total, 0)}</div>
                 </div>
                 <div>
-                  <div className="text-slate-400">Valor final</div>
+                  <div className="text-slate-400">{isCurrentYear ? 'Valor actual' : 'Valor final'}</div>
                   <div className="font-mono font-semibold text-slate-800">{formatCurrency(r.final_value, 0)}</div>
                 </div>
                 <div className="col-span-2">
                   <div className="text-slate-400">G/P</div>
                   <div className={`font-mono font-bold text-base ${pnlUp ? 'text-green-600' : 'text-red-500'}`}>
-                    {pnlUp ? '+' : ''}{formatCurrency(r.pnl_usd, 0)}
+                    {pnl > 0 ? '+' : ''}{formatCurrency(pnl, 0)}
                   </div>
                 </div>
               </div>
+              {isCurrentYear && (
+                <div className="text-[9px] text-slate-400 mt-2 pt-2 border-t border-slate-200">
+                  Capital total invertido histórico: {formatCurrency(totalInvested, 0)}
+                </div>
+              )}
             </div>
           )
         })}

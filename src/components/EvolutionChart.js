@@ -1,6 +1,6 @@
 'use client'
-import { useState } from 'react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { useState, useEffect } from 'react'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { BROKER_COLORS, formatCurrency } from '@/lib/constants'
 
 const SERIES = [
@@ -11,18 +11,28 @@ const SERIES = [
   { key: 'total', name: 'TOTAL', color: '#0ea5e9' },
 ]
 
-export default function EvolutionChart({ snapshots }) {
-  const [visible, setVisible] = useState({ etoro: true, xtb: true, ibkr: true, btc_usd: false, total: true })
+const STORAGE_KEY_PREFIX = 'belar_chart_visible_'
+
+export default function EvolutionChart({ snapshots, storageKey = 'dashboard' }) {
+  const [visible, setVisible] = useState(() => {
+    if (typeof window === 'undefined') return { etoro: true, xtb: true, ibkr: true, btc_usd: false, total: true }
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_PREFIX + storageKey)
+      return saved ? JSON.parse(saved) : { etoro: true, xtb: true, ibkr: true, btc_usd: false, total: true }
+    } catch { return { etoro: true, xtb: true, ibkr: true, btc_usd: false, total: true } }
+  })
+
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY_PREFIX + storageKey, JSON.stringify(visible)) } catch {}
+  }, [visible, storageKey])
 
   if (!snapshots?.length) return null
 
   const chartData = snapshots.map(s => ({
     date: s.week_date,
     label: new Date(s.week_date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }),
-    etoro: s.data?.etoro || 0,
-    xtb: s.data?.xtb || 0,
-    ibkr: s.data?.ibkr || 0,
-    btc_usd: s.data?.btc_usd || 0,
+    etoro: s.data?.etoro || 0, xtb: s.data?.xtb || 0,
+    ibkr: s.data?.ibkr || 0, btc_usd: s.data?.btc_usd || 0,
     total: s.total_usd || 0,
   }))
 
@@ -47,11 +57,10 @@ export default function EvolutionChart({ snapshots }) {
     <div className="bg-white rounded-xl border border-slate-200 p-5">
       <div className="flex items-center justify-between mb-4">
         <div className="section-title !mb-0">Evolución del Portfolio</div>
-        <div className="flex gap-2">
+        <div className="flex gap-1.5">
           {SERIES.map(s => (
-            <button key={s.key}
-              onClick={() => toggle(s.key)}
-              className={`text-[10px] font-semibold px-2 py-1 rounded transition-all ${visible[s.key] ? 'text-white' : 'text-slate-400 bg-slate-100'}`}
+            <button key={s.key} onClick={() => toggle(s.key)}
+              className={`text-[10px] font-semibold px-2.5 py-1 rounded-md transition-all ${visible[s.key] ? 'text-white shadow-sm' : 'text-slate-400 bg-slate-100'}`}
               style={visible[s.key] ? { background: s.color } : {}}>
               {s.name}
             </button>
