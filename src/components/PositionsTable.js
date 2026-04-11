@@ -1,5 +1,5 @@
 'use client'
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo } from 'react'
 import { BROKER_COLORS, BROKER_NAMES, CLASS_COLORS, formatCurrency, pnlColor } from '@/lib/constants'
 import { supabase } from '@/lib/supabase'
 
@@ -59,29 +59,30 @@ function SparklineSVG({ data, width, height, showDots, showLabels, showEvents })
 }
 
 // ── Mini sparkline for table row ──
-function Sparkline({ data, onMouseEnter, onMouseLeave }) {
+function Sparkline({ data, ticker, broker, invested }) {
+  const [hovered, setHovered] = useState(false)
+
   if (!data || data.length < 2) return (
     <div className="w-[88px] h-[22px] bg-slate-50 rounded flex items-center justify-center">
       <span className="text-[7px] text-slate-300 font-mono">sin historial</span>
     </div>
   )
 
-  const lastVal = data[data.length - 1].value
-  const invested = data[0].invested
-  const isUp = lastVal >= invested
-
   return (
-    <div className="relative cursor-pointer" onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
-      <div className="flex items-center gap-0.5">
+    <div className="relative" onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+      <div className="cursor-pointer">
         <SparklineSVG data={data} width={72} height={20} showDots={false} showLabels={false} showEvents={true} />
       </div>
+      {hovered && (
+        <SparkTooltip data={data} ticker={ticker} broker={broker} invested={invested} />
+      )}
     </div>
   )
 }
 
 // ── Expanded tooltip on hover ──
-function SparkTooltip({ data, ticker, broker, invested, tooltipPos }) {
-  if (!data || data.length < 2 || !tooltipPos) return null
+function SparkTooltip({ data, ticker, broker, invested }) {
+  if (!data || data.length < 2) return null
 
   const lastVal = data[data.length - 1].value
   const totalPct = ((lastVal - invested) / invested * 100).toFixed(2)
@@ -96,7 +97,7 @@ function SparkTooltip({ data, ticker, broker, invested, tooltipPos }) {
   const recent = changes.slice(-10)
 
   return (
-    <div className="fixed z-[9999]" style={{ padding: "12px 0 12px 20px", margin: "-12px 0 -12px -20px" }} onMouseEnter={tooltipPos.onEnter} onMouseLeave={tooltipPos.onLeave} style={{ left: tooltipPos.x, top: tooltipPos.y }}>
+    <div className="absolute z-[9999] left-0 top-full mt-1">
       <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-xl ring-1 ring-slate-100" style={{ minWidth: 290 }}>
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
@@ -189,8 +190,7 @@ function TickerIcon({ ticker }) {
 export default function PositionsTable({ positions, positionHistory, onRefresh }) {
   const [editing, setEditing] = useState(null)
   const [editVal, setEditVal] = useState('')
-  const [tooltip, setTooltip] = useState(null)
-
+  
   const historyMap = useMemo(() => {
     const map = {}
     if (positionHistory?.length) {
@@ -211,23 +211,7 @@ export default function PositionsTable({ positions, positionHistory, onRefresh }
     setEditing(null)
   }
 
-  const handleSparkEnter = useCallback((e, p) => {
-    if (window._ttTimer) clearTimeout(window._ttTimer)
-    const rect = e.currentTarget.getBoundingClientRect()
-    const x = rect.right + 4
-    const y = rect.top - 20
-    setTooltip({
-      posId: p.id, ticker: p.ticker,
-      broker: BROKER_NAMES[p.platform] || p.platform,
-      invested: Number(p.invested),
-      x: Math.min(x, window.innerWidth - 320),
-      y: Math.max(8, Math.min(y, window.innerHeight - 350)),
-      onEnter: () => { if (window._ttTimer) clearTimeout(window._ttTimer) },
-      onLeave: () => { window._ttTimer = setTimeout(() => setTooltip(null), 400) }
-    })
-  }, [])
 
-  const handleSparkLeave = useCallback(() => { window._ttTimer = setTimeout(() => setTooltip(null), 400) }, [])
 
   if (!positions?.length) return (
     <div className="bg-white rounded-xl border border-slate-200 p-5">
@@ -288,7 +272,7 @@ export default function PositionsTable({ positions, positionHistory, onRefresh }
                       <TickerIcon ticker={p.ticker} />
                       <div>
                         <span className="font-bold text-slate-800 text-[13px] block">{p.ticker}</span>
-                        <Sparkline data={historyMap[p.id]} onMouseEnter={(e) => handleSparkEnter(e, p)} onMouseLeave={handleSparkLeave} />
+                        <Sparkline data={historyMap[p.id]} ticker={p.ticker} broker={BROKER_NAMES[p.platform] || p.platform} invested={Number(p.invested)} />
                       </div>
                     </div>
                   </td>
@@ -349,16 +333,6 @@ export default function PositionsTable({ positions, positionHistory, onRefresh }
           </tfoot>
         </table>
       </div>
-
-      {tooltip && (
-        <SparkTooltip
-          data={historyMap[tooltip.posId]}
-          ticker={tooltip.ticker}
-          broker={tooltip.broker}
-          invested={tooltip.invested}
-          tooltipPos={{ x: tooltip.x, y: tooltip.y }}
-        />
-      )}
     </div>
   )
 }
