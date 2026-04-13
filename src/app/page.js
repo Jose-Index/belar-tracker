@@ -36,7 +36,7 @@ export default function Dashboard() {
       supabase.from('positions').select('*').eq('is_open', true).order('platform'),
       supabase.from('contributions').select('*').order('date'),
       supabase.from('yearly_results').select('*').order('year'),
-      supabase.from('radar_belar').select('*').eq('is_active', true).order('created_at', { ascending: false }),
+      supabase.from('radar_belar').select('*').eq('is_active', true).order('added_date', { ascending: false }),
       supabase.from('radar_jose').select('*').eq('is_active', true).order('created_at', { ascending: false }),
       supabase.from('calendar_events').select('*').order('date'),
       supabase.from('quotes').select('*').eq('is_active', true),
