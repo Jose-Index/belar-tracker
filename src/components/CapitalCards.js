@@ -33,6 +33,7 @@ export default function CapitalCards({ snapshots, brokers, wallets, onUpdateValu
     code: 'btc', label: 'BTC', value: btcUsd, prevValue: prevBtcUsd,
     color: BROKER_COLORS.btc, editKey: 'btc_qty',
     sub: `${btcQty.toFixed(8)} BTC`, editIsBtcQty: true,
+    isLive: !!btcPrice,
   }
 
   const cards = [...brokerCards, btcCard]
