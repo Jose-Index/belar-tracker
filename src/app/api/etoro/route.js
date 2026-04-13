@@ -24,73 +24,71 @@ export async function GET(request) {
   const action = searchParams.get('action') || 'portfolio'
 
   try {
-    if (action === 'portfolio') {
-      // Fetch portfolio AND equity in parallel
-      const [pnlData, equityData] = await Promise.all([
-        etoroFetch('/trading/info/real/pnl'),
-        etoroFetch('/trading/info/real/equity').catch(() => null),
-      ])
+    const pnlData = await etoroFetch('/trading/info/real/pnl')
+    const p = pnlData.clientPortfolio || pnlData
 
-      const portfolio = pnlData.clientPortfolio || pnlData
+    // Own positions
+    const positions = (p.positions || []).map(pos => ({
+      ticker: INSTRUMENT_MAP[pos.instrumentID] || `ID_${pos.instrumentID}`,
+      instrumentId: pos.instrumentID,
+      invested: pos.initialAmountInDollars,
+      value: pos.initialAmountInDollars + (pos.unrealizedPnL?.pnL || 0),
+      pnl: pos.unrealizedPnL?.pnL || 0,
+      leverage: pos.leverage,
+      openRate: pos.openRate,
+      openDate: pos.openDateTime?.split('T')[0],
+      stopLoss: pos.stopLossRate,
+      units: pos.initialUnits,
+    }))
 
-      // Own positions
-      const positions = (portfolio.positions || []).map(p => ({
-        ticker: INSTRUMENT_MAP[p.instrumentID] || `ID_${p.instrumentID}`,
-        instrumentId: p.instrumentID,
-        invested: p.initialAmountInDollars,
-        value: p.initialAmountInDollars + (p.unrealizedPnL?.pnL || 0),
-        pnl: p.unrealizedPnL?.pnL || 0,
-        leverage: p.leverage,
-        openRate: p.openRate,
-        openDate: p.openDateTime?.split('T')[0],
-        stopLoss: p.stopLossRate,
-        units: p.initialUnits,
-      }))
+    // CopyTrader
+    const mirrors = (p.mirrors || []).map(m => {
+      const mPos = m.positions || []
+      const mPnl = mPos.reduce((s, x) => s + (x.unrealizedPnL?.pnL || 0), 0)
+      const mInv = mPos.reduce((s, x) => s + (x.initialAmountInDollars || 0), 0)
+      return {
+        name: 'Thomaspj',
+        invested: mInv,
+        value: mInv + mPnl + (m.closedPositionsNetProfit || 0),
+        pnl: mPnl,
+        closedProfit: m.closedPositionsNetProfit || 0,
+        positionsCount: mPos.length,
+        availableAmount: m.availableAmount || 0,
+      }
+    })
 
-      // CopyTrader (Thomaspj)
-      const mirrors = (portfolio.mirrors || []).map(m => {
-        const mPos = m.positions || []
-        const mPnl = mPos.reduce((s, p) => s + (p.unrealizedPnL?.pnL || 0), 0)
-        const mInv = mPos.reduce((s, p) => s + (p.initialAmountInDollars || 0), 0)
-        return {
-          name: 'Thomaspj',
-          invested: mInv,
-          value: mInv + mPnl + (m.closedPositionsNetProfit || 0),
-          pnl: mPnl,
-          closedProfit: m.closedPositionsNetProfit || 0,
-          positionsCount: mPos.length,
-        }
-      })
+    // Calculate equity per eToro formula:
+    // Equity = Cash + TotalInvested + PnL
+    // Cash = credit - pending orders
+    const credit = p.credit || 0
+    const ordersForOpen = (p.ordersForOpen || []).filter(o => !o.mirrorID || o.mirrorID === 0)
+    const pendingOrdersAmount = ordersForOpen.reduce((s, o) => s + (o.amount || 0), 0)
+    const stockOrdersAmount = (p.orders || []).reduce((s, o) => s + (o.amount || 0), 0)
+    const cash = credit - pendingOrdersAmount - stockOrdersAmount
 
-      // Use equity endpoint for the real total (includes cash)
-      const equity = equityData?.equity ?? equityData?.Equity ?? null
+    // Total invested = own positions + mirror positions + mirror available (excluding closed profits)
+    const ownInvested = positions.reduce((s, x) => s + x.invested, 0)
+    const mirrorInvested = mirrors.reduce((s, m) => s + m.invested + m.availableAmount - m.closedProfit, 0)
+    const totalInvested = ownInvested + mirrorInvested + pendingOrdersAmount + stockOrdersAmount
 
-      // Fallback calculation if equity endpoint fails
-      const ownValue = positions.reduce((s, p) => s + p.value, 0)
-      const mirrorValue = mirrors.reduce((s, m) => s + m.value, 0)
-      const calculatedTotal = ownValue + mirrorValue
+    // PnL
+    const ownPnl = positions.reduce((s, x) => s + x.pnl, 0)
+    const mirrorPnl = mirrors.reduce((s, m) => s + m.pnl + m.closedProfit, 0)
+    const totalPnl = ownPnl + mirrorPnl
 
-      return NextResponse.json({
-        ok: true,
-        equity: equity || calculatedTotal,
-        equitySource: equity ? 'etoro_api' : 'calculated',
-        cash: equity ? equity - calculatedTotal : null,
-        positions,
-        mirrors,
-      })
+    const equity = cash + totalInvested + totalPnl
+
+    if (action === 'debug') {
+      return NextResponse.json({ credit, cash, pendingOrdersAmount, stockOrdersAmount, ownInvested, mirrorInvested, totalInvested, ownPnl, mirrorPnl, totalPnl, equity, raw: p })
     }
 
-    if (action === 'equity') {
-      const data = await etoroFetch('/trading/info/real/equity')
-      return NextResponse.json({ ok: true, data })
-    }
-
-    if (action === 'cash') {
-      const data = await etoroFetch('/trading/info/real/available-cash')
-      return NextResponse.json({ ok: true, data })
-    }
-
-    return NextResponse.json({ error: 'Use action=portfolio|equity|cash' }, { status: 400 })
+    return NextResponse.json({
+      ok: true,
+      equity,
+      cash,
+      positions,
+      mirrors,
+    })
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
