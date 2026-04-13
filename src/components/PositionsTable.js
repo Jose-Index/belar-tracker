@@ -201,9 +201,28 @@ function TickerIcon({ ticker }) {
   )
 }
 
-export default function PositionsTable({ positions, positionHistory, onRefresh }) {
+export default function PositionsTable({ positions, positionHistory, onRefresh, etoroLive }) {
   const [editing, setEditing] = useState(null)
   const [editVal, setEditVal] = useState('')
+
+  // Merge eToro live data into positions
+  const mergedPositions = useMemo(() => {
+    if (!positions) return []
+    if (!etoroLive?.positions) return positions
+    return positions.map(p => {
+      if (p.platform !== 'etoro') return p
+      const live = etoroLive.positions.find(lp => lp.ticker === p.ticker)
+      if (!live) {
+        // Check mirrors (Thomaspj)
+        if (p.ticker === 'Thomaspj' && etoroLive.mirrors?.[0]) {
+          const m = etoroLive.mirrors[0]
+          return { ...p, current_value: m.value, _live: true }
+        }
+        return p
+      }
+      return { ...p, current_value: live.value, _live: true }
+    })
+  }, [positions, etoroLive])
 
   const historyMap = useMemo(() => {
     const map = {}
@@ -225,14 +244,14 @@ export default function PositionsTable({ positions, positionHistory, onRefresh }
     setEditing(null)
   }
 
-  if (!positions?.length) return (
+  if (!mergedPositions?.length) return (
     <div className="bg-white rounded-xl border border-slate-200 p-5">
       <div className="section-title">Posiciones Abiertas</div>
       <p className="text-sm text-slate-400">Sin posiciones abiertas</p>
     </div>
   )
 
-  const sorted = [...positions].sort((a, b) => {
+  const sorted = [...mergedPositions].sort((a, b) => {
     const order = { etoro: 1, xtb: 2, ibkr: 3 }
     return (order[a.platform] || 99) - (order[b.platform] || 99)
   })

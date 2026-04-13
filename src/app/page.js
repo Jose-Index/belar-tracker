@@ -14,6 +14,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('dashboard')
   const [btcPrice, setBtcPrice] = useState(null)
+  const [etoroLive, setEtoroLive] = useState(null)
   const [data, setData] = useState({
     brokers: [], wallets: [], snapshots: [], positions: [],
     contributions: [], yearlyResults: [], radarBelar: [],
@@ -45,17 +46,23 @@ export default function Dashboard() {
     setLoading(false)
   }, [])
 
+  // Live data: BTC price + eToro portfolio (auto-refresh every 30s)
   useEffect(() => {
-    const loadBtc = async () => {
+    const loadLive = async () => {
       try {
-        const res = await fetch('/api/tickers')
-        const tickers = await res.json()
+        const [tickerRes, etoroRes] = await Promise.all([
+          fetch('/api/tickers'),
+          fetch('/api/etoro?action=portfolio'),
+        ])
+        const tickers = await tickerRes.json()
         const btc = tickers.find(t => t.symbol === 'BTC-USD')
         if (btc?.price) setBtcPrice(btc.price)
+        const etoro = await etoroRes.json()
+        if (etoro.ok) setEtoroLive(etoro)
       } catch(e) {}
     }
-    loadBtc()
-    const id = setInterval(loadBtc, 60000)
+    loadLive()
+    const id = setInterval(loadLive, 30000)
     return () => clearInterval(id)
   }, [])
 
@@ -143,9 +150,9 @@ export default function Dashboard() {
       <TabNav active={tab} onChange={setTab} />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-5 space-y-5">
         {tab === 'dashboard' && <>
-          <CapitalCards snapshots={data.snapshots} brokers={data.brokers} wallets={data.wallets} onUpdateValues={handleUpdateValues} btcPrice={btcPrice} />
+          <CapitalCards snapshots={data.snapshots} brokers={data.brokers} wallets={data.wallets} onUpdateValues={handleUpdateValues} btcPrice={btcPrice} etoroLive={etoroLive} />
           <EvolutionChart snapshots={data.snapshots} />
-          <PositionsTable positions={data.positions} positionHistory={data.positionHistory} onRefresh={fetchAll} />
+          <PositionsTable positions={data.positions} positionHistory={data.positionHistory} onRefresh={fetchAll} etoroLive={etoroLive} />
           <ResultsSummary snapshots={data.snapshots} contributions={data.contributions} />
         </>}
         {tab === 'historico' && <>

@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { BROKER_COLORS, BROKER_NAMES, formatCurrency, pnlColor } from '@/lib/constants'
 
-export default function CapitalCards({ snapshots, brokers, wallets, onUpdateValues, btcPrice }) {
+export default function CapitalCards({ snapshots, brokers, wallets, onUpdateValues, btcPrice, etoroLive }) {
   const [editing, setEditing] = useState(null)
   const [editValue, setEditValue] = useState('')
 
@@ -12,11 +12,19 @@ export default function CapitalCards({ snapshots, brokers, wallets, onUpdateValu
   const prev = snapshots.length > 1 ? snapshots[snapshots.length - 2] : null
   const data = latest.data || {}
 
-  const brokerCards = brokers.map(b => ({
-    code: b.code, label: BROKER_NAMES[b.code] || b.name,
-    value: data[b.code] || 0, prevValue: prev?.data?.[b.code] || 0,
-    color: BROKER_COLORS[b.code] || b.color, editKey: b.code,
-  }))
+  const brokerCards = brokers.map(b => {
+    let value = data[b.code] || 0
+    // Override eToro with live API data
+    if (b.code === 'etoro' && etoroLive?.equity) {
+      value = etoroLive.equity
+    }
+    return {
+      code: b.code, label: BROKER_NAMES[b.code] || b.name,
+      value, prevValue: prev?.data?.[b.code] || 0,
+      color: BROKER_COLORS[b.code] || b.color, editKey: b.code,
+      isLive: b.code === 'etoro' && !!etoroLive?.equity,
+    }
+  })
 
   const btcQty = data.btc_qty || 0
   const btcUsd = btcPrice ? btcQty * btcPrice : (data.btc_usd || 0)
@@ -45,7 +53,10 @@ export default function CapitalCards({ snapshots, brokers, wallets, onUpdateValu
             className="bg-white rounded-xl border border-slate-200 p-4 cursor-pointer hover:shadow-md transition-shadow"
             style={{ borderTopColor: c.color, borderTopWidth: 3 }}
             onClick={() => !isEditing && handleEdit(c)}>
-            <div className="text-[10px] font-semibold tracking-wider text-slate-400 mb-1">{c.label}</div>
+            <div className="text-[10px] font-semibold tracking-wider text-slate-400 mb-1 flex items-center gap-1.5">
+              {c.label}
+              {c.isLive && <span className="inline-flex items-center gap-0.5 text-[7px] font-bold text-emerald-500 uppercase tracking-widest"><span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" />live</span>}
+            </div>
             {isEditing ? (
               <input autoFocus type="number" step={c.editIsBtcQty ? '0.00000001' : '0.01'}
                 className="w-full text-lg font-bold bg-slate-50 border border-slate-300 rounded px-2 py-1 outline-none focus:border-blue-400 font-mono"
