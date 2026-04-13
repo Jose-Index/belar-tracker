@@ -34,7 +34,10 @@ export async function POST(request) {
 
 async function handleAction(action, data) {
   if (action === 'update_radar') {
-      await supabase.from('radar_belar').update({ is_active: false }).eq('is_active', true)
+      // Only clear existing if replace=true is explicitly passed
+      if (data?.replace) {
+        await supabase.from('radar_belar').update({ is_active: false }).eq('is_active', true)
+      }
       if (data?.items?.length) {
         const items = data.items.map(item => ({
           ticker: item.ticker,
@@ -45,7 +48,7 @@ async function handleAction(action, data) {
         }))
         await supabase.from('radar_belar').insert(items)
       }
-      return NextResponse.json({ ok: true, count: data?.items?.length || 0 })
+      return NextResponse.json({ ok: true, replaced: !!data?.replace, count: data?.items?.length || 0 })
     }
 
     if (action === 'add_calendar') {
