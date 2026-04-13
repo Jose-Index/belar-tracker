@@ -18,9 +18,13 @@ export const SL_TYPES = ['TIGHT', 'STANDARD', 'WIDE']
 
 export const CLASS_COLORS = {
   'NÚCLEO': '#2563eb',
+  'NUCLEO': '#2563eb',
   'TÁCTICA': '#7c3aed',
+  'TACTICA': '#7c3aed',
   'MOMENTUM': '#ea580c',
+  'MO MEN TUM': '#ea580c',
   'DISRUPTIVA': '#ec4899',
+  'DiSrUpTiVa': '#ec4899',
 }
 
 export const EVENT_TYPES = {
