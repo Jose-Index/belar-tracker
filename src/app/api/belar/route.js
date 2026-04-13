@@ -6,13 +6,34 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 )
 
+// GET handler — allows Claude to write via web_fetch without bash/Chrome
+export async function GET(request) {
+  const { searchParams } = new URL(request.url)
+  const action = searchParams.get('action')
+  const payload = searchParams.get('data')
+  if (!action || !payload) {
+    return NextResponse.json({ status: 'belar-api-ok', actions: ['update_radar', 'add_calendar', 'update_positions'] })
+  }
+  try {
+    const data = JSON.parse(decodeURIComponent(payload))
+    return handleAction(action, data)
+  } catch (e) {
+    return NextResponse.json({ error: e.message }, { status: 500 })
+  }
+}
+
 export async function POST(request) {
   try {
     const body = await request.json()
     const { action, data } = body
+    return handleAction(action, data)
+  } catch (e) {
+    return NextResponse.json({ error: e.message }, { status: 500 })
+  }
+}
 
-    if (action === 'update_radar') {
-      // Clear old radar items and insert new ones
+async function handleAction(action, data) {
+  if (action === 'update_radar') {
       await supabase.from('radar_belar').update({ is_active: false }).eq('is_active', true)
       if (data?.items?.length) {
         const items = data.items.map(item => ({
@@ -45,7 +66,4 @@ export async function POST(request) {
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
-  } catch (e) {
-    return NextResponse.json({ error: e.message }, { status: 500 })
-  }
 }
