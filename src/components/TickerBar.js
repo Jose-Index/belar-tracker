@@ -13,7 +13,7 @@ export default function TickerBar() {
       } catch (e) { /* silent */ }
     }
     load()
-    const id = setInterval(load, 60000)
+    const id = setInterval(load, 15000)
     return () => clearInterval(id)
   }, [])
 
