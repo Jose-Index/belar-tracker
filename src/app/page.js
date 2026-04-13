@@ -145,9 +145,11 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <Header onCloseWeek={handleCloseWeek} onCloseYear={handleCloseYear} />
-      <TickerBar />
-      <TabNav active={tab} onChange={setTab} />
+      <div className="sticky top-0 z-50 bg-slate-50">
+        <Header onCloseWeek={handleCloseWeek} onCloseYear={handleCloseYear} />
+        <TickerBar />
+        <TabNav active={tab} onChange={setTab} />
+      </div>
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-5 space-y-5">
         {tab === 'dashboard' && <>
           <CapitalCards snapshots={data.snapshots} brokers={data.brokers} wallets={data.wallets} onUpdateValues={handleUpdateValues} btcPrice={btcPrice} etoroLive={etoroLive} />
