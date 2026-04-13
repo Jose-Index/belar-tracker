@@ -22,9 +22,7 @@ export const CLASS_COLORS = {
   'TÁCTICA': '#7c3aed',
   'TACTICA': '#7c3aed',
   'MOMENTUM': '#ea580c',
-  'MO MEN TUM': '#ea580c',
   'DISRUPTIVA': '#ec4899',
-  'DiSrUpTiVa': '#ec4899',
 }
 
 export const EVENT_TYPES = {
