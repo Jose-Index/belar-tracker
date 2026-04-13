@@ -51,12 +51,12 @@ export default function CapitalCards({ snapshots, brokers, wallets, onUpdateValu
         const isEditing = editing === c.editKey
         return (
           <div key={c.code}
-            className="bg-white rounded-xl border border-slate-200 p-4 cursor-pointer hover:shadow-md transition-shadow"
+            className={`bg-white rounded-xl border border-slate-200 p-4 transition-shadow ${c.isLive && !c.editIsBtcQty ? '' : 'cursor-pointer hover:shadow-md'}`}
             style={{ borderTopColor: c.color, borderTopWidth: 3 }}
-            onClick={() => !isEditing && handleEdit(c)}>
+            onClick={() => !isEditing && !(c.isLive && !c.editIsBtcQty) && handleEdit(c)}>
             <div className="text-[10px] font-semibold tracking-wider text-slate-400 mb-1 flex items-center gap-1.5">
               {c.label}
-              {c.isLive && <span className="inline-flex items-center gap-0.5 text-[7px] font-bold text-emerald-500 uppercase tracking-widest"><span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" />live</span>}
+              {c.isLive && !c.editIsBtcQty && <span className="inline-flex items-center gap-0.5 text-[7px] font-bold text-emerald-500 uppercase tracking-widest"><span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" />live</span>}
             </div>
             {isEditing ? (
               <input autoFocus type="number" step={c.editIsBtcQty ? '0.00000001' : '0.01'}
