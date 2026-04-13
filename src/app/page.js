@@ -62,7 +62,7 @@ export default function Dashboard() {
       } catch(e) {}
     }
     loadLive()
-    const id = setInterval(loadLive, 30000)
+    const id = setInterval(loadLive, 10000)
     return () => clearInterval(id)
   }, [])
 
