@@ -276,13 +276,13 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
               <th>Activo</th>
               <th>Broker</th>
               <th>Entrada</th>
-              <th className="text-right">Invertido</th>
-              <th className="text-right">Valor</th>
-              <th className="text-right">G/P $</th>
-              <th className="text-right">G/P %</th>
-              <th className="text-right text-[10px] text-slate-400" title="Rendimiento diario">%/D</th>
+              <th>Invertido</th>
+              <th>Valor</th>
+              <th>G/P $</th>
+              <th>G/P %</th>
+              <th title="Rendimiento diario">%/D</th>
               <th>Clase</th>
-              <th className="text-right">Peso</th>
+              <th>Peso</th>
             </tr>
           </thead>
           <tbody>
@@ -343,7 +343,7 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
                     </span>
                   </td>
                   <td className="text-right">
-                    <span className={`font-mono text-[8px] ${dailyPct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                    <span className={`font-mono text-[9px] ${dailyPct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                       {dailyPct >= 0 ? '+' : ''}{(dailyPct * 100).toFixed(2)}%
                     </span>
                   </td>
