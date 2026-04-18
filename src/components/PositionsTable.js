@@ -1,6 +1,6 @@
 'use client'
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { BROKER_COLORS, BROKER_NAMES, CLASS_COLORS, formatCurrency, pnlColor } from '@/lib/constants'
+import { BROKER_COLORS, BROKER_NAMES, CLASS_COLORS, formatCurrency, formatNative, toUSD, pnlColor } from '@/lib/constants'
 import { supabase } from '@/lib/supabase'
 
 // ââ SVG Sparkline with area fill ââ
@@ -201,7 +201,7 @@ function TickerIcon({ ticker }) {
   )
 }
 
-export default function PositionsTable({ positions, positionHistory, onRefresh, etoroLive }) {
+export default function PositionsTable({ positions, positionHistory, onRefresh, etoroLive, eurUsdRate = 1.08 }) {
   const [editing, setEditing] = useState(null)
   const [editVal, setEditVal] = useState('')
 
@@ -256,8 +256,8 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
     return (order[a.platform] || 99) - (order[b.platform] || 99)
   })
 
-  const totalInvested = sorted.reduce((s, p) => s + Number(p.invested), 0)
-  const totalValue = sorted.reduce((s, p) => s + Number(p.current_value || p.invested), 0)
+  const totalInvested = sorted.reduce((s, p) => s + toUSD(Number(p.invested), p.currency || 'USD', eurUsdRate), 0)
+  const totalValue = sorted.reduce((s, p) => s + toUSD(Number(p.current_value || p.invested), p.currency || 'USD', eurUsdRate), 0)
   const totalPnl = totalValue - totalInvested
   const totalPct = totalInvested > 0 ? totalPnl / totalInvested : 0
 
@@ -292,7 +292,9 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
               const entry = new Date(p.entry_date)
               const days = Math.max(1, Math.floor((new Date() - entry) / 86400000))
               const dailyPct = pct / days
-              const weight = totalValue > 0 ? value / totalValue : 0
+              const cur = p.currency || 'USD'
+              const valueUSD = toUSD(value, cur, eurUsdRate)
+              const weight = totalValue > 0 ? valueUSD / totalValue : 0
               const brokerColor = BROKER_COLORS[p.platform] || '#666'
               const classColor = CLASS_COLORS[p.class] || '#6b7280'
 
@@ -315,7 +317,7 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
                   <td className="text-slate-500 font-mono text-[11px]">
                     {(() => { const opts = entry.getFullYear() !== new Date().getFullYear() ? { day: '2-digit', month: 'short', year: '2-digit', timeZone: 'UTC' } : { day: '2-digit', month: 'short', timeZone: 'UTC' }; return entry.toLocaleDateString('es-ES', opts) })()}
                   </td>
-                  <td className="text-right font-mono text-[12px] text-slate-500">{formatCurrency(invested)}</td>
+                  <td className="text-right font-mono text-[12px] text-slate-500">{formatNative(invested, cur)}</td>
                   <td className="text-right cursor-pointer" onClick={() => { setEditing(p.id); setEditVal(String(value)) }}>
                     {editing === p.id ? (
                       <input autoFocus type="number" step="0.01"
@@ -325,16 +327,16 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
                         onKeyDown={e => e.key === 'Enter' && handleSaveValue(p.id)}
                         onClick={e => e.stopPropagation()} />
                     ) : (
-                      <span className="font-mono text-[13px] font-bold text-slate-800 hover:text-green-600 transition-colors">{formatCurrency(value)}</span>
+                      <span className="font-mono text-[13px] font-bold text-slate-800 hover:text-green-600 transition-colors">{formatNative(value, cur)}</span>
                     )}
                   </td>
-                  <td className={`text-right font-mono text-[12px] font-semibold ${pnlColor(pnl)}`}>
-                    {pnl >= 0 ? '+' : ''}{formatCurrency(pnl)}
+                  <td className={`text-right font-mono text-[15px] font-bold ${pnl >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                    {pnl >= 0 ? '+' : ''}{formatNative(pnl, cur)}
                   </td>
-                  <td className={`text-right font-mono text-[13px] font-bold ${pnlColor(pct)}`}>
+                  <td className={`text-right font-mono text-[12px] font-semibold ${pct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                     {pct >= 0 ? '+' : ''}{(pct * 100).toFixed(2)}%
                   </td>
-                  <td className={`text-right font-mono text-[10px] ${pnlColor(dailyPct)}`}>
+                  <td className={`text-right font-mono text-[9px] ${dailyPct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                     {dailyPct >= 0 ? '+' : ''}{(dailyPct * 100).toFixed(2)}%
                   </td>
                   <td>
@@ -353,10 +355,10 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
               <td colSpan={3} className="text-[11px] text-slate-500 font-semibold">{sorted.length} posiciones</td>
               <td className="text-right font-mono text-[12px] font-semibold text-slate-600">{formatCurrency(totalInvested)}</td>
               <td className="text-right font-mono text-[13px] font-bold text-slate-800">{formatCurrency(totalValue)}</td>
-              <td className={`text-right font-mono text-[12px] font-bold ${pnlColor(totalPnl)}`}>
+              <td className={`text-right font-mono text-[15px] font-bold ${totalPnl >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                 {totalPnl >= 0 ? '+' : ''}{formatCurrency(totalPnl)}
               </td>
-              <td className={`text-right font-mono text-[13px] font-bold ${pnlColor(totalPct)}`}>
+              <td className={`text-right font-mono text-[12px] font-bold ${totalPct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                 {totalPct >= 0 ? '+' : ''}{(totalPct * 100).toFixed(2)}%
               </td>
               <td colSpan={3}></td>

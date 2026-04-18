@@ -15,6 +15,7 @@ export default function Dashboard() {
   const [tab, setTab] = useState('dashboard')
   const [btcPrice, setBtcPrice] = useState(null)
   const [etoroLive, setEtoroLive] = useState(null)
+  const [eurUsdRate, setEurUsdRate] = useState(1.08)
   const [data, setData] = useState({
     brokers: [], wallets: [], snapshots: [], positions: [],
     contributions: [], yearlyResults: [], radarBelar: [],
@@ -57,6 +58,8 @@ export default function Dashboard() {
         const tickers = await tickerRes.json()
         const btc = tickers.find(t => t.symbol === 'BTC-USD')
         if (btc?.price) setBtcPrice(btc.price)
+        const eur = tickers.find(t => t.symbol === 'EURUSD=X')
+        if (eur?.price) setEurUsdRate(eur.price)
         const etoro = await etoroRes.json()
         if (etoro.ok) setEtoroLive(etoro)
       } catch(e) {}
@@ -154,7 +157,7 @@ export default function Dashboard() {
         {tab === 'dashboard' && <>
           <CapitalCards snapshots={data.snapshots} brokers={data.brokers} wallets={data.wallets} onUpdateValues={handleUpdateValues} btcPrice={btcPrice} etoroLive={etoroLive} />
           <EvolutionChart snapshots={data.snapshots} />
-          <PositionsTable positions={data.positions} positionHistory={data.positionHistory} onRefresh={fetchAll} etoroLive={etoroLive} />
+          <PositionsTable positions={data.positions} positionHistory={data.positionHistory} onRefresh={fetchAll} etoroLive={etoroLive} eurUsdRate={eurUsdRate} />
           <ResultsSummary snapshots={data.snapshots} contributions={data.contributions} />
         </>}
         {tab === 'historico' && <>

@@ -54,6 +54,28 @@ export function formatCurrency(value, decimals = 2) {
   })
 }
 
+const CURRENCY_SYMBOLS = { USD: '$', EUR: '€', GBP: '£' }
+
+export function formatNative(value, currency = 'USD', decimals = 2) {
+  if (value == null || isNaN(value)) return (CURRENCY_SYMBOLS[currency] || '$') + '0.00'
+  const num = Number(value)
+  const prefix = num < 0 ? '-' : ''
+  const sym = CURRENCY_SYMBOLS[currency] || '$'
+  return prefix + sym + Math.abs(num).toLocaleString('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  })
+}
+
+// Convert a native-currency amount into USD using the given EUR/USD rate.
+// rate = USD per 1 EUR (e.g. 1.1767)
+export function toUSD(amount, currency = 'USD', eurUsdRate = 1) {
+  if (amount == null || isNaN(amount)) return 0
+  if (currency === 'USD') return Number(amount)
+  if (currency === 'EUR') return Number(amount) * Number(eurUsdRate || 1)
+  return Number(amount)
+}
+
 export function formatPct(value, decimals = 2) {
   if (value == null || isNaN(value)) return '0.00%'
   return (Number(value) * 100).toFixed(decimals) + '%'

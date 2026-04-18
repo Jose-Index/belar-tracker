@@ -274,7 +274,21 @@ export function ResultsSummary({ snapshots, contributions }) {
   const startOfYear = firstOfYear ? firstOfYear.total_usd : totalValue
   const ytdContribs = contributions.filter(c => new Date(c.date).getFullYear() === year).reduce((s, c) => s + Number(c.amount_usd || 0), 0)
   const ytdPnl = totalValue - startOfYear - ytdContribs
-  const ytdPct = startOfYear > 0 ? ytdPnl / startOfYear : 0
+
+  // Modified Dietz: time-weighted return accounting for when each cash flow entered
+  // weight_i = (totalDays - daysElapsedWhenFlow_i) / totalDays
+  const yearStart = new Date(year, 0, 1)
+  const now = new Date()
+  const totalDays = Math.max(1, Math.floor((now - yearStart) / 86400000))
+  const ytdCashflows = contributions.filter(c => new Date(c.date).getFullYear() === year)
+  const weightedContribs = ytdCashflows.reduce((s, c) => {
+    const flowDate = new Date(c.date)
+    const daysElapsed = Math.max(0, Math.min(totalDays, Math.floor((flowDate - yearStart) / 86400000)))
+    const weight = (totalDays - daysElapsed) / totalDays
+    return s + Number(c.amount_usd || 0) * weight
+  }, 0)
+  const ytdDenom = startOfYear + weightedContribs
+  const ytdPct = ytdDenom > 0 ? ytdPnl / ytdDenom : 0
 
   const boxes = [
     { label: `YTD ${year}`, pnl: ytdPnl, pct: ytdPct, color: '#7c3aed',
