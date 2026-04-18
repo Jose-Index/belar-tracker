@@ -332,14 +332,20 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
                       <span className="font-mono text-[13px] font-bold text-slate-800 hover:text-green-600 transition-colors">{formatNative(value, cur)}</span>
                     )}
                   </td>
-                  <td className={`text-right font-mono text-[16px] font-bold ${pnl >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                    {pnl >= 0 ? '+' : ''}{formatNative(pnl, cur)}
+                  <td className="text-right">
+                    <span className={`font-mono text-[16px] font-bold ${pnl >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                      {pnl >= 0 ? '+' : ''}{formatNative(pnl, cur)}
+                    </span>
                   </td>
-                  <td className={`text-right font-mono text-[12px] font-semibold ${pct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                    {pct >= 0 ? '+' : ''}{(pct * 100).toFixed(2)}%
+                  <td className="text-right">
+                    <span className={`font-mono text-[12px] font-semibold ${pct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                      {pct >= 0 ? '+' : ''}{(pct * 100).toFixed(2)}%
+                    </span>
                   </td>
-                  <td className={`text-right font-mono text-[8px] ${dailyPct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                    {dailyPct >= 0 ? '+' : ''}{(dailyPct * 100).toFixed(2)}%
+                  <td className="text-right">
+                    <span className={`font-mono text-[8px] ${dailyPct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                      {dailyPct >= 0 ? '+' : ''}{(dailyPct * 100).toFixed(2)}%
+                    </span>
                   </td>
                   <td>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-md"
@@ -357,11 +363,15 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
               <td colSpan={3} className="text-[11px] text-slate-500 font-semibold">{sorted.length} posiciones</td>
               <td className="text-right font-mono text-[12px] font-semibold text-slate-600">{formatCurrency(totalInvested)}</td>
               <td className="text-right font-mono text-[13px] font-bold text-slate-800">{formatCurrency(totalValue)}</td>
-              <td className={`text-right font-mono text-[16px] font-bold ${totalPnl >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                {totalPnl >= 0 ? '+' : ''}{formatCurrency(totalPnl)}
+              <td className="text-right">
+                <span className={`font-mono text-[16px] font-bold ${totalPnl >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                  {totalPnl >= 0 ? '+' : ''}{formatCurrency(totalPnl)}
+                </span>
               </td>
-              <td className={`text-right font-mono text-[12px] font-bold ${totalPct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                {totalPct >= 0 ? '+' : ''}{(totalPct * 100).toFixed(2)}%
+              <td className="text-right">
+                <span className={`font-mono text-[12px] font-bold ${totalPct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                  {totalPct >= 0 ? '+' : ''}{(totalPct * 100).toFixed(2)}%
+                </span>
               </td>
               <td colSpan={3}></td>
             </tr>
