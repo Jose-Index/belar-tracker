@@ -333,12 +333,12 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
                     )}
                   </td>
                   <td className="text-right">
-                    <span className={`font-mono text-[16px] font-bold ${pnl >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                    <span className={`font-mono text-[13px] font-bold ${pnl >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                       {pnl >= 0 ? '+' : ''}{formatNative(pnl, cur)}
                     </span>
                   </td>
                   <td className="text-right">
-                    <span className={`font-mono text-[12px] font-semibold ${pct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                    <span className={`font-mono text-[13px] font-bold ${pct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                       {pct >= 0 ? '+' : ''}{(pct * 100).toFixed(2)}%
                     </span>
                   </td>
@@ -364,12 +364,12 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
               <td className="text-right font-mono text-[12px] font-semibold text-slate-600">{formatCurrency(totalInvested)}</td>
               <td className="text-right font-mono text-[13px] font-bold text-slate-800">{formatCurrency(totalValue)}</td>
               <td className="text-right">
-                <span className={`font-mono text-[16px] font-bold ${totalPnl >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                <span className={`font-mono text-[13px] font-bold ${totalPnl >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                   {totalPnl >= 0 ? '+' : ''}{formatCurrency(totalPnl)}
                 </span>
               </td>
               <td className="text-right">
-                <span className={`font-mono text-[12px] font-bold ${totalPct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                <span className={`font-mono text-[13px] font-bold ${totalPct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                   {totalPct >= 0 ? '+' : ''}{(totalPct * 100).toFixed(2)}%
                 </span>
               </td>
