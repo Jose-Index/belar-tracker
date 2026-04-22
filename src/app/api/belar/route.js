@@ -12,7 +12,10 @@ export async function GET(request) {
   const action = searchParams.get('action')
   const payload = searchParams.get('data')
   if (!action || !payload) {
-    return NextResponse.json({ status: 'belar-api-ok', actions: ['update_radar', 'add_calendar', 'update_positions'] })
+    return NextResponse.json({
+      status: 'belar-api-ok',
+      actions: ['update_radar', 'add_calendar', 'update_positions', 'add_exception', 'update_exception_outcome']
+    })
   }
   try {
     const data = JSON.parse(decodeURIComponent(payload))
@@ -66,6 +69,47 @@ async function handleAction(action, data) {
         }
       }
       return NextResponse.json({ ok: true, count: data?.updates?.length || 0 })
+    }
+
+    if (action === 'add_exception') {
+      // Registra una excepción tasada activada por Belar (v1.3)
+      // Schema: { exception_type: 1|2|3, ticker, platform?, justification,
+      //           previous_sl?, proposed_sl?, exit_date?, exit_price? }
+      if (!data?.exception_type || ![1, 2, 3].includes(data.exception_type)) {
+        return NextResponse.json({ error: 'exception_type must be 1, 2 or 3' }, { status: 400 })
+      }
+      if (!data?.ticker || !data?.justification) {
+        return NextResponse.json({ error: 'ticker and justification are required' }, { status: 400 })
+      }
+      const row = {
+        exception_type: data.exception_type,
+        ticker: data.ticker.toUpperCase(),
+        platform: data.platform || null,
+        justification: data.justification,
+        previous_sl: data.previous_sl ?? null,
+        proposed_sl: data.proposed_sl ?? null,
+        exit_date: data.exit_date || null,
+        exit_price: data.exit_price ?? null,
+      }
+      const { data: inserted, error } = await supabase.from('exceptions').insert(row).select().single()
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ ok: true, exception: inserted })
+    }
+
+    if (action === 'update_exception_outcome') {
+      // Actualiza el resultado de una excepción a posteriori
+      // Schema: { id, outcome: 'favorable'|'desfavorable'|'neutro', outcome_note? }
+      if (!data?.id) return NextResponse.json({ error: 'id is required' }, { status: 400 })
+      if (!['favorable', 'desfavorable', 'neutro'].includes(data?.outcome)) {
+        return NextResponse.json({ error: 'outcome must be favorable|desfavorable|neutro' }, { status: 400 })
+      }
+      const { error } = await supabase.from('exceptions').update({
+        outcome: data.outcome,
+        outcome_note: data.outcome_note || null,
+        outcome_updated_at: new Date().toISOString(),
+      }).eq('id', data.id)
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ ok: true })
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })

@@ -7,7 +7,7 @@ import TabNav from '@/components/TabNav'
 import CapitalCards from '@/components/CapitalCards'
 import EvolutionChart from '@/components/EvolutionChart'
 import PositionsTable from '@/components/PositionsTable'
-import { RadarBelar, RadarJose } from '@/components/RadarModules'
+import { RadarBelar, RadarJose, ExceptionsSection } from '@/components/RadarModules'
 import { CalendarView, WeeklyHistory, ContributionsTable, YearlyResults, ResultsSummary, Calculator, BackupExport, Settings, Footer } from '@/components/Sections'
 
 export default function Dashboard() {
@@ -20,7 +20,7 @@ export default function Dashboard() {
     brokers: [], wallets: [], snapshots: [], positions: [],
     contributions: [], yearlyResults: [], radarBelar: [],
     radarJose: [], calendarEvents: [], quotes: [],
-    positionHistory: []
+    positionHistory: [], exceptions: []
   })
 
   const fetchAll = useCallback(async () => {
@@ -43,7 +43,13 @@ export default function Dashboard() {
       supabase.from('quotes').select('*').eq('is_active', true),
       supabase.from('position_history').select('position_id,week_date,value,invested,event,event_amount').order('week_date'),
     ])
-    setData({ brokers: brokers||[], wallets: wallets||[], snapshots: snapshots||[], positions: positions||[], contributions: contributions||[], yearlyResults: yearlyResults||[], radarBelar: radarBelar||[], radarJose: radarJose||[], calendarEvents: calendarEvents||[], quotes: quotes||[], positionHistory: positionHistory||[] })
+    // exceptions se carga aparte para que, si la tabla aún no existe, no rompa el resto
+    let exceptions = []
+    try {
+      const { data: ex } = await supabase.from('exceptions').select('*').eq('is_active', true).order('activated_at', { ascending: false })
+      exceptions = ex || []
+    } catch (_) { exceptions = [] }
+    setData({ brokers: brokers||[], wallets: wallets||[], snapshots: snapshots||[], positions: positions||[], contributions: contributions||[], yearlyResults: yearlyResults||[], radarBelar: radarBelar||[], radarJose: radarJose||[], calendarEvents: calendarEvents||[], quotes: quotes||[], positionHistory: positionHistory||[], exceptions })
     setLoading(false)
   }, [])
 
@@ -170,6 +176,7 @@ export default function Dashboard() {
         </>}
         {tab === 'radar' && <>
           <RadarBelar items={data.radarBelar} onRefresh={fetchAll} />
+          <ExceptionsSection items={data.exceptions} onRefresh={fetchAll} />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <RadarJose items={data.radarJose} onRefresh={fetchAll} />
             <CalendarView events={data.calendarEvents} onRefresh={fetchAll} />
