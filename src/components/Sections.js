@@ -4,6 +4,37 @@ import { EVENT_TYPES, formatCurrency, pnlColor, BROKER_COLORS, BROKER_NAMES, toU
 import { supabase } from '@/lib/supabase'
 
 // ─── BROKER BALANCES + REGISTRAR ────────────────────────────
+// Card individual por broker. DEFINIDO FUERA de BrokerBalancesRegister para
+// evitar que React lo desmonte en cada tecla (bug de focus en inputs).
+function BrokerBalanceCard({ code, label, color, posValue, total, balance, onChange }) {
+  return (
+    <div className="flex-1 min-w-[180px] bg-slate-50 rounded-lg border border-slate-200 p-3">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color }}>
+          {label}
+        </span>
+        <span className="text-[9px] text-slate-400 font-mono">
+          pos: {formatCurrency(posValue, 0)}
+        </span>
+      </div>
+      <div className="flex items-center gap-1">
+        <span className="text-[10px] text-slate-400 font-mono">$</span>
+        <input type="number" step="0.01" placeholder="saldo cash"
+          value={balance}
+          onChange={e => onChange(e.target.value)}
+          className="flex-1 px-2 py-1 border border-slate-300 rounded text-[13px] font-mono font-bold outline-none focus:border-green-400 bg-white"
+          style={{ color }} />
+      </div>
+      <div className="mt-2 pt-2 border-t border-slate-200 flex items-center justify-between">
+        <span className="text-[9px] text-slate-400 uppercase tracking-wider">Total</span>
+        <span className="text-[13px] font-mono font-bold" style={{ color }}>
+          {formatCurrency(total, 0)}
+        </span>
+      </div>
+    </div>
+  )
+}
+
 // Inputs manuales de saldo (cash) por broker + botón REGISTRAR.
 // Al pulsar REGISTRAR:
 //   1. Calcula totales por broker = Σ valor posiciones (USD) + saldo manual
@@ -125,37 +156,7 @@ export function BrokerBalancesRegister({ brokerBalances, positions, snapshots, b
     }
   }
 
-  const BrokerInput = ({ code, label }) => {
-    const color = BROKER_COLORS[code]
-    const posValue = brokerTotals[`pos${code[0].toUpperCase() + code.slice(1)}`]
-    const total = brokerTotals[code]
-    return (
-      <div className="flex-1 min-w-[180px] bg-slate-50 rounded-lg border border-slate-200 p-3">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color }}>
-            {label}
-          </span>
-          <span className="text-[9px] text-slate-400 font-mono">
-            pos: {formatCurrency(posValue, 0)}
-          </span>
-        </div>
-        <div className="flex items-center gap-1">
-          <span className="text-[10px] text-slate-400 font-mono">$</span>
-          <input type="number" step="0.01" placeholder="saldo cash"
-            value={balances[code]}
-            onChange={e => setBalances({ ...balances, [code]: e.target.value })}
-            className="flex-1 px-2 py-1 border border-slate-300 rounded text-[13px] font-mono font-bold outline-none focus:border-green-400 bg-white"
-            style={{ color }} />
-        </div>
-        <div className="mt-2 pt-2 border-t border-slate-200 flex items-center justify-between">
-          <span className="text-[9px] text-slate-400 uppercase tracking-wider">Total</span>
-          <span className="text-[13px] font-mono font-bold" style={{ color }}>
-            {formatCurrency(total, 0)}
-          </span>
-        </div>
-      </div>
-    )
-  }
+  const BrokerInput = null // reemplazado por BrokerBalanceCard a nivel de módulo
 
   const fmtSat = nextSat.toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })
 
@@ -176,9 +177,24 @@ export function BrokerBalancesRegister({ brokerBalances, positions, snapshots, b
       </div>
 
       <div className="flex flex-wrap gap-3 mb-3">
-        <BrokerInput code="etoro" label="eToro" />
-        <BrokerInput code="xtb" label="XTB" />
-        <BrokerInput code="ibkr" label="IBKR" />
+        <BrokerBalanceCard
+          code="etoro" label="eToro" color={BROKER_COLORS.etoro}
+          posValue={brokerTotals.posEtoro} total={brokerTotals.etoro}
+          balance={balances.etoro}
+          onChange={v => setBalances(prev => ({ ...prev, etoro: v }))}
+        />
+        <BrokerBalanceCard
+          code="xtb" label="XTB" color={BROKER_COLORS.xtb}
+          posValue={brokerTotals.posXtb} total={brokerTotals.xtb}
+          balance={balances.xtb}
+          onChange={v => setBalances(prev => ({ ...prev, xtb: v }))}
+        />
+        <BrokerBalanceCard
+          code="ibkr" label="IBKR" color={BROKER_COLORS.ibkr}
+          posValue={brokerTotals.posIbkr} total={brokerTotals.ibkr}
+          balance={balances.ibkr}
+          onChange={v => setBalances(prev => ({ ...prev, ibkr: v }))}
+        />
       </div>
 
       {lastResult && (
