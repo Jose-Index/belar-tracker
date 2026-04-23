@@ -154,15 +154,6 @@ function SparkTooltip({ data, ticker, broker, invested }) {
   )
 }
 
-function TickerIcon({ ticker }) {
-  const code = (ticker || '?').substring(0, 2).toUpperCase()
-  return (
-    <div className="w-5 h-5 rounded-md bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center shrink-0">
-      <span className="text-[8px] font-bold text-white leading-none">{code}</span>
-    </div>
-  )
-}
-
 // ─── ADD POSITION MODAL ────────────────
 function AddPositionModal({ onClose, onSave }) {
   const [form, setForm] = useState({
@@ -436,13 +427,8 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
               return (
                 <tr key={p.id}>
                   <td>
-                    <div className="flex items-center gap-2.5">
-                      <TickerIcon ticker={p.ticker} />
-                      <div>
-                        <span className="font-bold text-slate-800 text-[13px] block">{p.ticker}</span>
-                        <Sparkline data={historyMap[p.id]} ticker={p.ticker} broker={BROKER_NAMES[p.platform] || p.platform} invested={invested} />
-                      </div>
-                    </div>
+                    <span className="font-bold text-slate-800 text-[13px] block">{p.ticker}</span>
+                    <Sparkline data={historyMap[p.id]} ticker={p.ticker} broker={BROKER_NAMES[p.platform] || p.platform} invested={invested} />
                   </td>
 
                   <td>
