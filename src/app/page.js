@@ -26,8 +26,8 @@ export default function Dashboard() {
     positionHistory: [], exceptions: [], brokerBalances: [],
   })
 
-  const fetchAll = useCallback(async () => {
-    setLoading(true)
+  const doFetch = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true)
     const [
       { data: brokers }, { data: wallets }, { data: snapshots },
       { data: positions }, { data: contributions }, { data: yearlyResults },
@@ -67,8 +67,12 @@ export default function Dashboard() {
       quotes: quotes||[], positionHistory: positionHistory||[],
       exceptions, brokerBalances,
     })
-    setLoading(false)
+    if (!silent) setLoading(false)
   }, [])
+
+  // fetchAll = carga inicial con splash · refreshData = refresco silencioso (sin parpadeo)
+  const fetchAll = useCallback(() => doFetch({ silent: false }), [doFetch])
+  const refreshData = useCallback(() => doFetch({ silent: true }), [doFetch])
 
   useEffect(() => {
     const loadLive = async () => {
@@ -100,7 +104,7 @@ export default function Dashboard() {
     }
     const newTotal = (newData.etoro||0) + (newData.xtb||0) + (newData.ibkr||0) + (newData.btc_usd||0)
     await supabase.from('weekly_snapshots').update({ data: newData, total_usd: newTotal }).eq('id', latest.id)
-    fetchAll()
+    refreshData()
   }
 
   const btcQty = data.snapshots.length ? (data.snapshots[data.snapshots.length - 1].data?.btc_qty || 0) : 0
@@ -125,7 +129,7 @@ export default function Dashboard() {
         {tab === 'dashboard' && <>
           <CapitalCards snapshots={data.snapshots} brokers={data.brokers} wallets={data.wallets} onUpdateValues={handleUpdateValues} btcPrice={btcPrice} />
           <EvolutionChart snapshots={data.snapshots} />
-          <PositionsTable positions={data.positions} positionHistory={data.positionHistory} onRefresh={fetchAll} eurUsdRate={eurUsdRate} />
+          <PositionsTable positions={data.positions} positionHistory={data.positionHistory} onRefresh={refreshData} eurUsdRate={eurUsdRate} />
           <BrokerBalancesRegister
             brokerBalances={data.brokerBalances}
             positions={data.positions}
@@ -133,7 +137,7 @@ export default function Dashboard() {
             btcPrice={btcPrice}
             btcQty={btcQty}
             eurUsdRate={eurUsdRate}
-            onRefresh={fetchAll}
+            onRefresh={refreshData}
           />
           <ResultsSummary snapshots={data.snapshots} contributions={data.contributions} />
         </>}
@@ -142,15 +146,15 @@ export default function Dashboard() {
           <EvolutionChart snapshots={data.snapshots} storageKey="historico" />
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
             <WeeklyHistory snapshots={data.snapshots} />
-            <ContributionsTable contributions={data.contributions} onRefresh={fetchAll} />
+            <ContributionsTable contributions={data.contributions} onRefresh={refreshData} />
           </div>
         </>}
         {tab === 'radar' && <>
-          <RadarBelar items={data.radarBelar} onRefresh={fetchAll} />
-          <ExceptionsSection items={data.exceptions} onRefresh={fetchAll} />
+          <RadarBelar items={data.radarBelar} onRefresh={refreshData} />
+          <ExceptionsSection items={data.exceptions} onRefresh={refreshData} />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <RadarJose items={data.radarJose} onRefresh={fetchAll} />
-            <CalendarView events={data.calendarEvents} onRefresh={fetchAll} />
+            <RadarJose items={data.radarJose} onRefresh={refreshData} />
+            <CalendarView events={data.calendarEvents} onRefresh={refreshData} />
           </div>
         </>}
         {tab === 'tools' && <>
@@ -158,7 +162,7 @@ export default function Dashboard() {
             <Calculator />
             <BackupExport snapshots={data.snapshots} positions={data.positions} contributions={data.contributions} yearlyResults={data.yearlyResults} />
           </div>
-          <Settings quotes={data.quotes} onRefresh={fetchAll} />
+          <Settings quotes={data.quotes} onRefresh={refreshData} />
         </>}
         <Footer quotes={data.quotes} />
       </main>

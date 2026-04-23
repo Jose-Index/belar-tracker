@@ -319,6 +319,10 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
   const [sortMode, setSortMode] = useState('broker')
   const [showAdd, setShowAdd] = useState(false)
 
+  // Estado local para optimistic updates (evita recargar toda la página al editar)
+  const [localPositions, setLocalPositions] = useState(positions || [])
+  useEffect(() => { setLocalPositions(positions || []) }, [positions])
+
   const historyMap = useMemo(() => {
     const map = {}
     if (positionHistory?.length) {
@@ -330,10 +334,16 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
     return map
   }, [positionHistory])
 
+  // Optimistic update: actualiza localPositions instantáneamente y persiste en segundo plano.
+  // Si la persistencia falla, hace rollback cargando desde BD.
   const updateField = async (id, field, value) => {
-    await supabase.from('positions').update({ [field]: value }).eq('id', id)
-    onRefresh?.()
+    setLocalPositions(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p))
     setEditing(null)
+    const { error } = await supabase.from('positions').update({ [field]: value }).eq('id', id)
+    if (error) {
+      console.error('Update failed, refreshing:', error)
+      onRefresh?.()
+    }
   }
 
   const handleSaveField = async (id, field, value) => {
@@ -346,16 +356,26 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
 
   const handleClosePosition = async (p) => {
     if (!confirm(`¿Cerrar posición ${p.ticker} (${BROKER_NAMES[p.platform]})?\nLa fila desaparece del dashboard pero se conserva su histórico.`)) return
-    await supabase.from('positions').update({ is_open: false }).eq('id', p.id)
-    onRefresh?.()
+    // Optimistic: desaparece al instante
+    setLocalPositions(prev => prev.filter(x => x.id !== p.id))
+    const { error } = await supabase.from('positions').update({ is_open: false }).eq('id', p.id)
+    if (error) {
+      console.error('Close failed, refreshing:', error)
+      onRefresh?.()
+    }
   }
 
   const handleAddPosition = async (newPos) => {
-    await supabase.from('positions').insert(newPos)
-    onRefresh?.()
+    const { data: inserted, error } = await supabase.from('positions').insert(newPos).select().single()
+    if (error) {
+      console.error('Add failed:', error)
+      return
+    }
+    // Optimistic: aparece inmediatamente
+    setLocalPositions(prev => [...prev, inserted])
   }
 
-  if (!positions?.length && !showAdd) return (
+  if (!localPositions?.length && !showAdd) return (
     <div className="bg-white rounded-xl border border-slate-200 p-5">
       <div className="flex items-center justify-between mb-3">
         <div className="section-title !mb-0">Posiciones Abiertas</div>
@@ -369,7 +389,7 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
     </div>
   )
 
-  const sorted = [...positions].sort((a, b) => {
+  const sorted = [...localPositions].sort((a, b) => {
     if (sortMode === 'entry') {
       const da = a.entry_date ? new Date(a.entry_date).getTime() : -Infinity
       const db = b.entry_date ? new Date(b.entry_date).getTime() : -Infinity
