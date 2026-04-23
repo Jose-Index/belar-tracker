@@ -95,6 +95,7 @@ export function BrokerBalancesRegister({ brokerBalances, positions, snapshots, b
         { broker: 'ibkr',  balance: parseFloat(balances.ibkr) || 0,  updated_at: new Date().toISOString() },
       ]
       await supabase.from('broker_balances').upsert(balRows, { onConflict: 'broker' })
+        .then(({ error: bbErr }) => { if (bbErr) console.warn('broker_balances upsert warn:', bbErr) })
 
       // 2. Calcular btc_usd en tiempo real
       const btcUsd = btcPrice && btcQty ? btcPrice * btcQty : 0
@@ -112,24 +113,26 @@ export function BrokerBalancesRegister({ brokerBalances, positions, snapshots, b
       // 4. Upsert weekly_snapshot del sábado próximo
       const existing = snapshots?.find(s => s.week_date === nextSatStr)
       if (existing) {
-        await supabase.from('weekly_snapshots').update({ data, total_usd }).eq('id', existing.id)
+        const { error: wsUpdateErr } = await supabase.from('weekly_snapshots').update({ data, total_usd }).eq('id', existing.id)
+        if (wsUpdateErr) throw new Error('weekly_snapshots UPDATE: ' + wsUpdateErr.message)
       } else {
-        await supabase.from('weekly_snapshots').insert({
+        const { error: wsInsertErr } = await supabase.from('weekly_snapshots').insert({
           week_date: nextSatStr,
           year: nextSat.getFullYear(),
           data,
           total_usd,
         })
+        if (wsInsertErr) throw new Error('weekly_snapshots INSERT: ' + wsInsertErr.message)
       }
 
       // 5. Insertar position_history para cada posición (fecha = sábado próximo)
       if (positions?.length) {
-        // Purgar filas previas del mismo week_date para esas position_ids (evita duplicados)
         const posIds = positions.map(p => p.id)
-        await supabase.from('position_history')
+        const { error: phDelErr } = await supabase.from('position_history')
           .delete()
           .eq('week_date', nextSatStr)
           .in('position_id', posIds)
+        if (phDelErr) console.warn('position_history delete warn:', phDelErr)
 
         const snaps = positions.map(p => ({
           position_id: p.id,
