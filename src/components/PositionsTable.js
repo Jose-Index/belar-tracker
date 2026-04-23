@@ -154,52 +154,12 @@ function SparkTooltip({ data, ticker, broker, invested }) {
   )
 }
 
-const FAVICON_MAP = {
-  'AROC': 'https://stockanalysis.com/img/s/AROC-80.png',
-  'FIX': 'https://stockanalysis.com/img/s/FIX-80.png',
-  'IAU': 'https://stockanalysis.com/img/s/IAU-80.png',
-  'NEM': 'https://stockanalysis.com/img/s/NEM-80.png',
-  'SHELL.L': 'https://logo.clearbit.com/shell.com',
-  'Thomaspj': null,
-  'DVN': 'https://stockanalysis.com/img/s/DVN-80.png',
-  'DIA': 'https://stockanalysis.com/img/s/DIA-80.png',
-  'EOG': 'https://stockanalysis.com/img/s/EOG-80.png',
-  'ICE': 'https://stockanalysis.com/img/s/ICE-80.png',
-  'CME': 'https://stockanalysis.com/img/s/CME-80.png',
-  'HWM': 'https://stockanalysis.com/img/s/HWM-80.png',
-  'ROST': 'https://stockanalysis.com/img/s/ROST-80.png',
-  'MU': 'https://stockanalysis.com/img/s/MU-80.png',
-  'NVDA': 'https://stockanalysis.com/img/s/NVDA-80.png',
-  'AVGO': 'https://stockanalysis.com/img/s/AVGO-80.png',
-  'PUIG': 'https://logo.clearbit.com/puig.com',
-  'LITE': 'https://stockanalysis.com/img/s/LITE-80.png',
-  'ASML': 'https://logo.clearbit.com/asml.com',
-  'BOOT': 'https://stockanalysis.com/img/s/BOOT-80.png',
-  'SQM': 'https://stockanalysis.com/img/s/SQM-80.png',
-  'YPF': 'https://stockanalysis.com/img/s/YPF-80.png',
-  'VBTC.DE': 'https://logo.clearbit.com/vaneck.com',
-}
-
 function TickerIcon({ ticker }) {
-  const url = FAVICON_MAP[ticker]
-  if (url === null) {
-    return (
-      <div className="w-5 h-5 rounded-md bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center">
-        <span className="text-[8px] font-bold text-white leading-none">{(ticker || '?').substring(0, 2).toUpperCase()}</span>
-      </div>
-    )
-  }
-  const src = url || `https://logo.clearbit.com/${(ticker || '').toLowerCase().replace('.l','').replace('.de','')}.com`
+  const code = (ticker || '?').substring(0, 2).toUpperCase()
   return (
-    <img src={src} alt="" className="w-5 h-5 rounded-md bg-slate-100"
-      onError={e => {
-        if (!e.target.dataset.fallback) {
-          e.target.dataset.fallback = '1'
-          e.target.src = `https://www.google.com/s2/favicons?domain=${(ticker || '').toLowerCase()}.com&sz=64`
-        } else {
-          e.target.style.display = 'none'
-        }
-      }} />
+    <div className="w-5 h-5 rounded-md bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center shrink-0">
+      <span className="text-[8px] font-bold text-white leading-none">{code}</span>
+    </div>
   )
 }
 
