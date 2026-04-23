@@ -137,7 +137,8 @@ export function BrokerBalancesRegister({ brokerBalances, positions, snapshots, b
           value: Number(p.current_value || p.invested || 0),
           invested: Number(p.invested || 0),
         }))
-        await supabase.from('position_history').insert(snaps).catch(() => {})
+        const { error: phError } = await supabase.from('position_history').insert(snaps)
+        if (phError) console.warn('position_history insert failed (no bloqueante):', phError)
       }
 
       setLastResult({
