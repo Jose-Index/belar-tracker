@@ -23,27 +23,39 @@ async function etoroFetch(path) {
   return res.json()
 }
 
-async function resolveInstruments(ids) {
+async function resolveInstruments(ids, debug = false) {
   if (!ids.length) return {}
-  const qs = new URLSearchParams({
-    instrumentIds: ids.join(','),
-    fields: 'instrumentId,internalSymbolFull,displayname,symbolFull',
-  })
-  try {
-    const res = await fetch(`${BASE}/market-data/instruments?${qs}`, { headers: authHeaders() })
-    if (!res.ok) return { _err: `status ${res.status}`, _body: await res.text() }
-    const data = await res.json()
-    const arr = Array.isArray(data) ? data : (data.items || data.instruments || [])
-    const out = {}
-    for (const it of arr) {
-      const id = it.instrumentId || it.InstrumentID || it.instrumentID
-      const sym = it.internalSymbolFull || it.symbolFull || it.displayname
-      if (id && sym) out[id] = { ticker: sym, name: it.displayname || sym }
+  const attempts = [
+    `/market-data/instruments?instrumentIds=${ids.join(',')}&fields=instrumentId,internalSymbolFull,displayname`,
+    `/market-data/instruments?instrumentIds=${ids.join(',')}`,
+    `/market-data/instruments/rates?instrumentIds=${ids.join(',')}`,
+  ]
+  const log = []
+  for (const path of attempts) {
+    try {
+      const res = await fetch(`${BASE}${path}`, { headers: authHeaders() })
+      const body = await res.text()
+      log.push({ path, status: res.status, body: body.slice(0, 400) })
+      if (!res.ok) continue
+      let data
+      try { data = JSON.parse(body) } catch { continue }
+      const arr = Array.isArray(data) ? data : (data.items || data.instruments || data.data || [])
+      if (!arr.length) continue
+      const out = {}
+      for (const it of arr) {
+        const id = it.instrumentId || it.InstrumentID || it.instrumentID
+        const sym = it.internalSymbolFull || it.symbolFull || it.ticker || it.displayname
+        if (id && sym) out[id] = { ticker: sym, name: it.displayname || it.name || sym }
+      }
+      if (Object.keys(out).length) {
+        if (debug) out._debug = log
+        return out
+      }
+    } catch (e) {
+      log.push({ path, error: e.message })
     }
-    return out
-  } catch (e) {
-    return { _err: e.message }
   }
+  return debug ? { _debug: log } : {}
 }
 
 export async function GET(request) {
@@ -53,7 +65,7 @@ export async function GET(request) {
   if (action === 'resolve') {
     const idsParam = searchParams.get('ids') || ''
     const ids = idsParam.split(',').map(s => parseInt(s.trim())).filter(Boolean)
-    const resolved = await resolveInstruments(ids)
+    const resolved = await resolveInstruments(ids, true)
     return NextResponse.json({ ok: true, resolved })
   }
 
