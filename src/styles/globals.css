@@ -103,6 +103,12 @@ input[type="number"] { -moz-appearance: textfield; }
 
 .belar-table tbody tr:hover td { background: #f8fafc; }
 
+/* Aire en bordes laterales de la tabla — evita pegado al borde del card */
+.belar-table th:first-child,
+.belar-table td:first-child { padding-left: 20px; }
+.belar-table th:last-child,
+.belar-table td:last-child { padding-right: 20px; }
+
 .belar-table tfoot td {
   padding: 10px 12px;
   font-size: 12px;
