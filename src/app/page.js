@@ -8,19 +8,22 @@ import CapitalCards from '@/components/CapitalCards'
 import EvolutionChart from '@/components/EvolutionChart'
 import PositionsTable from '@/components/PositionsTable'
 import { RadarBelar, RadarJose, ExceptionsSection } from '@/components/RadarModules'
-import { CalendarView, WeeklyHistory, ContributionsTable, YearlyResults, ResultsSummary, Calculator, BackupExport, Settings, Footer } from '@/components/Sections'
+import {
+  CalendarView, WeeklyHistory, ContributionsTable, YearlyResults,
+  ResultsSummary, Calculator, BackupExport, Settings, Footer,
+  BrokerBalancesRegister,
+} from '@/components/Sections'
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('dashboard')
   const [btcPrice, setBtcPrice] = useState(null)
-  const [etoroLive, setEtoroLive] = useState(null)
   const [eurUsdRate, setEurUsdRate] = useState(1.08)
   const [data, setData] = useState({
     brokers: [], wallets: [], snapshots: [], positions: [],
     contributions: [], yearlyResults: [], radarBelar: [],
     radarJose: [], calendarEvents: [], quotes: [],
-    positionHistory: [], exceptions: []
+    positionHistory: [], exceptions: [], brokerBalances: [],
   })
 
   const fetchAll = useCallback(async () => {
@@ -43,35 +46,43 @@ export default function Dashboard() {
       supabase.from('quotes').select('*').eq('is_active', true),
       supabase.from('position_history').select('position_id,week_date,value,invested,event,event_amount').order('week_date'),
     ])
-    // exceptions se carga aparte para que, si la tabla aún no existe, no rompa el resto
+
     let exceptions = []
     try {
       const { data: ex } = await supabase.from('exceptions').select('*').eq('is_active', true).order('activated_at', { ascending: false })
       exceptions = ex || []
     } catch (_) { exceptions = [] }
-    setData({ brokers: brokers||[], wallets: wallets||[], snapshots: snapshots||[], positions: positions||[], contributions: contributions||[], yearlyResults: yearlyResults||[], radarBelar: radarBelar||[], radarJose: radarJose||[], calendarEvents: calendarEvents||[], quotes: quotes||[], positionHistory: positionHistory||[], exceptions })
+
+    let brokerBalances = []
+    try {
+      const { data: bb } = await supabase.from('broker_balances').select('*')
+      brokerBalances = bb || []
+    } catch (_) { brokerBalances = [] }
+
+    setData({
+      brokers: brokers||[], wallets: wallets||[], snapshots: snapshots||[],
+      positions: positions||[], contributions: contributions||[],
+      yearlyResults: yearlyResults||[], radarBelar: radarBelar||[],
+      radarJose: radarJose||[], calendarEvents: calendarEvents||[],
+      quotes: quotes||[], positionHistory: positionHistory||[],
+      exceptions, brokerBalances,
+    })
     setLoading(false)
   }, [])
 
-  // Live data: BTC price + eToro portfolio (auto-refresh every 30s)
   useEffect(() => {
     const loadLive = async () => {
       try {
-        const [tickerRes, etoroRes] = await Promise.all([
-          fetch('/api/tickers'),
-          fetch('/api/etoro?action=portfolio'),
-        ])
+        const tickerRes = await fetch('/api/tickers')
         const tickers = await tickerRes.json()
         const btc = tickers.find(t => t.symbol === 'BTC-USD')
         if (btc?.price) setBtcPrice(btc.price)
         const eur = tickers.find(t => t.symbol === 'EURUSD=X')
         if (eur?.price) setEurUsdRate(eur.price)
-        const etoro = await etoroRes.json()
-        if (etoro.ok) setEtoroLive(etoro)
       } catch(e) {}
     }
     loadLive()
-    const id = setInterval(loadLive, 10000)
+    const id = setInterval(loadLive, 30000)
     return () => clearInterval(id)
   }, [])
 
@@ -92,56 +103,7 @@ export default function Dashboard() {
     fetchAll()
   }
 
-  const handleCloseWeek = async () => {
-    const now = new Date()
-    const day = now.getDay()
-    const saturday = new Date(now)
-    if (day !== 6) saturday.setDate(now.getDate() - ((day + 1) % 7))
-    const weekDate = saturday.toISOString().split('T')[0]
-    const latest = data.snapshots[data.snapshots.length - 1]
-    if (!latest) return
-    if (data.snapshots.some(s => s.week_date === weekDate)) {
-      alert('Esta semana ya esta cerrada.')
-      return
-    }
-    if (!confirm('Cerrar semana del ' + weekDate + '? Total: $' + latest.total_usd?.toLocaleString())) return
-    await supabase.from('weekly_snapshots').insert({ week_date: weekDate, year: saturday.getFullYear(), data: latest.data, total_usd: latest.total_usd })
-    if (data.positions.length > 0) {
-      const posSnaps = data.positions.map(p => ({
-        position_id: p.id, week_date: weekDate,
-        value: Number(p.current_value || p.invested),
-        invested: Number(p.invested),
-      }))
-      await supabase.from('position_history').insert(posSnaps).catch(() => {})
-    }
-    fetchAll()
-  }
-
-  const handleCloseYear = async () => {
-    const year = new Date().getFullYear()
-    if (!confirm('Cerrar el anno ' + year + '? Esto cerrara los resultados anuales y creara el anno ' + (year + 1) + '.')) return
-    if (!confirm('SEGUNDA CONFIRMACION: Estas seguro de cerrar ' + year + '? Esta accion no se puede deshacer.')) return
-    const latest = data.snapshots[data.snapshots.length - 1]
-    if (!latest) return
-    const yearSnapshots = data.snapshots.filter(s => new Date(s.week_date).getFullYear() === year)
-    const firstOfYear = yearSnapshots[0]
-    const ytdContribs = data.contributions.filter(c => new Date(c.date).getFullYear() === year).reduce((s, c) => s + Number(c.amount_usd || 0), 0)
-    const existingYear = data.yearlyResults.find(r => r.year === year)
-    const yearData = {
-      year, invested_total: ytdContribs, final_value: latest.total_usd,
-      pnl_usd: latest.total_usd - (firstOfYear?.total_usd || 0) - ytdContribs,
-      pnl_pct: firstOfYear ? ((latest.total_usd - firstOfYear.total_usd - ytdContribs) / firstOfYear.total_usd) : 0,
-    }
-    if (existingYear) { await supabase.from('yearly_results').update(yearData).eq('year', year) }
-    else { await supabase.from('yearly_results').insert(yearData) }
-    const nextYear = year + 1
-    const existingNext = data.yearlyResults.find(r => r.year === nextYear)
-    if (!existingNext) {
-      await supabase.from('yearly_results').insert({ year: nextYear, invested_total: 0, final_value: latest.total_usd, pnl_usd: 0, pnl_pct: 0 })
-    }
-    alert('Anno ' + year + ' cerrado. Anno ' + nextYear + ' creado.')
-    fetchAll()
-  }
+  const btcQty = data.snapshots.length ? (data.snapshots[data.snapshots.length - 1].data?.btc_qty || 0) : 0
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -155,15 +117,24 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="sticky top-0 z-50 bg-slate-50">
-        <Header onCloseWeek={handleCloseWeek} onCloseYear={handleCloseYear} />
+        <Header />
         <TickerBar />
         <TabNav active={tab} onChange={setTab} />
       </div>
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-5 space-y-5">
         {tab === 'dashboard' && <>
-          <CapitalCards snapshots={data.snapshots} brokers={data.brokers} wallets={data.wallets} onUpdateValues={handleUpdateValues} btcPrice={btcPrice} etoroLive={etoroLive} />
+          <CapitalCards snapshots={data.snapshots} brokers={data.brokers} wallets={data.wallets} onUpdateValues={handleUpdateValues} btcPrice={btcPrice} />
           <EvolutionChart snapshots={data.snapshots} />
-          <PositionsTable positions={data.positions} positionHistory={data.positionHistory} onRefresh={fetchAll} etoroLive={etoroLive} eurUsdRate={eurUsdRate} />
+          <PositionsTable positions={data.positions} positionHistory={data.positionHistory} onRefresh={fetchAll} eurUsdRate={eurUsdRate} />
+          <BrokerBalancesRegister
+            brokerBalances={data.brokerBalances}
+            positions={data.positions}
+            snapshots={data.snapshots}
+            btcPrice={btcPrice}
+            btcQty={btcQty}
+            eurUsdRate={eurUsdRate}
+            onRefresh={fetchAll}
+          />
           <ResultsSummary snapshots={data.snapshots} contributions={data.contributions} />
         </>}
         {tab === 'historico' && <>

@@ -1,9 +1,9 @@
 'use client'
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { BROKER_COLORS, BROKER_NAMES, CLASS_COLORS, formatCurrency, formatNative, toUSD, pnlColor } from '@/lib/constants'
+import { BROKER_COLORS, BROKER_NAMES, CLASS_COLORS, RESP_COLORS, RESP_OPTIONS, formatCurrency, formatNative, toUSD, pnlColor } from '@/lib/constants'
 import { supabase } from '@/lib/supabase'
 
-// ââ SVG Sparkline with area fill ââ
+// ─── SVG Sparkline with area fill ────────────────
 function SparklineSVG({ data, width, height, showDots, showLabels, showEvents }) {
   if (!data || data.length < 2) return null
   const values = data.map(d => d.value)
@@ -44,7 +44,6 @@ function SparklineSVG({ data, width, height, showDots, showLabels, showEvents })
           </text>
         </>
       )}
-
       {showEvents && data.filter(d => d.event).map((d, idx) => {
         const i = data.indexOf(d)
         const ex = (i / (values.length - 1) * (width - pad * 2) + pad)
@@ -83,8 +82,8 @@ function Sparkline({ data, ticker, broker, invested }) {
   }, [open])
 
   if (!data || data.length < 2) return (
-    <div className="w-[88px] h-[22px] bg-slate-50 rounded flex items-center justify-center">
-      <span className="text-[7px] text-slate-300 font-mono">sin historial</span>
+    <div className="w-[72px] h-[20px] bg-slate-50 rounded flex items-center justify-center">
+      <span className="text-[7px] text-slate-300 font-mono">sin hist.</span>
     </div>
   )
 
@@ -176,6 +175,9 @@ const FAVICON_MAP = {
   'LITE': 'https://stockanalysis.com/img/s/LITE-80.png',
   'ASML': 'https://logo.clearbit.com/asml.com',
   'BOOT': 'https://stockanalysis.com/img/s/BOOT-80.png',
+  'SQM': 'https://stockanalysis.com/img/s/SQM-80.png',
+  'YPF': 'https://stockanalysis.com/img/s/YPF-80.png',
+  'VBTC.DE': 'https://logo.clearbit.com/vaneck.com',
 }
 
 function TickerIcon({ ticker }) {
@@ -183,17 +185,17 @@ function TickerIcon({ ticker }) {
   if (url === null) {
     return (
       <div className="w-5 h-5 rounded-md bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center">
-        <span className="text-[8px] font-bold text-white leading-none">{ticker.substring(0, 2).toUpperCase()}</span>
+        <span className="text-[8px] font-bold text-white leading-none">{(ticker || '?').substring(0, 2).toUpperCase()}</span>
       </div>
     )
   }
-  const src = url || `https://logo.clearbit.com/${ticker.toLowerCase().replace('.l','')}.com`
+  const src = url || `https://logo.clearbit.com/${(ticker || '').toLowerCase().replace('.l','').replace('.de','')}.com`
   return (
     <img src={src} alt="" className="w-5 h-5 rounded-md bg-slate-100"
       onError={e => {
         if (!e.target.dataset.fallback) {
           e.target.dataset.fallback = '1'
-          e.target.src = `https://www.google.com/s2/favicons?domain=${ticker.toLowerCase()}.com&sz=64`
+          e.target.src = `https://www.google.com/s2/favicons?domain=${(ticker || '').toLowerCase()}.com&sz=64`
         } else {
           e.target.style.display = 'none'
         }
@@ -201,28 +203,121 @@ function TickerIcon({ ticker }) {
   )
 }
 
-export default function PositionsTable({ positions, positionHistory, onRefresh, etoroLive, eurUsdRate = 1.08 }) {
+// ─── ADD POSITION MODAL ────────────────
+function AddPositionModal({ onClose, onSave }) {
+  const [form, setForm] = useState({
+    ticker: '', platform: 'etoro', resp: 'Jose',
+    class: 'NÚCLEO', entry_date: new Date().toISOString().split('T')[0],
+    invested: '', current_value: '', currency: 'USD',
+  })
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = async () => {
+    if (!form.ticker.trim() || !form.invested) return
+    setSaving(true)
+    await onSave({
+      ...form,
+      ticker: form.ticker.trim().toUpperCase(),
+      invested: parseFloat(form.invested),
+      current_value: parseFloat(form.current_value || form.invested),
+      is_open: true,
+    })
+    setSaving(false)
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 z-[10000] bg-slate-900/50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl p-5 w-full max-w-md" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-bold text-slate-800 tracking-wide">Nueva Posición</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-lg leading-none">✕</button>
+        </div>
+        <div className="space-y-2.5">
+          <div>
+            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Ticker</label>
+            <input autoFocus type="text" placeholder="NVDA" value={form.ticker}
+              onChange={e => setForm({...form, ticker: e.target.value.toUpperCase()})}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono font-bold uppercase outline-none focus:border-green-400" />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Broker</label>
+              <select value={form.platform} onChange={e => setForm({...form, platform: e.target.value})}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none">
+                <option value="etoro">eToro</option>
+                <option value="xtb">XTB</option>
+                <option value="ibkr">IBKR</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Resp</label>
+              <select value={form.resp} onChange={e => setForm({...form, resp: e.target.value})}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none">
+                {RESP_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Clase</label>
+              <select value={form.class} onChange={e => setForm({...form, class: e.target.value})}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none">
+                <option value="NÚCLEO">NÚCLEO</option>
+                <option value="TÁCTICA">TÁCTICA</option>
+                <option value="MOMENTUM">MOMENTUM</option>
+                <option value="DISRUPTIVA">DISRUPTIVA</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Divisa</label>
+              <select value={form.currency} onChange={e => setForm({...form, currency: e.target.value})}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none">
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+                <option value="GBP">GBP</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Entrada</label>
+            <input type="date" value={form.entry_date}
+              onChange={e => setForm({...form, entry_date: e.target.value})}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono outline-none focus:border-green-400" />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Invertido</label>
+              <input type="number" step="0.01" placeholder="0.00" value={form.invested}
+                onChange={e => setForm({...form, invested: e.target.value})}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono outline-none focus:border-green-400" />
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Valor actual</label>
+              <input type="number" step="0.01" placeholder="= invertido" value={form.current_value}
+                onChange={e => setForm({...form, current_value: e.target.value})}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono outline-none focus:border-green-400" />
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-2 mt-4">
+          <button onClick={onClose} className="flex-1 px-3 py-2 border border-slate-200 text-slate-600 text-xs font-semibold rounded-lg hover:bg-slate-50">Cancelar</button>
+          <button onClick={handleSave} disabled={saving || !form.ticker.trim() || !form.invested}
+            className="flex-1 px-3 py-2 bg-etoro text-white text-xs font-bold rounded-lg hover:bg-green-700 disabled:opacity-50">
+            {saving ? 'Guardando...' : 'Guardar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── MAIN COMPONENT ────────────────
+export default function PositionsTable({ positions, positionHistory, onRefresh, eurUsdRate = 1.08 }) {
   const [editing, setEditing] = useState(null)
   const [editVal, setEditVal] = useState('')
-
-  // Merge eToro live data into positions
-  const mergedPositions = useMemo(() => {
-    if (!positions) return []
-    if (!etoroLive?.positions) return positions
-    return positions.map(p => {
-      if (p.platform !== 'etoro') return p
-      const live = etoroLive.positions.find(lp => lp.ticker === p.ticker)
-      if (!live) {
-        // Check mirrors (Thomaspj)
-        if (p.ticker === 'Thomaspj' && etoroLive.mirrors?.[0]) {
-          const m = etoroLive.mirrors[0]
-          return { ...p, current_value: m.value, _live: true }
-        }
-        return p
-      }
-      return { ...p, current_value: live.value, _live: true }
-    })
-  }, [positions, etoroLive])
+  const [sortMode, setSortMode] = useState('broker')
+  const [showAdd, setShowAdd] = useState(false)
 
   const historyMap = useMemo(() => {
     const map = {}
@@ -235,45 +330,94 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
     return map
   }, [positionHistory])
 
-  const handleSaveValue = async (id) => {
-    const val = parseFloat(editVal)
-    if (!isNaN(val)) {
-      await supabase.from('positions').update({ current_value: val }).eq('id', id)
-      onRefresh?.()
-    }
+  const updateField = async (id, field, value) => {
+    await supabase.from('positions').update({ [field]: value }).eq('id', id)
+    onRefresh?.()
     setEditing(null)
   }
 
-  if (!mergedPositions?.length) return (
+  const handleSaveField = async (id, field, value) => {
+    const coerced = (field === 'invested' || field === 'current_value')
+      ? (() => { const v = parseFloat(value); return isNaN(v) ? null : v })()
+      : value
+    if (coerced === null || coerced === undefined || coerced === '') { setEditing(null); return }
+    await updateField(id, field, coerced)
+  }
+
+  const handleClosePosition = async (p) => {
+    if (!confirm(`¿Cerrar posición ${p.ticker} (${BROKER_NAMES[p.platform]})?\nLa fila desaparece del dashboard pero se conserva su histórico.`)) return
+    await supabase.from('positions').update({ is_open: false }).eq('id', p.id)
+    onRefresh?.()
+  }
+
+  const handleAddPosition = async (newPos) => {
+    await supabase.from('positions').insert(newPos)
+    onRefresh?.()
+  }
+
+  if (!positions?.length && !showAdd) return (
     <div className="bg-white rounded-xl border border-slate-200 p-5">
-      <div className="section-title">Posiciones Abiertas</div>
+      <div className="flex items-center justify-between mb-3">
+        <div className="section-title !mb-0">Posiciones Abiertas</div>
+        <button onClick={() => setShowAdd(true)}
+          className="px-2.5 py-1 text-[10px] font-bold text-etoro border border-green-200 rounded-md hover:bg-green-50">
+          + Añadir
+        </button>
+      </div>
       <p className="text-sm text-slate-400">Sin posiciones abiertas</p>
+      {showAdd && <AddPositionModal onClose={() => setShowAdd(false)} onSave={handleAddPosition} />}
     </div>
   )
 
-  const sorted = [...mergedPositions].sort((a, b) => {
+  const sorted = [...positions].sort((a, b) => {
+    if (sortMode === 'entry') {
+      const da = a.entry_date ? new Date(a.entry_date).getTime() : -Infinity
+      const db = b.entry_date ? new Date(b.entry_date).getTime() : -Infinity
+      if (da !== db) return db - da
+      return (a.ticker || '').localeCompare(b.ticker || '')
+    }
     const order = { etoro: 1, xtb: 2, ibkr: 3 }
     const brokerDiff = (order[a.platform] || 99) - (order[b.platform] || 99)
     if (brokerDiff !== 0) return brokerDiff
     return (a.ticker || '').localeCompare(b.ticker || '')
   })
 
-  const totalInvested = sorted.reduce((s, p) => s + toUSD(Number(p.invested), p.currency || 'USD', eurUsdRate), 0)
-  const totalValue = sorted.reduce((s, p) => s + toUSD(Number(p.current_value || p.invested), p.currency || 'USD', eurUsdRate), 0)
+  const totalInvested = sorted.reduce((s, p) => s + toUSD(Number(p.invested || 0), p.currency || 'USD', eurUsdRate), 0)
+  const totalValue = sorted.reduce((s, p) => s + toUSD(Number(p.current_value || p.invested || 0), p.currency || 'USD', eurUsdRate), 0)
   const totalPnl = totalValue - totalInvested
   const totalPct = totalInvested > 0 ? totalPnl / totalInvested : 0
 
   return (
     <div className="bg-white rounded-xl border border-slate-200">
-      <div className="px-5 pt-5 pb-3 flex items-center justify-between">
-        <div className="section-title !mb-0">Posiciones Abiertas</div>
-        <span className="text-[10px] text-slate-400 font-mono">{sorted.length} posiciones Â· {formatCurrency(totalValue)}</span>
+      <div className="px-5 pt-5 pb-3 flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-3">
+          <div className="section-title !mb-0">Posiciones Abiertas</div>
+          <span className="text-[10px] text-slate-400 font-mono">{sorted.length} posiciones · {formatCurrency(totalValue)}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-0 text-[9px] border border-slate-200 rounded-md overflow-hidden">
+            <button onClick={() => setSortMode('broker')}
+              className={`px-2 py-1 font-semibold tracking-wider transition-colors ${sortMode === 'broker' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>
+              BROKER · A-Z
+            </button>
+            <button onClick={() => setSortMode('entry')}
+              className={`px-2 py-1 font-semibold tracking-wider transition-colors ${sortMode === 'entry' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>
+              ENTRADA ↓
+            </button>
+          </div>
+          <button onClick={() => setShowAdd(true)}
+            className="px-2.5 py-1 text-[10px] font-bold text-etoro border border-green-200 rounded-md hover:bg-green-50">
+            + Añadir
+          </button>
+        </div>
       </div>
+
       <div className="overflow-x-auto">
-        <table className="w-full belar-table" style={{ minWidth: 860 }}>
+        <table className="w-full belar-table" style={{ minWidth: 1000 }}>
           <thead>
             <tr>
               <th>Activo</th>
+              <th>Resp</th>
               <th>Broker</th>
               <th>Entrada</th>
               <th>Invertido</th>
@@ -283,22 +427,31 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
               <th title="Rendimiento diario">%/D</th>
               <th>Clase</th>
               <th>Peso</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {sorted.map(p => {
-              const invested = Number(p.invested)
-              const value = Number(p.current_value || invested)
+              const invested = Number(p.invested || 0)
+              const value = Number(p.current_value || p.invested || 0)
               const pnl = value - invested
               const pct = invested > 0 ? pnl / invested : 0
-              const entry = new Date(p.entry_date)
-              const days = Math.max(1, Math.floor((new Date() - entry) / 86400000))
-              const dailyPct = pct / days
               const cur = p.currency || 'USD'
               const valueUSD = toUSD(value, cur, eurUsdRate)
               const weight = totalValue > 0 ? valueUSD / totalValue : 0
+
+              let dailyPct = null
+              if (p.entry_date) {
+                const entry = new Date(p.entry_date)
+                const days = Math.max(1, Math.floor((new Date() - entry) / 86400000))
+                dailyPct = pct / days
+              }
+
               const brokerColor = BROKER_COLORS[p.platform] || '#666'
               const classColor = CLASS_COLORS[p.class] || '#6b7280'
+              const respColor = RESP_COLORS[p.resp] || '#cbd5e1'
+
+              const editKey = (f) => `${p.id}:${f}`
 
               return (
                 <tr key={p.id}>
@@ -307,60 +460,139 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
                       <TickerIcon ticker={p.ticker} />
                       <div>
                         <span className="font-bold text-slate-800 text-[13px] block">{p.ticker}</span>
-                        <Sparkline data={historyMap[p.id]} ticker={p.ticker} broker={BROKER_NAMES[p.platform] || p.platform} invested={Number(p.invested)} />
+                        <Sparkline data={historyMap[p.id]} ticker={p.ticker} broker={BROKER_NAMES[p.platform] || p.platform} invested={invested} />
                       </div>
                     </div>
                   </td>
+
                   <td>
-                    <span className="platform-badge" style={{ background: brokerColor + '12', color: brokerColor, border: `1px solid ${brokerColor}30` }}>
-                      {BROKER_NAMES[p.platform] || p.platform}
-                    </span>
+                    <select value={p.resp || ''}
+                      onChange={e => updateField(p.id, 'resp', e.target.value || null)}
+                      className="text-[10px] font-bold px-2 py-0.5 rounded-md outline-none cursor-pointer border appearance-none"
+                      style={{
+                        background: respColor + '12',
+                        color: p.resp ? respColor : '#cbd5e1',
+                        borderColor: respColor + '30',
+                        minWidth: 64,
+                      }}>
+                      <option value="">—</option>
+                      {RESP_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
                   </td>
+
+                  <td>
+                    <select value={p.platform || ''}
+                      onChange={e => updateField(p.id, 'platform', e.target.value)}
+                      className="platform-badge outline-none cursor-pointer appearance-none"
+                      style={{ background: brokerColor + '12', color: brokerColor, border: `1px solid ${brokerColor}30` }}>
+                      <option value="etoro">eToro</option>
+                      <option value="xtb">XTB</option>
+                      <option value="ibkr">IBKR</option>
+                    </select>
+                  </td>
+
                   <td className="text-slate-500 font-mono text-[11px]">
-                    {(() => { const opts = entry.getFullYear() !== new Date().getFullYear() ? { day: '2-digit', month: 'short', year: '2-digit', timeZone: 'UTC' } : { day: '2-digit', month: 'short', timeZone: 'UTC' }; return entry.toLocaleDateString('es-ES', opts) })()}
-                  </td>
-                  <td className="text-right font-mono text-[12px] text-slate-500">{formatNative(invested, cur)}</td>
-                  <td className="text-right cursor-pointer" onClick={() => { setEditing(p.id); setEditVal(String(value)) }}>
-                    {editing === p.id ? (
-                      <input autoFocus type="number" step="0.01"
-                        className="w-24 text-right px-1 py-0.5 border border-green-400 rounded text-[13px] font-mono font-bold outline-none bg-green-50"
-                        value={editVal} onChange={e => setEditVal(e.target.value)}
-                        onBlur={() => handleSaveValue(p.id)}
-                        onKeyDown={e => e.key === 'Enter' && handleSaveValue(p.id)}
-                        onClick={e => e.stopPropagation()} />
+                    {editing === editKey('entry_date') ? (
+                      <input autoFocus type="date"
+                        className="px-1 py-0.5 border border-green-400 rounded text-[11px] font-mono outline-none bg-green-50"
+                        value={editVal}
+                        onChange={e => setEditVal(e.target.value)}
+                        onBlur={() => handleSaveField(p.id, 'entry_date', editVal || null)}
+                        onKeyDown={e => e.key === 'Enter' && handleSaveField(p.id, 'entry_date', editVal || null)} />
                     ) : (
-                      <span className="font-mono text-[13px] font-bold text-slate-800 hover:text-green-600 transition-colors">{formatNative(value, cur)}</span>
+                      <span className="cursor-pointer hover:text-green-600"
+                        onClick={() => { setEditing(editKey('entry_date')); setEditVal(p.entry_date ? String(p.entry_date).split('T')[0] : '') }}>
+                        {p.entry_date ? (() => {
+                          const d = new Date(p.entry_date)
+                          const opts = d.getFullYear() !== new Date().getFullYear()
+                            ? { day: '2-digit', month: 'short', year: '2-digit', timeZone: 'UTC' }
+                            : { day: '2-digit', month: 'short', timeZone: 'UTC' }
+                          return d.toLocaleDateString('es-ES', opts)
+                        })() : <span className="text-slate-300">—</span>}
+                      </span>
                     )}
                   </td>
+
+                  <td className="text-right">
+                    {editing === editKey('invested') ? (
+                      <input autoFocus type="number" step="0.01"
+                        className="w-24 text-right px-1 py-0.5 border border-green-400 rounded text-[12px] font-mono outline-none bg-green-50"
+                        value={editVal}
+                        onChange={e => setEditVal(e.target.value)}
+                        onBlur={() => handleSaveField(p.id, 'invested', editVal)}
+                        onKeyDown={e => e.key === 'Enter' && handleSaveField(p.id, 'invested', editVal)} />
+                    ) : (
+                      <span className="font-mono text-[12px] text-slate-500 cursor-pointer hover:text-green-600"
+                        onClick={() => { setEditing(editKey('invested')); setEditVal(String(invested)) }}>
+                        {formatNative(invested, cur)}
+                      </span>
+                    )}
+                  </td>
+
+                  <td className="text-right">
+                    {editing === editKey('current_value') ? (
+                      <input autoFocus type="number" step="0.01"
+                        className="w-24 text-right px-1 py-0.5 border border-green-400 rounded text-[13px] font-mono font-bold outline-none bg-green-50"
+                        value={editVal}
+                        onChange={e => setEditVal(e.target.value)}
+                        onBlur={() => handleSaveField(p.id, 'current_value', editVal)}
+                        onKeyDown={e => e.key === 'Enter' && handleSaveField(p.id, 'current_value', editVal)} />
+                    ) : (
+                      <span className="font-mono text-[13px] font-bold text-slate-800 cursor-pointer hover:text-green-600"
+                        onClick={() => { setEditing(editKey('current_value')); setEditVal(String(value)) }}>
+                        {formatNative(value, cur)}
+                      </span>
+                    )}
+                  </td>
+
                   <td className="text-right">
                     <span className={`font-mono text-[13px] font-bold ${pnl >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                       {pnl >= 0 ? '+' : ''}{formatNative(pnl, cur)}
                     </span>
                   </td>
+
                   <td className="text-right">
                     <span className={`font-mono text-[13px] font-bold ${pct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                       {pct >= 0 ? '+' : ''}{(pct * 100).toFixed(2)}%
                     </span>
                   </td>
+
                   <td className="text-right">
-                    <span className={`font-mono text-[9px] ${dailyPct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                      {dailyPct >= 0 ? '+' : ''}{(dailyPct * 100).toFixed(2)}%
-                    </span>
+                    {dailyPct !== null ? (
+                      <span className={`font-mono text-[9px] ${dailyPct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                        {dailyPct >= 0 ? '+' : ''}{(dailyPct * 100).toFixed(2)}%
+                      </span>
+                    ) : <span className="text-slate-300 text-[9px]">—</span>}
                   </td>
+
                   <td>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md"
-                      style={{ background: classColor + '12', color: classColor, border: `1px solid ${classColor}30` }}>
-                      {p.class}
-                    </span>
+                    <select value={p.class || 'NÚCLEO'}
+                      onChange={e => updateField(p.id, 'class', e.target.value)}
+                      className="text-[10px] font-bold px-2 py-0.5 rounded-md outline-none cursor-pointer appearance-none border"
+                      style={{ background: classColor + '12', color: classColor, borderColor: classColor + '30' }}>
+                      <option value="NÚCLEO">NÚCLEO</option>
+                      <option value="TÁCTICA">TÁCTICA</option>
+                      <option value="MOMENTUM">MOMENTUM</option>
+                      <option value="DISRUPTIVA">DISRUPTIVA</option>
+                    </select>
                   </td>
+
                   <td className="text-right font-mono text-[11px] text-slate-500">{(weight * 100).toFixed(1)}%</td>
+
+                  <td className="text-center">
+                    <button onClick={() => handleClosePosition(p)}
+                      title="Cerrar posición"
+                      className="text-slate-300 hover:text-red-500 text-sm leading-none transition-colors">
+                      ✕
+                    </button>
+                  </td>
                 </tr>
               )
             })}
           </tbody>
           <tfoot>
             <tr className="bg-slate-50 border-t-2 border-slate-200">
-              <td colSpan={3} className="text-[11px] text-slate-500 font-semibold">{sorted.length} posiciones</td>
+              <td colSpan={4} className="text-[11px] text-slate-500 font-semibold">{sorted.length} posiciones</td>
               <td className="text-right font-mono text-[12px] font-semibold text-slate-600">{formatCurrency(totalInvested)}</td>
               <td className="text-right font-mono text-[13px] font-bold text-slate-800">{formatCurrency(totalValue)}</td>
               <td className="text-right">
@@ -373,11 +605,13 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
                   {totalPct >= 0 ? '+' : ''}{(totalPct * 100).toFixed(2)}%
                 </span>
               </td>
-              <td colSpan={3}></td>
+              <td colSpan={4}></td>
             </tr>
           </tfoot>
         </table>
       </div>
+
+      {showAdd && <AddPositionModal onClose={() => setShowAdd(false)} onSave={handleAddPosition} />}
     </div>
   )
 }

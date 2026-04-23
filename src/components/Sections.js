@@ -1,7 +1,200 @@
 'use client'
-import { useState, useEffect } from 'react'
-import { EVENT_TYPES, formatCurrency, pnlColor, BROKER_COLORS, BROKER_NAMES } from '@/lib/constants'
+import { useState, useEffect, useMemo } from 'react'
+import { EVENT_TYPES, formatCurrency, pnlColor, BROKER_COLORS, BROKER_NAMES, toUSD, getNextSaturday, RESP_COLORS } from '@/lib/constants'
 import { supabase } from '@/lib/supabase'
+
+// ─── BROKER BALANCES + REGISTRAR ────────────────────────────
+// Inputs manuales de saldo (cash) por broker + botón REGISTRAR.
+// Al pulsar REGISTRAR:
+//   1. Calcula totales por broker = Σ valor posiciones (USD) + saldo manual
+//   2. Upsert weekly_snapshots para el sábado próximo (hoy si es sábado)
+//   3. Inserta position_history para cada posición (fecha = sábado próximo)
+//   4. Persiste saldos manuales en broker_balances
+export function BrokerBalancesRegister({ brokerBalances, positions, snapshots, btcPrice, btcQty, eurUsdRate, onRefresh }) {
+  const [balances, setBalances] = useState({ etoro: '', xtb: '', ibkr: '' })
+  const [registering, setRegistering] = useState(false)
+  const [lastResult, setLastResult] = useState(null)
+
+  // Hidratar desde Supabase al montar
+  useEffect(() => {
+    if (!brokerBalances?.length) return
+    const map = {}
+    brokerBalances.forEach(b => { map[b.broker] = String(b.balance ?? '') })
+    setBalances(prev => ({
+      etoro: map.etoro ?? prev.etoro,
+      xtb: map.xtb ?? prev.xtb,
+      ibkr: map.ibkr ?? prev.ibkr,
+    }))
+  }, [brokerBalances])
+
+  // Totales calculados en vivo
+  const brokerTotals = useMemo(() => {
+    const t = { etoro: 0, xtb: 0, ibkr: 0 }
+    ;(positions || []).forEach(p => {
+      const v = toUSD(Number(p.current_value || p.invested || 0), p.currency || 'USD', eurUsdRate)
+      if (t[p.platform] !== undefined) t[p.platform] += v
+    })
+    const bal = {
+      etoro: parseFloat(balances.etoro) || 0,
+      xtb: parseFloat(balances.xtb) || 0,
+      ibkr: parseFloat(balances.ibkr) || 0,
+    }
+    return {
+      etoro: t.etoro + bal.etoro,
+      xtb: t.xtb + bal.xtb,
+      ibkr: t.ibkr + bal.ibkr,
+      posEtoro: t.etoro, posXtb: t.xtb, posIbkr: t.ibkr,
+    }
+  }, [positions, balances, eurUsdRate])
+
+  const nextSat = useMemo(() => getNextSaturday(new Date()), [])
+  const nextSatStr = nextSat.toISOString().split('T')[0]
+
+  // ¿Existe ya fila para el sábado próximo? (para mostrar "Registro ya existe, se sobrescribirá")
+  const existsRow = snapshots?.some(s => s.week_date === nextSatStr)
+
+  const handleRegistrar = async () => {
+    if (registering) return
+    setRegistering(true)
+    try {
+      // 1. Persistir saldos manuales
+      const balRows = [
+        { broker: 'etoro', balance: parseFloat(balances.etoro) || 0, updated_at: new Date().toISOString() },
+        { broker: 'xtb',   balance: parseFloat(balances.xtb) || 0,   updated_at: new Date().toISOString() },
+        { broker: 'ibkr',  balance: parseFloat(balances.ibkr) || 0,  updated_at: new Date().toISOString() },
+      ]
+      await supabase.from('broker_balances').upsert(balRows, { onConflict: 'broker' })
+
+      // 2. Calcular btc_usd en tiempo real
+      const btcUsd = btcPrice && btcQty ? btcPrice * btcQty : 0
+
+      // 3. Construir data del snapshot
+      const data = {
+        etoro: brokerTotals.etoro,
+        xtb: brokerTotals.xtb,
+        ibkr: brokerTotals.ibkr,
+        btc_qty: btcQty || 0,
+        btc_usd: btcUsd,
+      }
+      const total_usd = data.etoro + data.xtb + data.ibkr + data.btc_usd
+
+      // 4. Upsert weekly_snapshot del sábado próximo
+      const existing = snapshots?.find(s => s.week_date === nextSatStr)
+      if (existing) {
+        await supabase.from('weekly_snapshots').update({ data, total_usd }).eq('id', existing.id)
+      } else {
+        await supabase.from('weekly_snapshots').insert({
+          week_date: nextSatStr,
+          year: nextSat.getFullYear(),
+          data,
+          total_usd,
+        })
+      }
+
+      // 5. Insertar position_history para cada posición (fecha = sábado próximo)
+      if (positions?.length) {
+        // Purgar filas previas del mismo week_date para esas position_ids (evita duplicados)
+        const posIds = positions.map(p => p.id)
+        await supabase.from('position_history')
+          .delete()
+          .eq('week_date', nextSatStr)
+          .in('position_id', posIds)
+
+        const snaps = positions.map(p => ({
+          position_id: p.id,
+          week_date: nextSatStr,
+          value: Number(p.current_value || p.invested || 0),
+          invested: Number(p.invested || 0),
+        }))
+        await supabase.from('position_history').insert(snaps).catch(() => {})
+      }
+
+      setLastResult({
+        ok: true,
+        saturday: nextSatStr,
+        total: total_usd,
+        byBroker: data,
+        ts: new Date().toLocaleTimeString('es-ES'),
+      })
+      onRefresh?.()
+    } catch (e) {
+      console.error('REGISTRAR error', e)
+      setLastResult({ ok: false, error: String(e?.message || e) })
+    } finally {
+      setRegistering(false)
+    }
+  }
+
+  const BrokerInput = ({ code, label }) => {
+    const color = BROKER_COLORS[code]
+    const posValue = brokerTotals[`pos${code[0].toUpperCase() + code.slice(1)}`]
+    const total = brokerTotals[code]
+    return (
+      <div className="flex-1 min-w-[180px] bg-slate-50 rounded-lg border border-slate-200 p-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color }}>
+            {label}
+          </span>
+          <span className="text-[9px] text-slate-400 font-mono">
+            pos: {formatCurrency(posValue, 0)}
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] text-slate-400 font-mono">$</span>
+          <input type="number" step="0.01" placeholder="saldo cash"
+            value={balances[code]}
+            onChange={e => setBalances({ ...balances, [code]: e.target.value })}
+            className="flex-1 px-2 py-1 border border-slate-300 rounded text-[13px] font-mono font-bold outline-none focus:border-green-400 bg-white"
+            style={{ color }} />
+        </div>
+        <div className="mt-2 pt-2 border-t border-slate-200 flex items-center justify-between">
+          <span className="text-[9px] text-slate-400 uppercase tracking-wider">Total</span>
+          <span className="text-[13px] font-mono font-bold" style={{ color }}>
+            {formatCurrency(total, 0)}
+          </span>
+        </div>
+      </div>
+    )
+  }
+
+  const fmtSat = nextSat.toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-5">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div>
+          <div className="section-title !mb-0">Registrar Snapshot Semanal</div>
+          <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+            Sábado destino: <span className="font-semibold text-slate-600">{fmtSat}</span>
+            {existsRow && <span className="ml-2 text-amber-500">· sobrescribirá registro existente</span>}
+          </p>
+        </div>
+        <button onClick={handleRegistrar} disabled={registering}
+          className="px-4 py-1.5 text-[11px] font-bold tracking-wider text-white bg-etoro border border-etoro rounded-md hover:bg-green-700 disabled:opacity-50 transition-colors">
+          {registering ? 'REGISTRANDO…' : 'REGISTRAR'}
+        </button>
+      </div>
+
+      <div className="flex flex-wrap gap-3 mb-3">
+        <BrokerInput code="etoro" label="eToro" />
+        <BrokerInput code="xtb" label="XTB" />
+        <BrokerInput code="ibkr" label="IBKR" />
+      </div>
+
+      {lastResult && (
+        <div className={`text-[10px] font-mono p-2 rounded ${lastResult.ok ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+          {lastResult.ok
+            ? `✓ Registrado ${lastResult.saturday} · Total ${formatCurrency(lastResult.total)} · ${lastResult.ts}`
+            : `✗ Error: ${lastResult.error}`}
+        </div>
+      )}
+
+      <p className="text-[9px] text-slate-400 mt-2">
+        Cash manual + valor de posiciones por broker. Los saldos quedan persistidos. El snapshot se guarda con fecha del próximo sábado — si hoy es sábado, hoy mismo. Pulsaciones múltiples en la misma semana sobrescriben esa fila. Cuando el sábado vence, queda congelada y el próximo REGISTRAR apunta al siguiente sábado.
+      </p>
+    </div>
+  )
+}
 
 // ─── CALENDAR ────────────────────────────
 export function CalendarView({ events, onRefresh }) {
@@ -388,6 +581,7 @@ export function BackupExport({ snapshots, positions, contributions, yearlyResult
       // Sheet 2: Positions
       const posData = positions.map(p => ({
         Ticker: p.ticker,
+        Resp: p.resp || '',
         Plataforma: p.platform,
         Clase: p.class,
         Entrada: p.entry_date,
@@ -460,7 +654,7 @@ export function Footer({ quotes }) {
         &ldquo;{quote.text}&rdquo;
         {quote.author && <span className="not-italic font-semibold block mt-1.5 text-slate-500"> — {quote.author}</span>}
       </p>
-      <p className="text-[10px] text-slate-300 mt-4 tracking-wider">BELAR Tracker v9 · Capa JOSE · Ecosistema IA Personal</p>
+      <p className="text-[10px] text-slate-300 mt-4 tracking-wider">BELAR Tracker v10 · Capa JOSE · Ecosistema IA Personal</p>
     </footer>
   )
 }
@@ -509,7 +703,7 @@ export function Settings({ quotes, onRefresh }) {
         <div className="text-[10px] text-slate-400 space-y-1">
           <p>Supabase: ruqgzfoperkfmahpbpcv · GitHub: Jose-Index/belar-tracker</p>
           <p>API Belar: /api/belar (POST) · API Tickers: /api/tickers (GET)</p>
-          <p>Versión: v9.13 · Stack: Next.js 14 + Supabase + Recharts + Tailwind</p>
+          <p>Versión: v10.0 · Stack: Next.js 14 + Supabase + Recharts + Tailwind</p>
         </div>
       </div>
     </div>

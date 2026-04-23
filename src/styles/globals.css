@@ -108,6 +108,16 @@ input[type="number"] { -moz-appearance: textfield; }
   font-size: 12px;
 }
 
+/* Selects inline en tabla — apariencia de badge, sin caret nativo */
+.belar-table select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: none;
+  padding-right: 8px;
+  cursor: pointer;
+}
+
 /* Color utilities */
 .text-gain { color: #16a34a; }
 .text-loss { color: #dc2626; }

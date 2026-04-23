@@ -25,6 +25,14 @@ export const CLASS_COLORS = {
   'DISRUPTIVA': '#ec4899',
 }
 
+// Responsable de la decisión de entrada
+export const RESP_OPTIONS = ['Jose', 'Belar', 'Deal']
+export const RESP_COLORS = {
+  'Jose': '#64748b',   // gris neutro
+  'Belar': '#0ea5e9',  // sky (color Total)
+  'Deal': '#7c3aed',   // violeta
+}
+
 export const EVENT_TYPES = {
   EARNINGS: { label: 'Resultados', color: '#f59e0b' },
   FED: { label: 'FED', color: '#dc2626' },
@@ -111,4 +119,16 @@ export function getSaturday(date) {
 
 export function toDateStr(date) {
   return date.toISOString().split('T')[0]
+}
+
+// Sábado próximo desde la fecha dada.
+// - Si hoy es sábado, devuelve hoy.
+// - Si no, devuelve el próximo sábado futuro.
+export function getNextSaturday(date = new Date()) {
+  const d = new Date(date)
+  const day = d.getDay()               // 0=Dom, 6=Sáb
+  const diff = day === 6 ? 0 : (6 - day)
+  d.setDate(d.getDate() + diff)
+  d.setHours(0, 0, 0, 0)
+  return d
 }
