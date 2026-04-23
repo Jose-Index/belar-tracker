@@ -25,37 +25,24 @@ async function etoroFetch(path) {
 
 async function resolveInstruments(ids, debug = false) {
   if (!ids.length) return {}
-  const attempts = [
-    `/market-data/instruments?instrumentIds=${ids.join(',')}&fields=instrumentId,internalSymbolFull,displayname`,
-    `/market-data/instruments?instrumentIds=${ids.join(',')}`,
-    `/market-data/instruments/rates?instrumentIds=${ids.join(',')}`,
-  ]
-  const log = []
-  for (const path of attempts) {
-    try {
-      const res = await fetch(`${BASE}${path}`, { headers: authHeaders() })
-      const body = await res.text()
-      log.push({ path, status: res.status, body: body.slice(0, 400) })
-      if (!res.ok) continue
-      let data
-      try { data = JSON.parse(body) } catch { continue }
-      const arr = Array.isArray(data) ? data : (data.items || data.instruments || data.data || [])
-      if (!arr.length) continue
-      const out = {}
-      for (const it of arr) {
-        const id = it.instrumentId || it.InstrumentID || it.instrumentID
-        const sym = it.internalSymbolFull || it.symbolFull || it.ticker || it.displayname
-        if (id && sym) out[id] = { ticker: sym, name: it.displayname || it.name || sym }
-      }
-      if (Object.keys(out).length) {
-        if (debug) out._debug = log
-        return out
-      }
-    } catch (e) {
-      log.push({ path, error: e.message })
+  try {
+    const path = `/market-data/instruments?instrumentIds=${ids.join(',')}`
+    const res = await fetch(`${BASE}${path}`, { headers: authHeaders() })
+    if (!res.ok) return debug ? { _err: `status ${res.status}` } : {}
+    const data = await res.json()
+    const arr = data.instrumentDisplayDatas || data.items || data.instruments || []
+    const out = {}
+    for (const it of arr) {
+      const id = it.instrumentID || it.instrumentId
+      const ticker = it.instrumentDisplayName || it.internalSymbolFull || it.symbolFull
+      const name = it.instrumentDisplayFullName || it.displayname || ticker
+      const exchangeId = it.exchangeID
+      if (id && ticker) out[id] = { ticker, name, exchangeId }
     }
+    return out
+  } catch (e) {
+    return debug ? { _err: e.message } : {}
   }
-  return debug ? { _debug: log } : {}
 }
 
 export async function GET(request) {
