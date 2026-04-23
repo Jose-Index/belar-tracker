@@ -121,6 +121,15 @@ export function toDateStr(date) {
   return date.toISOString().split('T')[0]
 }
 
+// YYYY-MM-DD en hora LOCAL (no UTC). Evita el off-by-one cuando
+// el objeto Date está a 00:00 local pero toISOString lo pasa a UTC.
+export function toDateStrLocal(date) {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
 // Sábado próximo desde la fecha dada.
 // - Si hoy es sábado, devuelve hoy.
 // - Si no, devuelve el próximo sábado futuro.

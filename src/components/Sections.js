@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useMemo } from 'react'
-import { EVENT_TYPES, formatCurrency, pnlColor, BROKER_COLORS, BROKER_NAMES, toUSD, getNextSaturday, RESP_COLORS } from '@/lib/constants'
+import { EVENT_TYPES, formatCurrency, pnlColor, BROKER_COLORS, BROKER_NAMES, toUSD, getNextSaturday, toDateStrLocal, RESP_COLORS } from '@/lib/constants'
 import { supabase } from '@/lib/supabase'
 
 // ─── BROKER BALANCES + REGISTRAR ────────────────────────────
@@ -79,7 +79,7 @@ export function BrokerBalancesRegister({ brokerBalances, positions, snapshots, b
   }, [positions, balances, eurUsdRate])
 
   const nextSat = useMemo(() => getNextSaturday(new Date()), [])
-  const nextSatStr = nextSat.toISOString().split('T')[0]
+  const nextSatStr = toDateStrLocal(nextSat)
 
   // ¿Existe ya fila para el sábado próximo? (para mostrar "Registro ya existe, se sobrescribirá")
   const existsRow = snapshots?.some(s => s.week_date === nextSatStr)
