@@ -31,26 +31,28 @@ function SparklineSVG({ data, width, height, showDots, showLabels, showEvents })
       {showDots && values.map((v, i) => (
         <circle key={i} cx={xFn(i)} cy={yFn(v)} r="2.5" fill={v >= invested ? '#22c55e' : '#ef4444'} stroke="#fff" strokeWidth="1" />
       ))}
-      {showLabels && (
-        <>
+      {showLabels && (() => {
+        const startPct = ((values[0] - invested) / invested * 100).toFixed(1)
+        const endPct = ((lastVal - invested) / invested * 100).toFixed(1)
+        return <>
           <text x={Number(xFn(0)) + 2} y={Number(yFn(values[0])) - 6} fontSize="8" fill="#94a3b8" textAnchor="start" fontFamily="monospace">
-            {'$' + values[0].toFixed(0)}
+            {(startPct >= 0 ? '+' : '') + startPct + '%'}
           </text>
           <text x={Number(xFn(values.length - 1)) - 2} y={Number(yFn(lastVal)) - 6} fontSize="8" fill={color} textAnchor="end" fontFamily="monospace" fontWeight="bold">
-            {'$' + lastVal.toFixed(0)}
+            {(endPct >= 0 ? '+' : '') + endPct + '%'}
           </text>
           <text x={width - pad} y={Number(invY) - 3} fontSize="7" fill="#64748b" textAnchor="end" fontFamily="monospace" opacity="0.7">
             inv
           </text>
         </>
-      )}
+      })()}
       {showEvents && data.filter(d => d.event).map((d, idx) => {
         const i = data.indexOf(d)
         const ex = (i / (values.length - 1) * (width - pad * 2) + pad)
         const ey = Number(yFn(d.value))
-        const isAmp = d.event === 'xAMPLIAR'
+        const isAmp = d.event === 'ampliar' || d.event === 'xAMPLIAR'
         const marker = isAmp ? '\u25B2' : '\u25BC'
-        const mColor = isAmp ? '#3b82f6' : '#f59e0b'
+        const mColor = isAmp ? '#22c55e' : '#ef4444'
         return <text key={'ev'+idx} x={ex} y={ey - (showDots ? 8 : 5)} fontSize={showDots ? '9' : '6'} fill={mColor} textAnchor="middle" fontWeight="bold">{marker}</text>
       })}
     </svg>
