@@ -41,7 +41,7 @@ function BrokerBalanceCard({ code, label, color, posValue, total, balance, onCha
 //   2. Upsert weekly_snapshots para el sábado próximo (hoy si es sábado)
 //   3. Inserta position_history para cada posición (fecha = sábado próximo)
 //   4. Persiste saldos manuales en broker_balances
-export function BrokerBalancesRegister({ brokerBalances, positions, snapshots, btcPrice, btcQty, eurUsdRate, etoroLive, onRefresh }) {
+export function BrokerBalancesRegister({ brokerBalances, positions, snapshots, btcPrice, btcQty, eurUsdRate, onRefresh }) {
   const [balances, setBalances] = useState({ etoro: '', xtb: '', ibkr: '' })
   const [registering, setRegistering] = useState(false)
   const [lastResult, setLastResult] = useState(null)
@@ -70,16 +70,13 @@ export function BrokerBalancesRegister({ brokerBalances, positions, snapshots, b
       xtb: parseFloat(balances.xtb) || 0,
       ibkr: parseFloat(balances.ibkr) || 0,
     }
-    // Use eToro LIVE equity when available (includes cash, mirrors, everything)
-    const etoroTotal = etoroLive?.equity ? etoroLive.equity : t.etoro + bal.etoro
     return {
-      etoro: etoroTotal,
+      etoro: t.etoro + bal.etoro,
       xtb: t.xtb + bal.xtb,
       ibkr: t.ibkr + bal.ibkr,
       posEtoro: t.etoro, posXtb: t.xtb, posIbkr: t.ibkr,
-      etoroIsLive: !!etoroLive?.equity,
     }
-  }, [positions, balances, eurUsdRate, etoroLive])
+  }, [positions, balances, eurUsdRate])
 
   const nextSat = useMemo(() => getNextSaturday(new Date()), [])
   const nextSatStr = toDateStrLocal(nextSat)

@@ -135,9 +135,9 @@ export default function Dashboard() {
       </div>
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-5 space-y-5">
         {tab === 'dashboard' && <>
-          <CapitalCards snapshots={data.snapshots} brokers={data.brokers} wallets={data.wallets} onUpdateValues={handleUpdateValues} btcPrice={btcPrice} etoroLive={etoroLive} />
+          <CapitalCards snapshots={data.snapshots} brokers={data.brokers} wallets={data.wallets} onUpdateValues={handleUpdateValues} btcPrice={btcPrice} />
           <EvolutionChart snapshots={data.snapshots} />
-          <PositionsTable positions={data.positions} positionHistory={data.positionHistory} onRefresh={refreshData} eurUsdRate={eurUsdRate} etoroLive={etoroLive} />
+          <PositionsTable positions={data.positions} positionHistory={data.positionHistory} onRefresh={refreshData} eurUsdRate={eurUsdRate} />
           <BrokerBalancesRegister
             brokerBalances={data.brokerBalances}
             positions={data.positions}
@@ -145,7 +145,7 @@ export default function Dashboard() {
             btcPrice={btcPrice}
             btcQty={btcQty}
             eurUsdRate={eurUsdRate}
-            etoroLive={etoroLive}
+           
             onRefresh={refreshData}
           />
           <ResultsSummary snapshots={data.snapshots} contributions={data.contributions} />
