@@ -41,7 +41,7 @@ function BrokerBalanceCard({ code, label, color, posValue, total, balance, onCha
 //   2. Upsert weekly_snapshots para el sábado próximo (hoy si es sábado)
 //   3. Inserta position_history para cada posición (fecha = sábado próximo)
 //   4. Persiste saldos manuales en broker_balances
-export function BrokerBalancesRegister({ brokerBalances, positions, snapshots, btcPrice, btcQty, eurUsdRate, onRefresh }) {
+export function BrokerBalancesRegister({ brokerBalances, positions, snapshots, btcPrice, btcQty, eurUsdRate, etoroLive, onRefresh }) {
   const [balances, setBalances] = useState({ etoro: '', xtb: '', ibkr: '' })
   const [registering, setRegistering] = useState(false)
   const [lastResult, setLastResult] = useState(null)
@@ -70,13 +70,16 @@ export function BrokerBalancesRegister({ brokerBalances, positions, snapshots, b
       xtb: parseFloat(balances.xtb) || 0,
       ibkr: parseFloat(balances.ibkr) || 0,
     }
+    // Use eToro LIVE equity when available (includes cash, mirrors, everything)
+    const etoroTotal = etoroLive?.equity ? etoroLive.equity : t.etoro + bal.etoro
     return {
-      etoro: t.etoro + bal.etoro,
+      etoro: etoroTotal,
       xtb: t.xtb + bal.xtb,
       ibkr: t.ibkr + bal.ibkr,
       posEtoro: t.etoro, posXtb: t.xtb, posIbkr: t.ibkr,
+      etoroIsLive: !!etoroLive?.equity,
     }
-  }, [positions, balances, eurUsdRate])
+  }, [positions, balances, eurUsdRate, etoroLive])
 
   const nextSat = useMemo(() => getNextSaturday(new Date()), [])
   const nextSatStr = toDateStrLocal(nextSat)
@@ -126,6 +129,7 @@ export function BrokerBalancesRegister({ brokerBalances, positions, snapshots, b
       }
 
       // 5. Insertar position_history para cada posición (fecha = sábado próximo)
+      //    Detectar ampliaciones/reducciones comparando invested vs último registro
       if (positions?.length) {
         const posIds = positions.map(p => p.id)
         const { error: phDelErr } = await supabase.from('position_history')
@@ -134,12 +138,41 @@ export function BrokerBalancesRegister({ brokerBalances, positions, snapshots, b
           .in('position_id', posIds)
         if (phDelErr) console.warn('position_history delete warn:', phDelErr)
 
-        const snaps = positions.map(p => ({
-          position_id: p.id,
-          week_date: nextSatStr,
-          value: Number(p.current_value || p.invested || 0),
-          invested: Number(p.invested || 0),
-        }))
+        // Get last week's position_history to compare invested amounts
+        const { data: prevHistory } = await supabase.from('position_history')
+          .select('position_id,invested')
+          .in('position_id', posIds)
+          .order('week_date', { ascending: false })
+          .limit(posIds.length * 2)
+
+        const lastInvestedMap = {}
+        ;(prevHistory || []).forEach(ph => {
+          if (!lastInvestedMap[ph.position_id]) lastInvestedMap[ph.position_id] = ph.invested
+        })
+
+        const snaps = positions.map(p => {
+          const currentInvested = Number(p.invested || 0)
+          const prevInvested = lastInvestedMap[p.id]
+          let event = null
+          let event_amount = null
+          if (prevInvested != null && Math.abs(currentInvested - prevInvested) > 1) {
+            if (currentInvested > prevInvested) {
+              event = 'ampliar'
+              event_amount = currentInvested - prevInvested
+            } else {
+              event = 'reducir'
+              event_amount = prevInvested - currentInvested
+            }
+          }
+          return {
+            position_id: p.id,
+            week_date: nextSatStr,
+            value: Number(p.current_value || p.invested || 0),
+            invested: currentInvested,
+            event,
+            event_amount,
+          }
+        })
         const { error: phError } = await supabase.from('position_history').insert(snaps)
         if (phError) console.warn('position_history insert failed (no bloqueante):', phError)
       }

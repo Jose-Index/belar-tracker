@@ -19,6 +19,7 @@ export default function Dashboard() {
   const [tab, setTab] = useState('dashboard')
   const [btcPrice, setBtcPrice] = useState(null)
   const [eurUsdRate, setEurUsdRate] = useState(1.08)
+  const [etoroLive, setEtoroLive] = useState(null)
   const [data, setData] = useState({
     brokers: [], wallets: [], snapshots: [], positions: [],
     contributions: [], yearlyResults: [], radarBelar: [],
@@ -77,12 +78,19 @@ export default function Dashboard() {
   useEffect(() => {
     const loadLive = async () => {
       try {
-        const tickerRes = await fetch('/api/tickers')
+        const [tickerRes, etoroRes] = await Promise.all([
+          fetch('/api/tickers'),
+          fetch('/api/etoro?action=portfolio').catch(() => null),
+        ])
         const tickers = await tickerRes.json()
         const btc = tickers.find(t => t.symbol === 'BTC-USD')
         if (btc?.price) setBtcPrice(btc.price)
         const eur = tickers.find(t => t.symbol === 'EURUSD=X')
         if (eur?.price) setEurUsdRate(eur.price)
+        if (etoroRes) {
+          const etoro = await etoroRes.json()
+          if (etoro.ok) setEtoroLive(etoro)
+        }
       } catch(e) {}
     }
     loadLive()
@@ -127,9 +135,9 @@ export default function Dashboard() {
       </div>
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-5 space-y-5">
         {tab === 'dashboard' && <>
-          <CapitalCards snapshots={data.snapshots} brokers={data.brokers} wallets={data.wallets} onUpdateValues={handleUpdateValues} btcPrice={btcPrice} />
+          <CapitalCards snapshots={data.snapshots} brokers={data.brokers} wallets={data.wallets} onUpdateValues={handleUpdateValues} btcPrice={btcPrice} etoroLive={etoroLive} />
           <EvolutionChart snapshots={data.snapshots} />
-          <PositionsTable positions={data.positions} positionHistory={data.positionHistory} onRefresh={refreshData} eurUsdRate={eurUsdRate} />
+          <PositionsTable positions={data.positions} positionHistory={data.positionHistory} onRefresh={refreshData} eurUsdRate={eurUsdRate} etoroLive={etoroLive} />
           <BrokerBalancesRegister
             brokerBalances={data.brokerBalances}
             positions={data.positions}
@@ -137,6 +145,7 @@ export default function Dashboard() {
             btcPrice={btcPrice}
             btcQty={btcQty}
             eurUsdRate={eurUsdRate}
+            etoroLive={etoroLive}
             onRefresh={refreshData}
           />
           <ResultsSummary snapshots={data.snapshots} contributions={data.contributions} />
