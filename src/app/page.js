@@ -8,6 +8,7 @@ import CapitalCards from '@/components/CapitalCards'
 import EvolutionChart from '@/components/EvolutionChart'
 import PositionsTable from '@/components/PositionsTable'
 import { RadarBelar, RadarJose, ExceptionsSection } from '@/components/RadarModules'
+import { SourcesPanel } from '@/components/Sources'
 import {
   CalendarView, WeeklyHistory, ContributionsTable, YearlyResults,
   ResultsSummary, Calculator, BackupExport, Settings, Footer,
@@ -166,6 +167,7 @@ export default function Dashboard() {
             <CalendarView events={data.calendarEvents} onRefresh={refreshData} />
           </div>
         </>}
+        {tab === 'sources' && <SourcesPanel />}
         {tab === 'tools' && <>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <Calculator />
