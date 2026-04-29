@@ -699,12 +699,12 @@ export function Footer({ quotes }) {
   if (!quote) return null
 
   return (
-    <footer className="text-center py-10 mt-8">
-      <p className="text-[13px] text-slate-400 italic max-w-xl mx-auto leading-relaxed">
+    <footer className="text-center py-12 mt-10">
+      <p className="text-[15px] text-slate-400 italic max-w-2xl mx-auto leading-relaxed">
         &ldquo;{quote.text}&rdquo;
-        {quote.author && <span className="not-italic font-semibold block mt-1.5 text-slate-500"> — {quote.author}</span>}
+        {quote.author && <span className="not-italic font-semibold block mt-2 text-slate-500 text-[13px]"> — {quote.author}</span>}
       </p>
-      <p className="text-[10px] text-slate-300 mt-4 tracking-wider">BELAR Tracker v10 · Capa JOSE · Ecosistema IA Personal</p>
+      <p className="text-[10px] text-slate-300 mt-5 tracking-wider">BELAR Tracker v10 · Capa JOSE · Ecosistema IA Personal</p>
     </footer>
   )
 }

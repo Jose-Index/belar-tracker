@@ -427,7 +427,7 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
               const editKey = (f) => `${p.id}:${f}`
 
               return (
-                <tr key={p.id}>
+                <tr key={p.id} className={p.class === 'NÚCLEO' || p.class === 'NUCLEO' ? 'bg-blue-50/40' : ''} style={p.class === 'NÚCLEO' || p.class === 'NUCLEO' ? { borderLeft: '3px solid #2563eb' } : {}}>
                   <td>
                     <span className="font-bold text-slate-800 text-[13px] block">{p.ticker}</span>
                     <Sparkline data={historyMap[p.id]} ticker={p.ticker} broker={BROKER_NAMES[p.platform] || p.platform} invested={invested} />
