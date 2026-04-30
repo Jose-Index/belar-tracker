@@ -349,6 +349,13 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
       if (da !== db) return db - da
       return (a.ticker || '').localeCompare(b.ticker || '')
     }
+    if (sortMode === 'clase') {
+      const classOrder = { 'NÚCLEO': 1, 'NUCLEO': 1, 'TÁCTICA': 2, 'TACTICA': 2, 'MOMENTUM': 3, 'DISRUPTIVA': 4 }
+      const ca = classOrder[a.class] || 99
+      const cb = classOrder[b.class] || 99
+      if (ca !== cb) return ca - cb
+      return (a.ticker || '').localeCompare(b.ticker || '')
+    }
     const order = { etoro: 1, xtb: 2, ibkr: 3 }
     const brokerDiff = (order[a.platform] || 99) - (order[b.platform] || 99)
     if (brokerDiff !== 0) return brokerDiff
@@ -376,6 +383,10 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
             <button onClick={() => setSortMode('entry')}
               className={`px-2 py-1 font-semibold tracking-wider transition-colors ${sortMode === 'entry' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>
               ENTRADA ↓
+            </button>
+            <button onClick={() => setSortMode('clase')}
+              className={`px-2 py-1 font-semibold tracking-wider transition-colors ${sortMode === 'clase' ? 'bg-slate-700 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>
+              CLASE
             </button>
           </div>
           <button onClick={() => setShowAdd(true)}
