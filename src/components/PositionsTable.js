@@ -161,7 +161,7 @@ function AddPositionModal({ onClose, onSave }) {
   const [form, setForm] = useState({
     ticker: '', platform: 'etoro', resp: 'Jose',
     class: 'NÚCLEO', entry_date: new Date().toISOString().split('T')[0],
-    invested: '', current_value: '', currency: 'USD',
+    invested: '', current_value: '', currency: 'USD', leverage: 1,
   })
   const [saving, setSaving] = useState(false)
 
@@ -173,6 +173,7 @@ function AddPositionModal({ onClose, onSave }) {
       ticker: form.ticker.trim().toUpperCase(),
       invested: parseFloat(form.invested),
       current_value: parseFloat(form.current_value || form.invested),
+      leverage: parseFloat(form.leverage) || 1,
       is_open: true,
     })
     setSaving(false)
@@ -251,6 +252,19 @@ function AddPositionModal({ onClose, onSave }) {
                 onChange={e => setForm({...form, current_value: e.target.value})}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono outline-none focus:border-green-400" />
             </div>
+          </div>
+          <div>
+            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Apalancamiento (x)</label>
+            <select value={form.leverage} onChange={e => setForm({...form, leverage: parseFloat(e.target.value)})}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono outline-none focus:border-green-400">
+              <option value={1}>x1 (sin apalancamiento)</option>
+              <option value={2}>x2</option>
+              <option value={3}>x3</option>
+              <option value={5}>x5</option>
+              <option value={10}>x10</option>
+              <option value={20}>x20</option>
+              <option value={30}>x30</option>
+            </select>
           </div>
         </div>
         <div className="flex gap-2 mt-4">
@@ -397,7 +411,7 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full belar-table" style={{ minWidth: 1000 }}>
+        <table className="w-full belar-table" style={{ minWidth: 1080 }}>
           <thead>
             <tr>
               <th>Activo</th>
@@ -410,6 +424,7 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
               <th>G/P %</th>
               <th title="Rendimiento diario">%/D</th>
               <th>Clase</th>
+              <th title="Apalancamiento">Apal.</th>
               <th>Peso</th>
               <th></th>
             </tr>
@@ -556,6 +571,26 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
                     </select>
                   </td>
 
+                  <td className="text-center">
+                    <select value={p.leverage ?? 1}
+                      onChange={e => updateField(p.id, 'leverage', parseFloat(e.target.value))}
+                      className="text-[10px] font-bold px-2 py-0.5 rounded-md outline-none cursor-pointer appearance-none border"
+                      style={{
+                        background: (Number(p.leverage) > 1) ? '#f59e0b18' : '#f1f5f912',
+                        color: (Number(p.leverage) > 1) ? '#b45309' : '#94a3b8',
+                        borderColor: (Number(p.leverage) > 1) ? '#f59e0b40' : '#cbd5e130',
+                        minWidth: 50,
+                      }}>
+                      <option value={1}>x1</option>
+                      <option value={2}>x2</option>
+                      <option value={3}>x3</option>
+                      <option value={5}>x5</option>
+                      <option value={10}>x10</option>
+                      <option value={20}>x20</option>
+                      <option value={30}>x30</option>
+                    </select>
+                  </td>
+
                   <td className="text-right font-mono text-[11px] text-slate-500">{(weight * 100).toFixed(1)}%</td>
 
                   <td className="text-center">
@@ -584,7 +619,7 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
                   {totalPct >= 0 ? '+' : ''}{(totalPct * 100).toFixed(2)}%
                 </span>
               </td>
-              <td colSpan={4}></td>
+              <td colSpan={5}></td>
             </tr>
           </tfoot>
         </table>
