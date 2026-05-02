@@ -282,6 +282,7 @@ function AddPositionModal({ onClose, onSave }) {
 // ─── MAIN COMPONENT ────────────────
 export default function PositionsTable({ positions, positionHistory, onRefresh, eurUsdRate = 1.08 }) {
   const [editing, setEditing] = useState(null)
+  const [noteEditing, setNoteEditing] = useState(null) // { id, ticker, value }
   const [editVal, setEditVal] = useState('')
   const [sortMode, setSortMode] = useState('broker')
   const [showAdd, setShowAdd] = useState(false)
@@ -465,48 +466,21 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
                   <td>
                     <span className="font-bold text-slate-800 text-[13px] block">{p.ticker}</span>
                     <Sparkline data={historyMap[p.id]} ticker={p.ticker} broker={BROKER_NAMES[p.platform] || p.platform} invested={invested} />
-                    {/* Inline note */}
-                    {editing === editKey('notes') ? (
-                      <div className="mt-1">
-                        <input
-                          autoFocus
-                          type="text"
-                          className="w-full px-1.5 py-1 text-[10px] text-slate-700 bg-white border border-blue-300 rounded outline-none"
-                          style={{ minWidth: '200px' }}
-                          value={editVal}
-                          onChange={e => setEditVal(e.target.value)}
-                          onBlur={() => {
-                            const now = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                            const noteWithDate = editVal ? `[${now}] ${editVal.replace(/^\[.*?\]\s*/, '')}` : ''
-                            updateField(p.id, 'notes_belar', noteWithDate)
-                          }}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') {
-                              const now = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                              const noteWithDate = editVal ? `[${now}] ${editVal.replace(/^\[.*?\]\s*/, '')}` : ''
-                              updateField(p.id, 'notes_belar', noteWithDate)
-                            }
-                            if (e.key === 'Escape') setEditing(null)
-                          }}
-                          placeholder="Añadir nota..."
-                        />
-                      </div>
-                    ) : (
-                      <div
-                        className="text-[10px] text-slate-400 cursor-pointer hover:text-slate-600 transition-colors mt-0.5 truncate"
-                        style={{ maxWidth: '180px' }}
-                        title={p.notes_belar || 'Añadir nota'}
-                        onClick={() => { setEditing(editKey('notes')); setEditVal(p.notes_belar || '') }}>
-                        {p.notes_belar ? (
-                          <span className="text-slate-500 flex items-center gap-1">
-                            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-slate-400 shrink-0"><path d="M13.5 4.5l-2-2L3 11l-.5 2.5L5 13l8.5-8.5z"/><path d="M10.5 3.5l2 2"/></svg>
-                            {p.notes_belar}
-                          </span>
-                        ) : (
-                          <span className="text-slate-300 italic">+ nota</span>
-                        )}
-                      </div>
-                    )}
+                    {/* Note display */}
+                    <div
+                      className="text-[10px] text-slate-400 cursor-pointer hover:text-slate-600 transition-colors mt-0.5 truncate"
+                      style={{ maxWidth: '180px' }}
+                      title={p.notes_belar || 'Añadir nota'}
+                      onClick={() => setNoteEditing({ id: p.id, ticker: p.ticker, value: p.notes_belar || '' })}>
+                      {p.notes_belar ? (
+                        <span className="text-slate-500 flex items-center gap-1">
+                          <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-slate-400 shrink-0"><path d="M13.5 4.5l-2-2L3 11l-.5 2.5L5 13l8.5-8.5z"/><path d="M10.5 3.5l2 2"/></svg>
+                          {p.notes_belar}
+                        </span>
+                      ) : (
+                        <span className="text-slate-300 italic">+ nota</span>
+                      )}
+                    </div>
                   </td>
 
                   <td>
@@ -674,6 +648,35 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
           </tfoot>
         </table>
       </div>
+
+      {/* Full-width note editing bar */}
+      {noteEditing && (
+        <div className="mx-5 mb-4 p-3 bg-slate-50 border border-blue-200 rounded-lg">
+          <div className="flex items-center gap-2 mb-1.5">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-blue-500 shrink-0"><path d="M13.5 4.5l-2-2L3 11l-.5 2.5L5 13l8.5-8.5z"/><path d="M10.5 3.5l2 2"/></svg>
+            <span className="text-[11px] font-bold text-slate-600">{noteEditing.ticker}</span>
+            <button onClick={() => setNoteEditing(null)} className="ml-auto text-slate-400 hover:text-slate-600 text-xs">✕</button>
+          </div>
+          <input
+            autoFocus
+            type="text"
+            className="w-full px-3 py-2 text-[12px] text-slate-700 bg-white border border-slate-200 rounded-md outline-none focus:border-blue-400"
+            value={noteEditing.value}
+            onChange={e => setNoteEditing({ ...noteEditing, value: e.target.value })}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                const now = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                const noteWithDate = noteEditing.value ? `[${now}] ${noteEditing.value.replace(/^\[.*?\]\s*/, '')}` : ''
+                updateField(noteEditing.id, 'notes_belar', noteWithDate)
+                setNoteEditing(null)
+              }
+              if (e.key === 'Escape') setNoteEditing(null)
+            }}
+            placeholder="Escribir nota..."
+          />
+          <div className="text-[9px] text-slate-400 mt-1">Enter para guardar · Esc para cancelar</div>
+        </div>
+      )}
 
       {showAdd && <AddPositionModal onClose={() => setShowAdd(false)} onSave={handleAddPosition} />}
     </div>
