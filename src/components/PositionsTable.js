@@ -612,15 +612,16 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
                 </tr>
                 {/* Notes row */}
                 <tr>
-                  <td colSpan={13} style={{ borderTop: 'none', padding: '0 20px 6px 20px', maxWidth: 0 }}>
+                  <td colSpan={13} style={{ borderTop: 'none', padding: '0 20px 6px 20px', overflow: 'hidden', width: '1px' }}>
+                    <div style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}>
                     {editing === editKey('notes') ? (
                       <div className="flex items-center gap-2">
                         <span className="text-[9px] text-slate-400 shrink-0">📝</span>
                         <input
                           autoFocus
                           type="text"
-                          className="w-full px-2 py-1 text-[11px] text-slate-600 bg-white border border-slate-200 rounded outline-none focus:border-blue-400"
-                          style={{ maxWidth: '100%', boxSizing: 'border-box' }}
+                          className="px-2 py-1 text-[11px] text-slate-600 bg-white border border-slate-200 rounded outline-none focus:border-blue-400"
+                          style={{ width: '400px' }}
                           value={editVal}
                           onChange={e => setEditVal(e.target.value)}
                           onBlur={() => {
@@ -641,18 +642,19 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
                       </div>
                     ) : (
                       <div
-                        className="text-[11px] text-slate-400 cursor-pointer hover:text-slate-600 transition-colors flex items-center gap-1.5 truncate"
+                        className="text-[11px] text-slate-400 cursor-pointer hover:text-slate-600 transition-colors flex items-center gap-1.5"
                         onClick={() => { setEditing(editKey('notes')); setEditVal(p.notes_belar || '') }}>
                         {p.notes_belar ? (
                           <>
                             <span className="text-[9px]">📝</span>
-                            <span className="text-slate-500 truncate">{p.notes_belar}</span>
+                            <span className="text-slate-500">{p.notes_belar}</span>
                           </>
                         ) : (
                           <span className="text-[10px] text-slate-300 italic">+ nota</span>
                         )}
                       </div>
                     )}
+                    </div>
                   </td>
                 </tr>
                 </React.Fragment>
