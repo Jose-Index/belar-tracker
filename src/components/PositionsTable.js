@@ -611,8 +611,8 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
                   </td>
                 </tr>
                 {/* Notes row */}
-                <tr className="border-b border-slate-100">
-                  <td colSpan={14} className="px-4 py-1.5 bg-slate-50/50">
+                <tr>
+                  <td colSpan={13} className="px-4 pt-0 pb-1.5" style={{ borderTop: 'none' }}>
                     {editing === editKey('notes') ? (
                       <div className="flex items-center gap-2">
                         <span className="text-[9px] text-slate-400 shrink-0">📝</span>
@@ -640,7 +640,7 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
                       </div>
                     ) : (
                       <div
-                        className="text-[11px] text-slate-400 cursor-pointer hover:text-slate-600 transition-colors min-h-[20px] flex items-center gap-1.5"
+                        className="text-[11px] text-slate-400 cursor-pointer hover:text-slate-600 transition-colors flex items-center gap-1.5"
                         onClick={() => { setEditing(editKey('notes')); setEditVal(p.notes_belar || '') }}>
                         {p.notes_belar ? (
                           <>
