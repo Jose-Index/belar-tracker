@@ -461,33 +461,35 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
               const editKey = (f) => `${p.id}:${f}`
 
               return (
-                <tr key={p.id} className={p.class === 'NÚCLEO' || p.class === 'NUCLEO' ? 'bg-blue-50/40' : ''} style={p.class === 'NÚCLEO' || p.class === 'NUCLEO' ? { borderLeft: '3px solid #2563eb' } : {}}>
+                <tr key={p.id} className={p.class === 'NÚCLEO' || p.class === 'NUCLEO' ? 'bg-blue-50/40' : ''} style={{ position: 'relative', ...(p.class === 'NÚCLEO' || p.class === 'NUCLEO' ? { borderLeft: '3px solid #2563eb' } : {}) }}>
                   <td>
                     <span className="font-bold text-slate-800 text-[13px] block">{p.ticker}</span>
                     <Sparkline data={historyMap[p.id]} ticker={p.ticker} broker={BROKER_NAMES[p.platform] || p.platform} invested={invested} />
                     {/* Inline note */}
                     {editing === editKey('notes') ? (
-                      <input
-                        autoFocus
-                        type="text"
-                        className="mt-1 w-full px-1.5 py-0.5 text-[10px] text-slate-600 bg-white border border-slate-200 rounded outline-none focus:border-blue-400"
-                        value={editVal}
-                        onChange={e => setEditVal(e.target.value)}
-                        onBlur={() => {
-                          const now = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                          const noteWithDate = editVal ? `[${now}] ${editVal.replace(/^\[.*?\]\s*/, '')}` : ''
-                          updateField(p.id, 'notes_belar', noteWithDate)
-                        }}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') {
+                      <div className="mt-1 relative" style={{ position: 'absolute', left: 20, right: 20, zIndex: 10 }}>
+                        <input
+                          autoFocus
+                          type="text"
+                          className="w-full px-2.5 py-1.5 text-[11px] text-slate-700 bg-white border border-blue-300 rounded-md outline-none shadow-lg"
+                          value={editVal}
+                          onChange={e => setEditVal(e.target.value)}
+                          onBlur={() => {
                             const now = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
                             const noteWithDate = editVal ? `[${now}] ${editVal.replace(/^\[.*?\]\s*/, '')}` : ''
                             updateField(p.id, 'notes_belar', noteWithDate)
-                          }
-                          if (e.key === 'Escape') setEditing(null)
-                        }}
-                        placeholder="Añadir nota..."
-                      />
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              const now = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                              const noteWithDate = editVal ? `[${now}] ${editVal.replace(/^\[.*?\]\s*/, '')}` : ''
+                              updateField(p.id, 'notes_belar', noteWithDate)
+                            }
+                            if (e.key === 'Escape') setEditing(null)
+                          }}
+                          placeholder="Añadir nota..."
+                        />
+                      </div>
                     ) : (
                       <div
                         className="text-[10px] text-slate-400 cursor-pointer hover:text-slate-600 transition-colors mt-0.5 truncate"
@@ -495,7 +497,10 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
                         title={p.notes_belar || 'Añadir nota'}
                         onClick={() => { setEditing(editKey('notes')); setEditVal(p.notes_belar || '') }}>
                         {p.notes_belar ? (
-                          <span className="text-slate-500">📝 {p.notes_belar}</span>
+                          <span className="text-slate-500 flex items-center gap-1">
+                            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-slate-400 shrink-0"><path d="M13.5 4.5l-2-2L3 11l-.5 2.5L5 13l8.5-8.5z"/><path d="M10.5 3.5l2 2"/></svg>
+                            {p.notes_belar}
+                          </span>
                         ) : (
                           <span className="text-slate-300 italic">+ nota</span>
                         )}
