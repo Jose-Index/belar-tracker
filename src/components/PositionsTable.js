@@ -462,25 +462,12 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
               const editKey = (f) => `${p.id}:${f}`
 
               return (
-                <tr key={p.id} className={p.class === 'NÚCLEO' || p.class === 'NUCLEO' ? 'bg-blue-50/40' : ''} style={{ position: 'relative', ...(p.class === 'NÚCLEO' || p.class === 'NUCLEO' ? { borderLeft: '3px solid #2563eb' } : {}) }}>
+                <React.Fragment key={p.id}>
+                <tr className={p.class === 'NÚCLEO' || p.class === 'NUCLEO' ? 'bg-blue-50/40' : ''} style={p.class === 'NÚCLEO' || p.class === 'NUCLEO' ? { borderLeft: '3px solid #2563eb' } : {}}>
                   <td>
                     <span className="font-bold text-slate-800 text-[13px] block">{p.ticker}</span>
                     <Sparkline data={historyMap[p.id]} ticker={p.ticker} broker={BROKER_NAMES[p.platform] || p.platform} invested={invested} />
-                    {/* Note display */}
-                    <div
-                      className="text-[10px] text-slate-400 cursor-pointer hover:text-slate-600 transition-colors mt-0.5 truncate"
-                      style={{ maxWidth: '180px' }}
-                      title={p.notes_belar || 'Añadir nota'}
-                      onClick={() => setNoteEditing({ id: p.id, ticker: p.ticker, value: p.notes_belar || '' })}>
-                      {p.notes_belar ? (
-                        <span className="text-slate-500 flex items-center gap-1">
-                          <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-slate-400 shrink-0"><path d="M13.5 4.5l-2-2L3 11l-.5 2.5L5 13l8.5-8.5z"/><path d="M10.5 3.5l2 2"/></svg>
-                          {p.notes_belar}
-                        </span>
-                      ) : (
-                        <span className="text-slate-300 italic">+ nota</span>
-                      )}
-                    </div>
+
                   </td>
 
                   <td>
@@ -625,6 +612,52 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
                     </button>
                   </td>
                 </tr>
+                <tr style={p.class === 'NÚCLEO' || p.class === 'NUCLEO' ? { borderLeft: '3px solid #2563eb' } : {}}>
+                  <td colSpan={13} style={{ borderTop: 'none', borderBottom: '1px solid #e2e8f0', padding: '0 20px 8px 20px', maxWidth: 0, overflow: 'hidden' }}>
+                    {noteEditing?.id === p.id ? (
+                      <div style={{ overflow: 'hidden' }}>
+                        <input
+                          autoFocus
+                          type="text"
+                          className="w-full px-2 py-1 text-[11px] text-slate-700 bg-white border border-blue-300 rounded outline-none"
+                          value={noteEditing.value}
+                          onChange={e => setNoteEditing({ ...noteEditing, value: e.target.value })}
+                          onBlur={() => {
+                            const now = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                            const noteWithDate = noteEditing.value ? `[${now}] ${noteEditing.value.replace(/^\[.*?\]\s*/, '')}` : ''
+                            updateField(noteEditing.id, 'notes_belar', noteWithDate)
+                            setNoteEditing(null)
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              const now = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                              const noteWithDate = noteEditing.value ? `[${now}] ${noteEditing.value.replace(/^\[.*?\]\s*/, '')}` : ''
+                              updateField(noteEditing.id, 'notes_belar', noteWithDate)
+                              setNoteEditing(null)
+                            }
+                            if (e.key === 'Escape') setNoteEditing(null)
+                          }}
+                          placeholder="Escribir nota..."
+                        />
+                      </div>
+                    ) : (
+                      <div
+                        className="text-[10px] text-slate-400 cursor-pointer hover:text-slate-600 transition-colors truncate"
+                        style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        onClick={() => setNoteEditing({ id: p.id, ticker: p.ticker, value: p.notes_belar || '' })}>
+                        {p.notes_belar ? (
+                          <span className="text-slate-500 inline-flex items-center gap-1">
+                            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-slate-400 shrink-0"><path d="M13.5 4.5l-2-2L3 11l-.5 2.5L5 13l8.5-8.5z"/><path d="M10.5 3.5l2 2"/></svg>
+                            {p.notes_belar}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300 italic">+ nota</span>
+                        )}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+                </React.Fragment>
               )
             })}
           </tbody>
@@ -649,34 +682,6 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
         </table>
       </div>
 
-      {/* Full-width note editing bar */}
-      {noteEditing && (
-        <div className="mx-5 mb-4 p-3 bg-slate-50 border border-blue-200 rounded-lg">
-          <div className="flex items-center gap-2 mb-1.5">
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-blue-500 shrink-0"><path d="M13.5 4.5l-2-2L3 11l-.5 2.5L5 13l8.5-8.5z"/><path d="M10.5 3.5l2 2"/></svg>
-            <span className="text-[11px] font-bold text-slate-600">{noteEditing.ticker}</span>
-            <button onClick={() => setNoteEditing(null)} className="ml-auto text-slate-400 hover:text-slate-600 text-xs">✕</button>
-          </div>
-          <input
-            autoFocus
-            type="text"
-            className="w-full px-3 py-2 text-[12px] text-slate-700 bg-white border border-slate-200 rounded-md outline-none focus:border-blue-400"
-            value={noteEditing.value}
-            onChange={e => setNoteEditing({ ...noteEditing, value: e.target.value })}
-            onKeyDown={e => {
-              if (e.key === 'Enter') {
-                const now = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                const noteWithDate = noteEditing.value ? `[${now}] ${noteEditing.value.replace(/^\[.*?\]\s*/, '')}` : ''
-                updateField(noteEditing.id, 'notes_belar', noteWithDate)
-                setNoteEditing(null)
-              }
-              if (e.key === 'Escape') setNoteEditing(null)
-            }}
-            placeholder="Escribir nota..."
-          />
-          <div className="text-[9px] text-slate-400 mt-1">Enter para guardar · Esc para cancelar</div>
-        </div>
-      )}
 
       {showAdd && <AddPositionModal onClose={() => setShowAdd(false)} onSave={handleAddPosition} />}
     </div>
