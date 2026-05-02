@@ -72,21 +72,6 @@ export default function EvolutionChart({ snapshots, storageKey = 'dashboard' }) 
   // Determine if right axis is needed
   const showRightAxis = visible.total_eur
 
-  // Sync right axis domain with left axis for visual alignment
-  // Find min/max across all visible $ values
-  const allValues = chartData.flatMap(d => {
-    const vals = []
-    SERIES.forEach(s => { if (visible[s.key] && s.yAxisId === 'left') vals.push(d[s.key] || 0) })
-    return vals
-  })
-  const minVal = Math.min(...allValues)
-  const maxVal = Math.max(...allValues)
-
-  // For € axis: use the latest EUR/USD rate to set equivalent scale
-  const latestRate = chartData[chartData.length - 1]?.eur_usd_rate || 1.10
-  const eurMin = minVal / latestRate
-  const eurMax = maxVal / latestRate
-
   const CustomTooltip = ({ active, payload, label }) => {
     if (!active || !payload) return null
     return (
@@ -124,7 +109,7 @@ export default function EvolutionChart({ snapshots, storageKey = 'dashboard' }) 
           <XAxis dataKey="label" tick={{ fontSize: 9, fill: '#94a3b8' }} interval="preserveStartEnd" />
           <YAxis yAxisId="left" domain={['auto', 'auto']} tick={{ fontSize: 9, fill: '#94a3b8' }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} width={45} />
           {showRightAxis && (
-            <YAxis yAxisId="right" orientation="right" domain={[eurMin, eurMax]}
+            <YAxis yAxisId="right" orientation="right" domain={['auto', 'auto']}
               tick={{ fontSize: 9, fill: '#0ea5e9' }} tickFormatter={v => `€${(v/1000).toFixed(0)}k`} width={45} />
           )}
           <Tooltip content={<CustomTooltip />} />
