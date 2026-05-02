@@ -318,6 +318,14 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
       ? (() => { const v = parseFloat(value); return isNaN(v) ? null : v })()
       : value
     if (coerced === null || coerced === undefined || coerced === '') { setEditing(null); return }
+    // Confirm before changing invested amount (prevent accidental edits)
+    if (field === 'invested') {
+      const pos = localPositions.find(p => p.id === id)
+      if (!confirm(`¿Modificar INVERTIDO de ${pos?.ticker || ''}?\nValor actual: $${Number(pos?.invested || 0).toFixed(2)}\nNuevo valor: $${Number(coerced).toFixed(2)}`)) {
+        setEditing(null)
+        return
+      }
+    }
     await updateField(id, field, coerced)
   }
 
