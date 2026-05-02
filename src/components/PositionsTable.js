@@ -467,11 +467,12 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
                     <Sparkline data={historyMap[p.id]} ticker={p.ticker} broker={BROKER_NAMES[p.platform] || p.platform} invested={invested} />
                     {/* Inline note */}
                     {editing === editKey('notes') ? (
-                      <div className="mt-1 relative" style={{ position: 'absolute', left: 20, right: 20, zIndex: 10 }}>
+                      <div className="mt-1">
                         <input
                           autoFocus
                           type="text"
-                          className="w-full px-2.5 py-1.5 text-[11px] text-slate-700 bg-white border border-blue-300 rounded-md outline-none shadow-lg"
+                          className="w-full px-1.5 py-1 text-[10px] text-slate-700 bg-white border border-blue-300 rounded outline-none"
+                          style={{ minWidth: '200px' }}
                           value={editVal}
                           onChange={e => setEditVal(e.target.value)}
                           onBlur={() => {
