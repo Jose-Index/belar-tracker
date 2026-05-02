@@ -461,11 +461,46 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
               const editKey = (f) => `${p.id}:${f}`
 
               return (
-                <React.Fragment key={p.id}>
-                <tr className={p.class === 'NÚCLEO' || p.class === 'NUCLEO' ? 'bg-blue-50/40' : ''} style={p.class === 'NÚCLEO' || p.class === 'NUCLEO' ? { borderLeft: '3px solid #2563eb' } : {}}>
+                <tr key={p.id} className={p.class === 'NÚCLEO' || p.class === 'NUCLEO' ? 'bg-blue-50/40' : ''} style={p.class === 'NÚCLEO' || p.class === 'NUCLEO' ? { borderLeft: '3px solid #2563eb' } : {}}>
                   <td>
                     <span className="font-bold text-slate-800 text-[13px] block">{p.ticker}</span>
                     <Sparkline data={historyMap[p.id]} ticker={p.ticker} broker={BROKER_NAMES[p.platform] || p.platform} invested={invested} />
+                    {/* Inline note */}
+                    {editing === editKey('notes') ? (
+                      <input
+                        autoFocus
+                        type="text"
+                        className="mt-1 w-full px-1.5 py-0.5 text-[10px] text-slate-600 bg-white border border-slate-200 rounded outline-none focus:border-blue-400"
+                        value={editVal}
+                        onChange={e => setEditVal(e.target.value)}
+                        onBlur={() => {
+                          const now = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                          const noteWithDate = editVal ? `[${now}] ${editVal.replace(/^\[.*?\]\s*/, '')}` : ''
+                          updateField(p.id, 'notes_belar', noteWithDate)
+                        }}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            const now = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                            const noteWithDate = editVal ? `[${now}] ${editVal.replace(/^\[.*?\]\s*/, '')}` : ''
+                            updateField(p.id, 'notes_belar', noteWithDate)
+                          }
+                          if (e.key === 'Escape') setEditing(null)
+                        }}
+                        placeholder="Añadir nota..."
+                      />
+                    ) : (
+                      <div
+                        className="text-[10px] text-slate-400 cursor-pointer hover:text-slate-600 transition-colors mt-0.5 truncate"
+                        style={{ maxWidth: '180px' }}
+                        title={p.notes_belar || 'Añadir nota'}
+                        onClick={() => { setEditing(editKey('notes')); setEditVal(p.notes_belar || '') }}>
+                        {p.notes_belar ? (
+                          <span className="text-slate-500">📝 {p.notes_belar}</span>
+                        ) : (
+                          <span className="text-slate-300 italic">+ nota</span>
+                        )}
+                      </div>
+                    )}
                   </td>
 
                   <td>
@@ -610,54 +645,6 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
                     </button>
                   </td>
                 </tr>
-                {/* Notes row */}
-                <tr>
-                  <td colSpan={13} style={{ borderTop: 'none', padding: '0 20px 6px 20px', overflow: 'hidden', width: '1px' }}>
-                    <div style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                    {editing === editKey('notes') ? (
-                      <div className="flex items-center gap-2">
-                        <span className="text-[9px] text-slate-400 shrink-0">📝</span>
-                        <input
-                          autoFocus
-                          type="text"
-                          className="px-2 py-1 text-[11px] text-slate-600 bg-white border border-slate-200 rounded outline-none focus:border-blue-400"
-                          style={{ width: '400px' }}
-                          value={editVal}
-                          onChange={e => setEditVal(e.target.value)}
-                          onBlur={() => {
-                            const now = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                            const noteWithDate = editVal ? `[${now}] ${editVal.replace(/^\[.*?\]\s*/, '')}` : ''
-                            updateField(p.id, 'notes_belar', noteWithDate)
-                          }}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') {
-                              const now = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                              const noteWithDate = editVal ? `[${now}] ${editVal.replace(/^\[.*?\]\s*/, '')}` : ''
-                              updateField(p.id, 'notes_belar', noteWithDate)
-                            }
-                            if (e.key === 'Escape') setEditing(null)
-                          }}
-                          placeholder="Añadir nota..."
-                        />
-                      </div>
-                    ) : (
-                      <div
-                        className="text-[11px] text-slate-400 cursor-pointer hover:text-slate-600 transition-colors flex items-center gap-1.5"
-                        onClick={() => { setEditing(editKey('notes')); setEditVal(p.notes_belar || '') }}>
-                        {p.notes_belar ? (
-                          <>
-                            <span className="text-[9px]">📝</span>
-                            <span className="text-slate-500">{p.notes_belar}</span>
-                          </>
-                        ) : (
-                          <span className="text-[10px] text-slate-300 italic">+ nota</span>
-                        )}
-                      </div>
-                    )}
-                    </div>
-                  </td>
-                </tr>
-                </React.Fragment>
               )
             })}
           </tbody>
