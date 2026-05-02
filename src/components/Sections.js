@@ -107,6 +107,7 @@ export function BrokerBalancesRegister({ brokerBalances, positions, snapshots, b
         ibkr: brokerTotals.ibkr,
         btc_qty: btcQty || 0,
         btc_usd: btcUsd,
+        eur_usd_rate: eurUsdRate || 1.10,
       }
       const total_usd = data.etoro + data.xtb + data.ibkr + data.btc_usd
 
