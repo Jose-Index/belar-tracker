@@ -402,8 +402,27 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
         map[h.position_id].push({ week_date: h.week_date, value: Number(h.value), invested: Number(h.invested), event: h.event, event_amount: h.event_amount })
       })
     }
+    // Inyectar punto inicial sintético (apertura) — refleja la evolución dentro de la primera semana
+    ;(localPositions || []).forEach(p => {
+      if (!p.entry_date || !p.invested) return
+      const series = map[p.id] || (map[p.id] = [])
+      const entryDate = String(p.entry_date)
+      // Solo añadir si no existe ya un registro en o antes de entry_date
+      const hasEntryOrEarlier = series.some(h => h.week_date <= entryDate)
+      if (!hasEntryOrEarlier) {
+        series.unshift({
+          week_date: entryDate,
+          value: Number(p.invested),
+          invested: Number(p.invested),
+          event: 'apertura',
+          event_amount: null,
+        })
+      }
+      // Ordenar por fecha ascendente por si el unshift altera orden
+      series.sort((a, b) => a.week_date.localeCompare(b.week_date))
+    })
     return map
-  }, [positionHistory])
+  }, [positionHistory, localPositions])
 
   // Optimistic update: actualiza localPositions instantáneamente y persiste en segundo plano.
   // Si la persistencia falla, hace rollback cargando desde BD.
