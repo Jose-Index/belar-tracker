@@ -8,21 +8,22 @@ const TABS = [
 
 export default function TabNav({ active, onChange }) {
   return (
-    <nav className="bg-white/85 backdrop-blur-md border-b border-stone-200">
+    <nav className="border-b border-stone-200" style={{ background: 'rgba(255, 255, 255, 0.7)', backdropFilter: 'blur(10px)' }}>
       <div className="max-w-screen-2xl mx-auto px-4 sm:px-6">
-        <div className="flex gap-1 py-2">
+        <div className="flex gap-2 py-3">
           {TABS.map(t => {
             const isActive = active === t.id
             return (
               <button
                 key={t.id}
                 onClick={() => onChange(t.id)}
-                className={`flex items-center gap-2 px-3.5 py-1.5 text-[11px] font-semibold tracking-[0.08em] rounded-lg transition-all ${
+                className={`flex items-center gap-2.5 px-5 py-2.5 text-[13px] font-semibold tracking-[0.06em] rounded-lg transition-all ${
                   isActive
-                    ? 'bg-slate-800 text-white shadow-sm'
-                    : 'text-slate-500 hover:bg-stone-100 hover:text-slate-700'
-                }`}>
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                    ? 'text-white shadow-sm'
+                    : 'text-stone-500 hover:bg-stone-100 hover:text-stone-700'
+                }`}
+                style={isActive ? { background: 'var(--accent)' } : {}}>
+                <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
                   <path strokeLinecap="round" strokeLinejoin="round" d={t.icon} />
                 </svg>
                 {t.label}
