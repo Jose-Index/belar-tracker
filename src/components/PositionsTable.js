@@ -67,8 +67,9 @@ function Sparkline({ data, ticker, broker, invested }) {
   useEffect(() => {
     if (open && wrapperRef.current) {
       const rect = wrapperRef.current.getBoundingClientRect()
+      const tooltipWidth = 500 // 480 + padding margen
       setPos({
-        x: Math.min(rect.left, window.innerWidth - 310),
+        x: Math.max(8, Math.min(rect.left, window.innerWidth - tooltipWidth)),
         y: rect.bottom + 6
       })
     }
@@ -102,51 +103,92 @@ function Sparkline({ data, ticker, broker, invested }) {
 function SparkTooltip({ data, ticker, broker, invested }) {
   if (!data || data.length < 2) return null
   const lastVal = data[data.length - 1].value
+  const firstVal = data[0].value
   const totalPct = ((lastVal - invested) / invested * 100).toFixed(2)
   const isUp = lastVal >= invested
+  const maxVal = Math.max(...data.map(d => d.value))
+  const minVal = Math.min(...data.map(d => d.value))
   const changes = data.map((d, i) => {
-    if (i === 0) return { ...d, weekPct: ((d.value - invested) / invested * 100) }
+    if (i === 0) return { ...d, weekPct: ((d.value - invested) / invested * 100), prevVal: invested }
     const prev = data[i - 1].value
-    return { ...d, weekPct: ((d.value - prev) / prev * 100) }
+    return { ...d, weekPct: ((d.value - prev) / prev * 100), prevVal: prev }
   })
-  const recent = changes.slice(-10)
+  // Más reciente arriba
+  const allRows = [...changes].reverse()
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-xl ring-1 ring-slate-100" style={{ minWidth: 290 }}>
-      <div className="flex items-center justify-between mb-2">
+    <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xl ring-1 ring-slate-100" style={{ width: 480 }}>
+      {/* Cabecera */}
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <span className="text-[13px] font-bold text-slate-800 font-mono">{ticker}</span>
-          <span className="text-[9px] text-slate-400 font-mono uppercase">{broker}</span>
+          <span className="text-[15px] font-bold text-slate-800 font-mono">{ticker}</span>
+          <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wider">{broker}</span>
         </div>
-        <span className={`text-[13px] font-bold font-mono ${isUp ? 'text-green-400' : 'text-red-400'}`}>
+        <span className={`text-[15px] font-bold font-mono ${isUp ? 'text-green-600' : 'text-red-500'}`}>
           {isUp ? '+' : ''}{totalPct}%
         </span>
       </div>
-      <div className="bg-slate-50 rounded-lg p-2 mb-2.5">
-        <SparklineSVG data={data} width={262} height={80} showDots={true} showLabels={true} showEvents={true} />
+
+      {/* Gráfico grande */}
+      <div className="bg-slate-50/70 rounded-lg p-3 mb-3 border border-slate-100">
+        <SparklineSVG data={data} width={448} height={140} showDots={true} showLabels={true} showEvents={true} />
       </div>
-      <div className="space-y-0">
-        <div className="flex items-center justify-between text-[8px] font-mono text-slate-400 pb-1 mb-1 border-b border-slate-200">
-          <span>FECHA</span><span>VALOR</span><span>SEMANAL</span>
+
+      {/* KPIs */}
+      <div className="grid grid-cols-4 gap-2 mb-3 text-[9px] font-mono">
+        <div className="bg-slate-50 rounded p-1.5 border border-slate-100">
+          <div className="text-slate-400 uppercase tracking-wider text-[8px]">Inv</div>
+          <div className="text-slate-700 font-bold">${invested.toFixed(0)}</div>
         </div>
-        {recent.map((d, i) => {
-          const isWeekUp = d.weekPct >= 0
-          const dateStr = new Date(d.week_date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' })
-          return (
-            <div key={i} className="flex items-center justify-between text-[9px] font-mono py-[3px] border-b border-slate-100 last:border-0">
-              <span className="text-slate-400 w-[70px]">{d.event ? (d.event === 'xAMPLIAR' ? '\u25B2 ' : '\u25BC ') : ''}{dateStr}</span>
-              <span className="text-slate-700 w-[60px] text-right">${d.value.toFixed(0)}</span>
-              <span className={`w-[55px] text-right font-semibold ${isWeekUp ? 'text-green-400' : 'text-red-400'}`}>
-                {isWeekUp ? '+' : ''}{d.weekPct.toFixed(2)}%
-              </span>
-            </div>
-          )
-        })}
+        <div className="bg-slate-50 rounded p-1.5 border border-slate-100">
+          <div className="text-slate-400 uppercase tracking-wider text-[8px]">Actual</div>
+          <div className="text-slate-700 font-bold">${lastVal.toFixed(0)}</div>
+        </div>
+        <div className="bg-slate-50 rounded p-1.5 border border-slate-100">
+          <div className="text-slate-400 uppercase tracking-wider text-[8px]">Máx</div>
+          <div className="text-green-600 font-bold">${maxVal.toFixed(0)}</div>
+        </div>
+        <div className="bg-slate-50 rounded p-1.5 border border-slate-100">
+          <div className="text-slate-400 uppercase tracking-wider text-[8px]">Mín</div>
+          <div className="text-red-500 font-bold">${minVal.toFixed(0)}</div>
+        </div>
       </div>
-      <div className="mt-2 pt-2 border-t border-slate-200 flex justify-between text-[8px] font-mono text-slate-400">
-        <span>Inv: ${invested.toFixed(0)}</span>
-        <span>G/P: <span className={isUp ? 'text-green-600' : 'text-red-500'}>${(lastVal - invested).toFixed(0)}</span></span>
-        <span>{data.length} sem</span>
+
+      {/* Tabla con TODAS las semanas, scroll */}
+      <div className="text-[9px] font-mono">
+        <div className="flex items-center justify-between text-slate-400 pb-1 mb-0.5 border-b border-slate-200 px-1">
+          <span className="w-[80px]">FECHA</span>
+          <span className="w-[60px] text-right">VALOR</span>
+          <span className="w-[60px] text-right">Δ$</span>
+          <span className="w-[55px] text-right">SEM%</span>
+        </div>
+        <div className="max-h-[220px] overflow-y-auto pr-1">
+          {allRows.map((d, i) => {
+            const isWeekUp = d.weekPct >= 0
+            const deltaUsd = d.value - d.prevVal
+            const dateStr = new Date(d.week_date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' })
+            return (
+              <div key={i} className="flex items-center justify-between py-[3px] border-b border-slate-50 last:border-0 hover:bg-slate-50/60 px-1 rounded-sm">
+                <span className="text-slate-500 w-[80px]">
+                  {d.event ? (d.event === 'ampliar' || d.event === 'xAMPLIAR' ? '\u25B2 ' : '\u25BC ') : ''}{dateStr}
+                </span>
+                <span className="text-slate-700 w-[60px] text-right font-semibold">${d.value.toFixed(0)}</span>
+                <span className={`w-[60px] text-right ${deltaUsd >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                  {deltaUsd >= 0 ? '+' : ''}{deltaUsd.toFixed(0)}
+                </span>
+                <span className={`w-[55px] text-right font-semibold ${isWeekUp ? 'text-green-600' : 'text-red-500'}`}>
+                  {isWeekUp ? '+' : ''}{d.weekPct.toFixed(2)}%
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="mt-2 pt-2 border-t border-slate-200 flex justify-between text-[9px] font-mono text-slate-400">
+        <span>G/P total: <span className={isUp ? 'text-green-600 font-bold' : 'text-red-500 font-bold'}>{isUp ? '+' : ''}${(lastVal - invested).toFixed(0)}</span></span>
+        <span>{data.length} semanas registradas</span>
       </div>
     </div>
   )

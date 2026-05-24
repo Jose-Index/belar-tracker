@@ -113,7 +113,7 @@ export default function Dashboard() {
   const btcQty = data.snapshots.length ? (data.snapshots[data.snapshots.length - 1].data?.btc_qty || 0) : 0
 
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
+    <div className="min-h-screen flex items-center justify-center bg-stone-50">
       <div className="text-center">
         <div className="text-2xl font-bold text-etoro tracking-widest mb-2 animate-pulse">BELAR</div>
         <div className="text-xs text-slate-400">Cargando datos...</div>
@@ -122,8 +122,8 @@ export default function Dashboard() {
   )
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="sticky top-0 z-50 bg-slate-50">
+    <div className="min-h-screen bg-stone-50">
+      <div className="sticky top-0 z-50 bg-stone-50/95 backdrop-blur-sm">
         <Header />
         <TickerBar />
         <TabNav active={tab} onChange={setTab} />
