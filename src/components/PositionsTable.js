@@ -505,9 +505,16 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
               // Estilos de destaque por clasificación
               const isNucleo = p.class === 'NÚCLEO' || p.class === 'NUCLEO'
               const isExit = p.class === 'xSALIR'
-              const rowClass = isExit ? 'bg-red-50/60' : isNucleo ? 'bg-blue-50/40' : ''
+              const rowClass = isExit
+                ? 'bg-red-100'
+                : isNucleo
+                  ? 'bg-blue-50/40'
+                  : ''
               const rowStyle = isExit
-                ? { borderLeft: '3px solid #ef4444' }
+                ? {
+                    borderLeft: '6px solid #dc2626',
+                    boxShadow: 'inset 0 0 0 1px #fca5a5',
+                  }
                 : isNucleo
                   ? { borderLeft: '3px solid #2563eb' }
                   : {}
@@ -516,7 +523,9 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
                 <React.Fragment key={p.id}>
                 <tr className={rowClass} style={rowStyle}>
                   <td>
-                    <span className="font-bold text-slate-800 text-[13px] block">{p.ticker}</span>
+                    <span className={`font-bold text-[13px] block ${isExit ? 'text-red-700' : 'text-slate-800'}`}>
+                      {isExit && <span className="mr-1">⚠</span>}{p.ticker}
+                    </span>
                     <Sparkline data={historyMap[p.id]} ticker={p.ticker} broker={BROKER_NAMES[p.platform] || p.platform} invested={invested} />
 
                   </td>
