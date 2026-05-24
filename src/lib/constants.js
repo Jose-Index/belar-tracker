@@ -130,13 +130,17 @@ export function toDateStrLocal(date) {
   return `${y}-${m}-${d}`
 }
 
-// Sábado próximo desde la fecha dada.
-// - Si hoy es sábado, devuelve hoy.
-// - Si no, devuelve el próximo sábado futuro.
+// Sábado de referencia para el snapshot semanal.
+// - Sábado → hoy mismo.
+// - Domingo → sábado anterior (-1d). La semana se considera CERRADA.
+// - Lun-Vie → próximo sábado (cierre futuro de la semana en curso).
 export function getNextSaturday(date = new Date()) {
   const d = new Date(date)
   const day = d.getDay()               // 0=Dom, 6=Sáb
-  const diff = day === 6 ? 0 : (6 - day)
+  let diff
+  if (day === 6) diff = 0
+  else if (day === 0) diff = -1
+  else diff = 6 - day
   d.setDate(d.getDate() + diff)
   d.setHours(0, 0, 0, 0)
   return d

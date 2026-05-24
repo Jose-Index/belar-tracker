@@ -8,6 +8,8 @@ import CapitalCards from '@/components/CapitalCards'
 import EvolutionChart from '@/components/EvolutionChart'
 import PositionsTable from '@/components/PositionsTable'
 import { SourcesPanel } from '@/components/Sources'
+import PlanRectorEditor from '@/components/PlanRectorEditor'
+import TableroRector from '@/components/TableroRector'
 import {
   CalendarView, WeeklyHistory, ContributionsTable, YearlyResults,
   ResultsSummary, Calculator, BackupExport, Settings, Footer,
@@ -149,10 +151,8 @@ export default function Dashboard() {
 
         {/* ─── PLAN RECTOR TAB ─── */}
         {tab === 'plan' && <>
-          <div className="bg-white rounded-xl border border-slate-200 p-6">
-            <div className="section-title">Plan Rector</div>
-            <p className="text-sm text-slate-400 italic">Próximamente: editor de texto libre con estilos + tablero rector drag & drop</p>
-          </div>
+          <PlanRectorEditor planRector={data.planRector} onRefresh={refreshData} />
+          <TableroRector positions={data.positions} tableroRector={data.tableroRector} onRefresh={refreshData} />
         </>}
 
         {/* ─── HERRAMIENTAS TAB ─── */}

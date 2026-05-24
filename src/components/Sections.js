@@ -88,33 +88,77 @@ export function BrokerBalancesRegister({ brokerBalances, positions, snapshots, b
     if (registering) return
     setRegistering(true)
     try {
-      // 1. Persistir saldos manuales
-      const balRows = [
-        { broker: 'etoro', balance: parseFloat(balances.etoro) || 0, updated_at: new Date().toISOString() },
-        { broker: 'xtb',   balance: parseFloat(balances.xtb) || 0,   updated_at: new Date().toISOString() },
-        { broker: 'ibkr',  balance: parseFloat(balances.ibkr) || 0,  updated_at: new Date().toISOString() },
-      ]
-      await supabase.from('broker_balances').upsert(balRows, { onConflict: 'broker' })
-        .then(({ error: bbErr }) => { if (bbErr) console.warn('broker_balances upsert warn:', bbErr) })
+      // ── 1. LECTURA FRESCA DE POSITIONS DESDE SUPABASE ──
+      // Crítico: NO usar props.positions porque pueden estar desfasadas
+      // tras edición inline reciente sin refetch completo.
+      const { data: freshPositions, error: posErr } = await supabase
+        .from('positions').select('*').eq('is_open', true)
+      if (posErr) throw new Error('positions read: ' + posErr.message)
 
-      // 2. Calcular btc_usd en tiempo real
+      // ── 2. LECTURA FRESCA DE SNAPSHOTS PARA DETECTAR EXISTING ──
+      const { data: freshSnap } = await supabase
+        .from('weekly_snapshots').select('id,week_date').eq('week_date', nextSatStr).maybeSingle()
+
+      // ── 3. CÁLCULO DE TOTALES POR BROKER CON DATOS FRESCOS ──
+      const t = { etoro: 0, xtb: 0, ibkr: 0 }
+      ;(freshPositions || []).forEach(p => {
+        // Number() trata current_value null como 0; preferimos invested si no hay current_value
+        const raw = p.current_value != null ? Number(p.current_value) : Number(p.invested || 0)
+        const v = toUSD(raw, p.currency || 'USD', eurUsdRate)
+        if (t[p.platform] !== undefined) t[p.platform] += v
+      })
+      const cash = {
+        etoro: parseFloat(balances.etoro) || 0,
+        xtb:   parseFloat(balances.xtb)   || 0,
+        ibkr:  parseFloat(balances.ibkr)  || 0,
+      }
+      const totBroker = {
+        etoro: t.etoro + cash.etoro,
+        xtb:   t.xtb   + cash.xtb,
+        ibkr:  t.ibkr  + cash.ibkr,
+      }
+
+      // ── 4. PERSISTIR SALDOS MANUALES ──
+      const balRows = [
+        { broker: 'etoro', balance: cash.etoro, updated_at: new Date().toISOString() },
+        { broker: 'xtb',   balance: cash.xtb,   updated_at: new Date().toISOString() },
+        { broker: 'ibkr',  balance: cash.ibkr,  updated_at: new Date().toISOString() },
+      ]
+      const { error: bbErr } = await supabase.from('broker_balances').upsert(balRows, { onConflict: 'broker' })
+      if (bbErr) console.warn('broker_balances upsert warn:', bbErr)
+
+      // ── 5. CALCULAR BTC USD EN TIEMPO REAL ──
       const btcUsd = btcPrice && btcQty ? btcPrice * btcQty : 0
 
-      // 3. Construir data del snapshot
+      // ── 6. CONSTRUIR DATA DEL SNAPSHOT ──
       const data = {
-        etoro: brokerTotals.etoro,
-        xtb: brokerTotals.xtb,
-        ibkr: brokerTotals.ibkr,
+        etoro: totBroker.etoro,
+        xtb:   totBroker.xtb,
+        ibkr:  totBroker.ibkr,
         btc_qty: btcQty || 0,
         btc_usd: btcUsd,
         eur_usd_rate: eurUsdRate || 1.10,
       }
       const total_usd = data.etoro + data.xtb + data.ibkr + data.btc_usd
 
-      // 4. Upsert weekly_snapshot del sábado próximo
-      const existing = snapshots?.find(s => s.week_date === nextSatStr)
-      if (existing) {
-        const { error: wsUpdateErr } = await supabase.from('weekly_snapshots').update({ data, total_usd }).eq('id', existing.id)
+      // ── 7. VALIDACIÓN DE COHERENCIA (sanity check) ──
+      const breakdown = {
+        etoro: { positions: t.etoro, cash: cash.etoro, total: totBroker.etoro },
+        xtb:   { positions: t.xtb,   cash: cash.xtb,   total: totBroker.xtb   },
+        ibkr:  { positions: t.ibkr,  cash: cash.ibkr,  total: totBroker.ibkr  },
+        btc:   { qty: btcQty, price: btcPrice, usd: btcUsd },
+        total_usd,
+        positions_count: freshPositions?.length || 0,
+        fx_rate: eurUsdRate,
+      }
+      // Sanity: si total ≤ 0 o algún broker negativo, no escribimos
+      if (total_usd <= 0 || totBroker.etoro < 0 || totBroker.xtb < 0 || totBroker.ibkr < 0) {
+        throw new Error(`Sanity check failed: ${JSON.stringify(breakdown)}`)
+      }
+
+      // ── 8. UPSERT WEEKLY_SNAPSHOT ──
+      if (freshSnap?.id) {
+        const { error: wsUpdateErr } = await supabase.from('weekly_snapshots').update({ data, total_usd }).eq('id', freshSnap.id)
         if (wsUpdateErr) throw new Error('weekly_snapshots UPDATE: ' + wsUpdateErr.message)
       } else {
         const { error: wsInsertErr } = await supabase.from('weekly_snapshots').insert({
@@ -126,17 +170,15 @@ export function BrokerBalancesRegister({ brokerBalances, positions, snapshots, b
         if (wsInsertErr) throw new Error('weekly_snapshots INSERT: ' + wsInsertErr.message)
       }
 
-      // 5. Insertar position_history para cada posición (fecha = sábado próximo)
-      //    Detectar ampliaciones/reducciones comparando invested vs último registro
-      if (positions?.length) {
-        const posIds = positions.map(p => p.id)
+      // ── 9. POSITION_HISTORY ──
+      if (freshPositions?.length) {
+        const posIds = freshPositions.map(p => p.id)
         const { error: phDelErr } = await supabase.from('position_history')
           .delete()
           .eq('week_date', nextSatStr)
           .in('position_id', posIds)
         if (phDelErr) console.warn('position_history delete warn:', phDelErr)
 
-        // Get last week's position_history to compare invested amounts
         const { data: prevHistory } = await supabase.from('position_history')
           .select('position_id,invested')
           .in('position_id', posIds)
@@ -148,27 +190,24 @@ export function BrokerBalancesRegister({ brokerBalances, positions, snapshots, b
           if (!lastInvestedMap[ph.position_id]) lastInvestedMap[ph.position_id] = ph.invested
         })
 
-        const snaps = positions.map(p => {
+        const snaps = freshPositions.map(p => {
           const currentInvested = Number(p.invested || 0)
           const prevInvested = lastInvestedMap[p.id]
           let event = null
           let event_amount = null
           if (prevInvested != null && Math.abs(currentInvested - prevInvested) > 1) {
             if (currentInvested > prevInvested) {
-              event = 'ampliar'
-              event_amount = currentInvested - prevInvested
+              event = 'ampliar'; event_amount = currentInvested - prevInvested
             } else {
-              event = 'reducir'
-              event_amount = prevInvested - currentInvested
+              event = 'reducir'; event_amount = prevInvested - currentInvested
             }
           }
           return {
             position_id: p.id,
             week_date: nextSatStr,
-            value: Number(p.current_value || p.invested || 0),
+            value: p.current_value != null ? Number(p.current_value) : Number(p.invested || 0),
             invested: currentInvested,
-            event,
-            event_amount,
+            event, event_amount,
           }
         })
         const { error: phError } = await supabase.from('position_history').insert(snaps)
@@ -180,6 +219,7 @@ export function BrokerBalancesRegister({ brokerBalances, positions, snapshots, b
         saturday: nextSatStr,
         total: total_usd,
         byBroker: data,
+        breakdown,
         ts: new Date().toLocaleTimeString('es-ES'),
       })
       onRefresh?.()
@@ -234,9 +274,22 @@ export function BrokerBalancesRegister({ brokerBalances, positions, snapshots, b
 
       {lastResult && (
         <div className={`text-[10px] font-mono p-2 rounded ${lastResult.ok ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
-          {lastResult.ok
-            ? `✓ Registrado ${lastResult.saturday} · Total ${formatCurrency(lastResult.total)} · ${lastResult.ts}`
-            : `✗ Error: ${lastResult.error}`}
+          {lastResult.ok ? (
+            <>
+              <div className="font-bold mb-1">
+                ✓ Registrado {lastResult.saturday} · Total {formatCurrency(lastResult.total)} · {lastResult.ts}
+              </div>
+              {lastResult.breakdown && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-0.5 text-[9px] mt-1.5 pt-1.5 border-t border-green-300/40">
+                  <div>eToro pos: {formatCurrency(lastResult.breakdown.etoro.positions, 0)} + cash {formatCurrency(lastResult.breakdown.etoro.cash, 0)} = <b>{formatCurrency(lastResult.breakdown.etoro.total, 0)}</b></div>
+                  <div>XTB pos: {formatCurrency(lastResult.breakdown.xtb.positions, 0)} + cash {formatCurrency(lastResult.breakdown.xtb.cash, 0)} = <b>{formatCurrency(lastResult.breakdown.xtb.total, 0)}</b></div>
+                  <div>IBKR pos: {formatCurrency(lastResult.breakdown.ibkr.positions, 0)} + cash {formatCurrency(lastResult.breakdown.ibkr.cash, 0)} = <b>{formatCurrency(lastResult.breakdown.ibkr.total, 0)}</b></div>
+                  <div>BTC: {lastResult.breakdown.btc.qty} × ${lastResult.breakdown.btc.price?.toFixed(0)} = <b>{formatCurrency(lastResult.breakdown.btc.usd, 0)}</b></div>
+                  <div className="col-span-2 md:col-span-4 text-[9px] text-slate-500 pt-1">{lastResult.breakdown.positions_count} posiciones · FX {lastResult.breakdown.fx_rate?.toFixed(4)}</div>
+                </div>
+              )}
+            </>
+          ) : `✗ Error: ${lastResult.error}`}
         </div>
       )}
 
@@ -251,6 +304,10 @@ export function BrokerBalancesRegister({ brokerBalances, positions, snapshots, b
 export function CalendarView({ events, onRefresh }) {
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState({ date: '', event_type: 'CUSTOM', ticker: '', title: '', importance: 'MEDIUM' })
+  const [viewMonth, setViewMonth] = useState(() => {
+    const d = new Date()
+    return { year: d.getFullYear(), month: d.getMonth() }
+  })
 
   const handleAdd = async () => {
     if (!form.date || !form.title) return
@@ -260,16 +317,96 @@ export function CalendarView({ events, onRefresh }) {
     onRefresh?.()
   }
 
-  const upcoming = events?.filter(e => new Date(e.date) >= new Date(new Date().toDateString())).slice(0, 15) || []
+  const handleDelete = async (id) => {
+    if (!confirm('¿Eliminar este evento?')) return
+    await supabase.from('calendar_events').delete().eq('id', id)
+    onRefresh?.()
+  }
+
+  // Agrupar eventos por fecha (YYYY-MM-DD)
+  const eventsByDate = useMemo(() => {
+    const map = {}
+    ;(events || []).forEach(ev => {
+      const key = ev.date // ya viene como YYYY-MM-DD
+      if (!map[key]) map[key] = []
+      map[key].push(ev)
+    })
+    return map
+  }, [events])
+
+  // Generar matriz del mes visible (6 semanas × 7 días)
+  const grid = useMemo(() => {
+    const { year, month } = viewMonth
+    const firstDay = new Date(year, month, 1)
+    // getDay(): 0=domingo, 1=lunes... ajustamos a semana ES (lunes=0)
+    const startOffset = (firstDay.getDay() + 6) % 7
+    const daysInMonth = new Date(year, month + 1, 0).getDate()
+    const cells = []
+    // Días del mes anterior
+    for (let i = startOffset - 1; i >= 0; i--) {
+      const d = new Date(year, month, -i)
+      cells.push({ date: d, inMonth: false })
+    }
+    // Días del mes
+    for (let i = 1; i <= daysInMonth; i++) {
+      cells.push({ date: new Date(year, month, i), inMonth: true })
+    }
+    // Padding final hasta múltiplo de 7 (mínimo 5 semanas, máximo 6)
+    while (cells.length % 7 !== 0 || cells.length < 35) {
+      const last = cells[cells.length - 1].date
+      const next = new Date(last)
+      next.setDate(next.getDate() + 1)
+      cells.push({ date: next, inMonth: next.getMonth() === month })
+    }
+    return cells
+  }, [viewMonth])
+
+  const monthLabel = new Date(viewMonth.year, viewMonth.month, 1).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
+  const todayStr = new Date().toISOString().split('T')[0]
+
+  const navMonth = (delta) => {
+    setViewMonth(v => {
+      const d = new Date(v.year, v.month + delta, 1)
+      return { year: d.getFullYear(), month: d.getMonth() }
+    })
+  }
+
+  const goToday = () => {
+    const d = new Date()
+    setViewMonth({ year: d.getFullYear(), month: d.getMonth() })
+  }
+
+  // Próximos eventos (lista lateral) — 7 días desde hoy
+  const upcoming = useMemo(() => {
+    const today = new Date(todayStr)
+    const limit = new Date(today)
+    limit.setDate(limit.getDate() + 30)
+    return (events || [])
+      .filter(e => {
+        const ed = new Date(e.date)
+        return ed >= today && ed <= limit
+      })
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(0, 12)
+  }, [events, todayStr])
+
+  const dayShort = ['L', 'M', 'X', 'J', 'V', 'S', 'D']
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-5">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div className="section-title !mb-0">Calendario de Vigilancia</div>
-        <button onClick={() => setShowAdd(!showAdd)} className="text-[10px] font-bold text-etoro border border-green-200 px-2.5 py-1 rounded-md hover:bg-green-50 transition">
-          {showAdd ? 'Cancelar' : '+ Evento'}
-        </button>
+        <div className="flex items-center gap-1">
+          <button onClick={() => navMonth(-1)} className="px-2 py-1 text-xs text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded">‹</button>
+          <button onClick={goToday} className="px-2.5 py-1 text-[10px] font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded uppercase tracking-wider">Hoy</button>
+          <span className="px-3 py-1 text-xs font-semibold text-slate-700 capitalize min-w-[120px] text-center">{monthLabel}</span>
+          <button onClick={() => navMonth(1)} className="px-2 py-1 text-xs text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded">›</button>
+          <button onClick={() => setShowAdd(!showAdd)} className="ml-2 text-[10px] font-bold text-etoro border border-green-200 px-2.5 py-1 rounded-md hover:bg-green-50 transition">
+            {showAdd ? 'Cancelar' : '+ Evento'}
+          </button>
+        </div>
       </div>
+
       {showAdd && (
         <div className="flex flex-wrap gap-2 mb-4 p-3 bg-slate-50 rounded-lg border border-slate-100">
           <input type="date" className="px-2 py-1.5 border border-slate-200 rounded-md text-xs outline-none focus:border-green-400" value={form.date} onChange={e => setForm({...form, date: e.target.value})} />
@@ -281,23 +418,89 @@ export function CalendarView({ events, onRefresh }) {
           <button onClick={handleAdd} className="px-3 py-1.5 bg-etoro text-white text-[10px] font-bold rounded-md">Guardar</button>
         </div>
       )}
-      <div className="space-y-1">
-        {upcoming.length === 0 && <p className="text-sm text-slate-400 py-2">Sin eventos próximos</p>}
-        {upcoming.map(e => {
-          const type = EVENT_TYPES[e.event_type] || EVENT_TYPES.CUSTOM
-          return (
-            <div key={e.id} className="flex items-center gap-3 text-xs py-2.5 border-b border-slate-50 last:border-0">
-              <span className="font-mono text-slate-400 w-14 shrink-0">
-                {new Date(e.date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
-              </span>
-              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold shrink-0" style={{ background: type.color + '15', color: type.color }}>
-                {type.label}
-              </span>
-              {e.ticker && <span className="font-mono font-bold text-slate-700 shrink-0">{e.ticker}</span>}
-              <span className="text-slate-600 truncate">{e.title}</span>
-            </div>
-          )
-        })}
+
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-5">
+        {/* GRID VISUAL DEL MES */}
+        <div>
+          <div className="grid grid-cols-7 gap-1 mb-1">
+            {dayShort.map(d => (
+              <div key={d} className="text-[9px] font-bold text-slate-400 uppercase tracking-widest text-center py-1">{d}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {grid.map((cell, idx) => {
+              const dateStr = cell.date.toISOString().split('T')[0]
+              const dayEvents = eventsByDate[dateStr] || []
+              const isToday = dateStr === todayStr
+              const isPast = dateStr < todayStr
+              return (
+                <div
+                  key={idx}
+                  className={`relative min-h-[68px] rounded-md border p-1 text-[10px] transition-colors ${
+                    !cell.inMonth ? 'bg-slate-50/40 border-slate-100 text-slate-300' :
+                    isToday ? 'bg-blue-50 border-blue-300' :
+                    isPast ? 'bg-white border-slate-100 text-slate-400' :
+                    'bg-white border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <div className={`text-[10px] font-bold mb-0.5 ${isToday ? 'text-blue-700' : ''}`}>
+                    {cell.date.getDate()}
+                  </div>
+                  <div className="space-y-0.5">
+                    {dayEvents.slice(0, 3).map(ev => {
+                      const type = EVENT_TYPES[ev.event_type] || EVENT_TYPES.CUSTOM
+                      return (
+                        <div
+                          key={ev.id}
+                          title={`${ev.ticker ? ev.ticker + ' · ' : ''}${ev.title}`}
+                          className="truncate px-1 py-0.5 rounded text-[8.5px] font-semibold cursor-default"
+                          style={{ background: type.color + '18', color: type.color }}
+                          onClick={() => handleDelete(ev.id)}
+                        >
+                          {ev.ticker ? <span className="font-mono">{ev.ticker}</span> : type.label}
+                        </div>
+                      )
+                    })}
+                    {dayEvents.length > 3 && (
+                      <div className="text-[8px] text-slate-400 px-1">+{dayEvents.length - 3} más</div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* LISTA LATERAL — PRÓXIMOS 30 DÍAS */}
+        <div>
+          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Próximos 30 días</div>
+          <div className="space-y-1 max-h-[460px] overflow-y-auto pr-1">
+            {upcoming.length === 0 && <p className="text-[11px] text-slate-400 py-2 italic">Sin eventos</p>}
+            {upcoming.map(e => {
+              const type = EVENT_TYPES[e.event_type] || EVENT_TYPES.CUSTOM
+              const d = new Date(e.date)
+              const diasRest = Math.round((d - new Date(todayStr)) / 86400000)
+              return (
+                <div key={e.id} className="group flex items-start gap-2 py-1.5 px-2 rounded hover:bg-slate-50 text-[10.5px]">
+                  <div className="font-mono text-slate-400 w-12 shrink-0 text-right pt-px">
+                    {d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider shrink-0" style={{ background: type.color + '18', color: type.color }}>
+                        {type.label}
+                      </span>
+                      {e.ticker && <span className="font-mono font-bold text-slate-700 text-[10px]">{e.ticker}</span>}
+                      <span className="text-slate-400 text-[9px]">·{diasRest === 0 ? 'hoy' : `${diasRest}d`}</span>
+                    </div>
+                    <div className="text-slate-500 mt-0.5 truncate">{e.title}</div>
+                  </div>
+                  <button onClick={() => handleDelete(e.id)} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 text-[10px] shrink-0 transition">✕</button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
       </div>
     </div>
   )

@@ -1,6 +1,6 @@
 'use client'
 import React, { useState, useMemo, useRef, useEffect } from 'react'
-import { BROKER_COLORS, BROKER_NAMES, CLASS_COLORS, RESP_COLORS, RESP_OPTIONS, formatCurrency, formatNative, toUSD, pnlColor } from '@/lib/constants'
+import { BROKER_COLORS, BROKER_NAMES, CLASS_COLORS, formatCurrency, formatNative, toUSD, pnlColor } from '@/lib/constants'
 import { supabase } from '@/lib/supabase'
 
 // ─── SVG Sparkline with area fill ────────────────
@@ -74,15 +74,6 @@ function Sparkline({ data, ticker, broker, invested }) {
     }
   }, [open])
 
-  useEffect(() => {
-    if (!open) return
-    const handler = (e) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
-
   if (!data || data.length < 2) return (
     <div className="w-[72px] h-[20px] bg-slate-50 rounded flex items-center justify-center">
       <span className="text-[7px] text-slate-300 font-mono">sin hist.</span>
@@ -90,12 +81,17 @@ function Sparkline({ data, ticker, broker, invested }) {
   )
 
   return (
-    <div ref={wrapperRef} className="relative">
-      <div className="cursor-pointer" onClick={() => setOpen(!open)}>
+    <div
+      ref={wrapperRef}
+      className="relative"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <div className="cursor-help">
         <SparklineSVG data={data} width={72} height={20} showDots={false} showLabels={false} showEvents={true} />
       </div>
       {open && (
-        <div className="fixed z-[9999]" style={{ left: pos.x, top: pos.y }}>
+        <div className="fixed z-[9999] pointer-events-none" style={{ left: pos.x, top: pos.y }}>
           <SparkTooltip data={data} ticker={ticker} broker={broker} invested={invested} />
         </div>
       )}
@@ -159,7 +155,7 @@ function SparkTooltip({ data, ticker, broker, invested }) {
 // ─── ADD POSITION MODAL ────────────────
 function AddPositionModal({ onClose, onSave }) {
   const [form, setForm] = useState({
-    ticker: '', platform: 'etoro', resp: 'Jose',
+    ticker: '', platform: 'etoro',
     class: 'NÚCLEO', entry_date: new Date().toISOString().split('T')[0],
     invested: '', current_value: '', currency: 'USD', leverage: 1,
   })
@@ -194,23 +190,14 @@ function AddPositionModal({ onClose, onSave }) {
               onChange={e => setForm({...form, ticker: e.target.value.toUpperCase()})}
               className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono font-bold uppercase outline-none focus:border-green-400" />
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Broker</label>
-              <select value={form.platform} onChange={e => setForm({...form, platform: e.target.value})}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none">
-                <option value="etoro">eToro</option>
-                <option value="xtb">XTB</option>
-                <option value="ibkr">IBKR</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Resp</label>
-              <select value={form.resp} onChange={e => setForm({...form, resp: e.target.value})}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none">
-                {RESP_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
-            </div>
+          <div>
+            <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Broker</label>
+            <select value={form.platform} onChange={e => setForm({...form, platform: e.target.value})}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none">
+              <option value="etoro">eToro</option>
+              <option value="xtb">XTB</option>
+              <option value="ibkr">IBKR</option>
+            </select>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
@@ -282,8 +269,7 @@ function AddPositionModal({ onClose, onSave }) {
 // ─── MAIN COMPONENT ────────────────
 export default function PositionsTable({ positions, positionHistory, onRefresh, eurUsdRate = 1.08 }) {
   const [editing, setEditing] = useState(null)
-  const [noteEditing, setNoteEditing] = useState(null) // { id, ticker, value }
-  const [editVal, setEditVal] = useState('')
+    const [editVal, setEditVal] = useState('')
   const [sortMode, setSortMode] = useState('broker')
   const [showAdd, setShowAdd] = useState(false)
 
@@ -331,14 +317,28 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
   }
 
   const handleClosePosition = async (p) => {
-    if (!confirm(`¿Cerrar posición ${p.ticker} (${BROKER_NAMES[p.platform]})?\nLa fila desaparece del dashboard pero se conserva su histórico.`)) return
+    if (!confirm(`¿Cerrar posición ${p.ticker} (${BROKER_NAMES[p.platform]})?\nLa fila desaparece del dashboard pero se conserva su histórico.\nEl ticker pasa al Tablero Rector → RADAR.`)) return
     // Optimistic: desaparece al instante
     setLocalPositions(prev => prev.filter(x => x.id !== p.id))
     const { error } = await supabase.from('positions').update({ is_open: false }).eq('id', p.id)
     if (error) {
       console.error('Close failed, refreshing:', error)
       onRefresh?.()
+      return
     }
+    // Insertar card en Tablero Rector → RADAR (si no existe ya)
+    try {
+      const { data: existing } = await supabase.from('tablero_rector')
+        .select('id').eq('ticker', p.ticker).maybeSingle()
+      if (!existing) {
+        await supabase.from('tablero_rector').insert({
+          ticker: p.ticker, class: 'RADAR', notes: '', sort_order: 0,
+        })
+      }
+    } catch (err) {
+      console.warn('Tablero auto-insert warn:', err)
+    }
+    onRefresh?.()
   }
 
   const handleAddPosition = async (newPos) => {
@@ -424,7 +424,6 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
           <thead>
             <tr>
               <th>Activo</th>
-              <th>Resp</th>
               <th>Broker</th>
               <th>Entrada</th>
               <th>Invertido</th>
@@ -457,7 +456,6 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
 
               const brokerColor = BROKER_COLORS[p.platform] || '#666'
               const classColor = CLASS_COLORS[p.class] || '#6b7280'
-              const respColor = RESP_COLORS[p.resp] || '#cbd5e1'
 
               const editKey = (f) => `${p.id}:${f}`
 
@@ -468,21 +466,6 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
                     <span className="font-bold text-slate-800 text-[13px] block">{p.ticker}</span>
                     <Sparkline data={historyMap[p.id]} ticker={p.ticker} broker={BROKER_NAMES[p.platform] || p.platform} invested={invested} />
 
-                  </td>
-
-                  <td>
-                    <select value={p.resp || ''}
-                      onChange={e => updateField(p.id, 'resp', e.target.value || null)}
-                      className="text-[10px] font-bold px-2 py-0.5 rounded-md outline-none cursor-pointer border appearance-none"
-                      style={{
-                        background: respColor + '12',
-                        color: p.resp ? respColor : '#cbd5e1',
-                        borderColor: respColor + '30',
-                        minWidth: 64,
-                      }}>
-                      <option value="">—</option>
-                      {RESP_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
-                    </select>
                   </td>
 
                   <td>
@@ -612,58 +595,13 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
                     </button>
                   </td>
                 </tr>
-                <tr style={p.class === 'NÚCLEO' || p.class === 'NUCLEO' ? { borderLeft: '3px solid #2563eb' } : {}}>
-                  <td colSpan={13} style={{ borderTop: 'none', borderBottom: '1px solid #e2e8f0', padding: '0 20px 8px 20px', maxWidth: 0, overflow: 'hidden' }}>
-                    {noteEditing?.id === p.id ? (
-                      <div style={{ overflow: 'hidden' }}>
-                        <input
-                          autoFocus
-                          type="text"
-                          className="w-full px-2 py-1 text-[11px] text-slate-700 bg-white border border-blue-300 rounded outline-none"
-                          value={noteEditing.value}
-                          onChange={e => setNoteEditing({ ...noteEditing, value: e.target.value })}
-                          onBlur={() => {
-                            const now = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                            const noteWithDate = noteEditing.value ? `[${now}] ${noteEditing.value.replace(/^\[.*?\]\s*/, '')}` : ''
-                            updateField(noteEditing.id, 'notes_belar', noteWithDate)
-                            setNoteEditing(null)
-                          }}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') {
-                              const now = new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                              const noteWithDate = noteEditing.value ? `[${now}] ${noteEditing.value.replace(/^\[.*?\]\s*/, '')}` : ''
-                              updateField(noteEditing.id, 'notes_belar', noteWithDate)
-                              setNoteEditing(null)
-                            }
-                            if (e.key === 'Escape') setNoteEditing(null)
-                          }}
-                          placeholder="Escribir nota..."
-                        />
-                      </div>
-                    ) : (
-                      <div
-                        className="text-[10px] text-slate-400 cursor-pointer hover:text-slate-600 transition-colors truncate"
-                        style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                        onClick={() => setNoteEditing({ id: p.id, ticker: p.ticker, value: p.notes_belar || '' })}>
-                        {p.notes_belar ? (
-                          <span className="text-slate-500 inline-flex items-center gap-1">
-                            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-slate-400 shrink-0"><path d="M13.5 4.5l-2-2L3 11l-.5 2.5L5 13l8.5-8.5z"/><path d="M10.5 3.5l2 2"/></svg>
-                            {p.notes_belar}
-                          </span>
-                        ) : (
-                          <span className="text-slate-300 italic">+ nota</span>
-                        )}
-                      </div>
-                    )}
-                  </td>
-                </tr>
                 </React.Fragment>
               )
             })}
           </tbody>
           <tfoot>
             <tr className="bg-slate-50 border-t-2 border-slate-200">
-              <td colSpan={4} className="text-[11px] text-slate-500 font-semibold">{sorted.length} posiciones</td>
+              <td colSpan={3} className="text-[11px] text-slate-500 font-semibold">{sorted.length} posiciones</td>
               <td className="text-right font-mono text-[12px] font-semibold text-slate-600">{formatCurrency(totalInvested)}</td>
               <td className="text-right font-mono text-[13px] font-bold text-slate-800">{formatCurrency(totalValue)}</td>
               <td className="text-right">

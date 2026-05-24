@@ -1,7 +1,7 @@
 import '../styles/globals.css'
 
 export const metadata = {
-  title: 'BELAR Tracker v9',
+  title: 'BELAR Tracker',
   description: 'Portfolio tracker — Capa JOSE · Ecosistema IA Personal',
 }
 
