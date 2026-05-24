@@ -12,7 +12,7 @@ export const BROKER_NAMES = {
   btc: 'BTC',
 }
 
-export const POSITION_CLASSES = ['NÚCLEO', 'TÁCTICA', 'MOMENTUM', 'DISRUPTIVA']
+export const POSITION_CLASSES = ['NÚCLEO', 'TÁCTICA', 'MOMENTUM', 'DISRUPTIVA', 'xSALIR']
 
 export const SL_TYPES = ['TIGHT', 'STANDARD', 'WIDE']
 
@@ -23,6 +23,7 @@ export const CLASS_COLORS = {
   'TACTICA': '#7c3aed',
   'MOMENTUM': '#ea580c',
   'DISRUPTIVA': '#ec4899',
+  'xSALIR': '#ef4444',
 }
 
 // Responsable de la decisión de entrada

@@ -250,6 +250,7 @@ function AddPositionModal({ onClose, onSave }) {
                 <option value="TÁCTICA">TÁCTICA</option>
                 <option value="MOMENTUM">MOMENTUM</option>
                 <option value="DISRUPTIVA">DISRUPTIVA</option>
+                <option value="xSALIR">xSALIR</option>
               </select>
             </div>
             <div>
@@ -415,7 +416,7 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
       return (a.ticker || '').localeCompare(b.ticker || '')
     }
     if (sortMode === 'clase') {
-      const classOrder = { 'NÚCLEO': 1, 'NUCLEO': 1, 'TÁCTICA': 2, 'TACTICA': 2, 'MOMENTUM': 3, 'DISRUPTIVA': 4 }
+      const classOrder = { 'NÚCLEO': 1, 'NUCLEO': 1, 'TÁCTICA': 2, 'TACTICA': 2, 'MOMENTUM': 3, 'DISRUPTIVA': 4, 'xSALIR': 5 }
       const ca = classOrder[a.class] || 99
       const cb = classOrder[b.class] || 99
       if (ca !== cb) return ca - cb
@@ -604,6 +605,7 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
                       <option value="TÁCTICA">TÁCTICA</option>
                       <option value="MOMENTUM">MOMENTUM</option>
                       <option value="DISRUPTIVA">DISRUPTIVA</option>
+                      <option value="xSALIR">xSALIR</option>
                     </select>
                   </td>
 

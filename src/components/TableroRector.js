@@ -263,7 +263,7 @@ function Column({ col, cards, isOver, dragId, onDragOver, onDrop, onCardDragStar
     >
       <div className="flex items-center justify-between px-3 py-2 border-b border-slate-200/60">
         <span
-          className="text-[10px] font-bold uppercase tracking-widest"
+          className="text-[10px] font-bold tracking-widest"
           style={{ color: col.color }}
         >
           {col.label}

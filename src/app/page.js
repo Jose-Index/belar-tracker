@@ -136,7 +136,6 @@ export default function Dashboard() {
           <CapitalCards snapshots={data.snapshots} brokers={data.brokers} wallets={data.wallets} onUpdateValues={handleUpdateValues} btcPrice={btcPrice} />
           <ResultsSummary snapshots={data.snapshots} contributions={data.contributions} />
           <PositionsTable positions={data.positions} positionHistory={data.positionHistory} onRefresh={refreshData} eurUsdRate={eurUsdRate} />
-          <CalendarView events={data.calendarEvents} onRefresh={refreshData} />
           <BrokerBalancesRegister
             brokerBalances={data.brokerBalances}
             positions={data.positions}
@@ -146,6 +145,7 @@ export default function Dashboard() {
             eurUsdRate={eurUsdRate}
             onRefresh={refreshData}
           />
+          <CalendarView events={data.calendarEvents} onRefresh={refreshData} />
           <YearlyResults results={data.yearlyResults} contributions={data.contributions} snapshots={data.snapshots} />
         </>}
 
