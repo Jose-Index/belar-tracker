@@ -1,5 +1,4 @@
 'use client'
-import { useState } from 'react'
 
 // =============================================================================
 // FUENTES BELAR
@@ -106,8 +105,6 @@ const SOURCES = {
 // Plan ordenado de bloques: diaria primero (la que más se usa), luego semanal, mensual, y específicas.
 const SECTION_ORDER = ['daily', 'weekly', 'monthly', 'bitcoin', 'aiSemis', 'defense', 'gold', 'asia', 'spain']
 
-// Por defecto, solo la diaria abierta (asumiendo apertura matutina del tracker).
-const DEFAULT_OPEN = ['daily']
 
 const TAG_STYLES = {
   gratis: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -154,73 +151,41 @@ function SourceCard({ item }) {
   )
 }
 
-function Section({ id, data, open, onToggle }) {
+function Section({ id, data }) {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-      <button
-        onClick={() => onToggle(id)}
-        className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 transition-colors"
-      >
+    <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-3 border-b border-stone-100 bg-stone-50/40">
         <div className="flex items-center gap-3">
           <span className="text-slate-500">{data.icon}</span>
-          <div className="text-left">
-            <div className="text-[13px] font-semibold text-slate-800 tracking-wide uppercase">{data.title}</div>
-            <div className="text-[10px] text-slate-400 font-mono mt-0.5">{data.subtitle} · {data.items.length} fuentes</div>
+          <div>
+            <div className="text-[12px] font-bold text-slate-700 tracking-[0.08em] uppercase">{data.title}</div>
+            <div className="text-[10px] text-slate-400 font-mono mt-0.5">{data.subtitle}</div>
           </div>
         </div>
-        <svg
-          width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-          className={`text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`}
-        >
-          <polyline points="6 9 12 15 18 9"/>
-        </svg>
-      </button>
-      {open && (
-        <div className="border-t border-slate-100 p-3 grid grid-cols-1 md:grid-cols-2 gap-2.5 bg-slate-50/30">
-          {data.items.map((item, i) => (
-            <SourceCard key={i} item={item} />
-          ))}
-        </div>
-      )}
+        <span className="text-[9px] font-mono text-slate-400 uppercase tracking-wider">{data.items.length} fuentes</span>
+      </div>
+      <div className="p-3 grid grid-cols-1 md:grid-cols-2 gap-2.5">
+        {data.items.map((item, i) => (
+          <SourceCard key={i} item={item} />
+        ))}
+      </div>
     </div>
   )
 }
 
 export function SourcesPanel() {
-  const [openIds, setOpenIds] = useState(new Set(DEFAULT_OPEN))
-
-  const toggle = (id) => {
-    setOpenIds(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  const expandAll = () => setOpenIds(new Set(SECTION_ORDER))
-  const collapseAll = () => setOpenIds(new Set())
-
   const totalSources = SECTION_ORDER.reduce((sum, id) => sum + SOURCES[id].items.length, 0)
 
   return (
     <div className="space-y-4">
-      {/* Header con título y controles */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5">
+      {/* Header con título */}
+      <div className="bg-white rounded-xl border border-stone-200 p-5">
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div>
             <div className="section-title !mb-1">Fuentes</div>
             <p className="text-[11px] text-slate-500">
               {totalSources} fuentes organizadas por periodicidad y tesis activa de cartera.
             </p>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={expandAll} className="text-[10px] uppercase tracking-wider font-mono text-slate-500 hover:text-slate-800 px-2.5 py-1 border border-slate-200 rounded hover:border-slate-400 transition-colors">
-              Expandir todo
-            </button>
-            <button onClick={collapseAll} className="text-[10px] uppercase tracking-wider font-mono text-slate-500 hover:text-slate-800 px-2.5 py-1 border border-slate-200 rounded hover:border-slate-400 transition-colors">
-              Colapsar
-            </button>
           </div>
         </div>
       </div>
@@ -242,15 +207,13 @@ export function SourcesPanel() {
         </div>
       </div>
 
-      {/* Bloques colapsables */}
-      <div className="space-y-2.5">
+      {/* Bloques siempre abiertos, en grid 2 columnas en pantallas anchas */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
         {SECTION_ORDER.map(id => (
           <Section
             key={id}
             id={id}
             data={SOURCES[id]}
-            open={openIds.has(id)}
-            onToggle={toggle}
           />
         ))}
       </div>

@@ -8,21 +8,28 @@ const TABS = [
 
 export default function TabNav({ active, onChange }) {
   return (
-    <nav className="max-w-screen-2xl mx-auto px-4 sm:px-6 border-b border-slate-200 bg-white/80 backdrop-blur-sm">
-      <div className="flex gap-1">
-        {TABS.map(t => (
-          <button key={t.id} onClick={() => onChange(t.id)}
-            className={`flex items-center gap-2 px-4 py-2.5 text-[11px] font-semibold tracking-wider transition-all border-b-2 ${
-              active === t.id 
-                ? 'border-slate-800 text-slate-800' 
-                : 'border-transparent text-slate-400 hover:text-slate-600'
-            }`}>
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d={t.icon} />
-            </svg>
-            {t.label}
-          </button>
-        ))}
+    <nav className="bg-white/85 backdrop-blur-md border-b border-stone-200">
+      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6">
+        <div className="flex gap-1 py-2">
+          {TABS.map(t => {
+            const isActive = active === t.id
+            return (
+              <button
+                key={t.id}
+                onClick={() => onChange(t.id)}
+                className={`flex items-center gap-2 px-3.5 py-1.5 text-[11px] font-semibold tracking-[0.08em] rounded-lg transition-all ${
+                  isActive
+                    ? 'bg-slate-800 text-white shadow-sm'
+                    : 'text-slate-500 hover:bg-stone-100 hover:text-slate-700'
+                }`}>
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d={t.icon} />
+                </svg>
+                {t.label}
+              </button>
+            )
+          })}
+        </div>
       </div>
     </nav>
   )

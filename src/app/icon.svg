@@ -1,4 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#2EA543"/>
-  <path d="M 22 18 L 22 46 L 36 46 C 41.5 46 45 42.7 45 38.5 C 45 35.5 43.2 33 40.5 32 C 42.5 31 43.8 28.8 43.8 26 C 43.8 21.8 40.5 18 35 18 Z M 27 22.5 L 34 22.5 C 36.8 22.5 38.5 24 38.5 26.3 C 38.5 28.6 36.8 30.1 34 30.1 L 27 30.1 Z M 27 34.4 L 35 34.4 C 38.1 34.4 39.8 36 39.8 38.4 C 39.8 40.8 38.1 42.4 35 42.4 L 27 42.4 Z" fill="#FFFFFF"/>
+  <defs>
+    <radialGradient id="coin" cx="0.35" cy="0.3" r="0.85">
+      <stop offset="0%" stop-color="#FFD56B"/>
+      <stop offset="55%" stop-color="#E8A93B"/>
+      <stop offset="100%" stop-color="#A6691B"/>
+    </radialGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFE489"/>
+      <stop offset="100%" stop-color="#8B5410"/>
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="32" r="30" fill="url(#rim)"/>
+  <circle cx="32" cy="32" r="27" fill="url(#coin)"/>
+  <circle cx="32" cy="32" r="23" fill="none" stroke="#8B5410" stroke-width="0.6" stroke-dasharray="1 1.5" opacity="0.55"/>
+  <g>
+    <path d="M 22 18 L 22 46 L 36 46 C 41.5 46 45 42.7 45 38.5 C 45 35.5 43.2 33 40.5 32 C 42.5 31 43.8 28.8 43.8 26 C 43.8 21.8 40.5 18 35 18 Z M 27 22.5 L 34 22.5 C 36.8 22.5 38.5 24 38.5 26.3 C 38.5 28.6 36.8 30.1 34 30.1 L 27 30.1 Z M 27 34.4 L 35 34.4 C 38.1 34.4 39.8 36 39.8 38.4 C 39.8 40.8 38.1 42.4 35 42.4 L 27 42.4 Z" fill="#5C3608" opacity="0.4" transform="translate(0.4 0.4)"/>
+    <path d="M 22 18 L 22 46 L 36 46 C 41.5 46 45 42.7 45 38.5 C 45 35.5 43.2 33 40.5 32 C 42.5 31 43.8 28.8 43.8 26 C 43.8 21.8 40.5 18 35 18 Z M 27 22.5 L 34 22.5 C 36.8 22.5 38.5 24 38.5 26.3 C 38.5 28.6 36.8 30.1 34 30.1 L 27 30.1 Z M 27 34.4 L 35 34.4 C 38.1 34.4 39.8 36 39.8 38.4 C 39.8 40.8 38.1 42.4 35 42.4 L 27 42.4 Z" fill="#FFF4D6"/>
+  </g>
+  <ellipse cx="24" cy="18" rx="11" ry="4" fill="#FFFFFF" opacity="0.18"/>
 </svg>

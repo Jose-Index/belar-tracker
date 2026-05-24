@@ -1,4 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180">
-  <rect width="180" height="180" rx="40" fill="#2EA543"/>
-  <path d="M 62 50 L 62 130 L 100 130 C 115 130 125 121 125 109 C 125 100 120 93 113 90 C 118 87 122 81 122 73 C 122 61 113 50 98 50 Z M 76 63 L 95 63 C 102 63 107 67 107 73.5 C 107 80 102 84 95 84 L 76 84 Z M 76 97 L 98 97 C 106 97 111 101 111 108 C 111 115 106 119 98 119 L 76 119 Z" fill="#FFFFFF"/>
+  <defs>
+    <radialGradient id="coin" cx="0.35" cy="0.3" r="0.85">
+      <stop offset="0%" stop-color="#FFD56B"/>
+      <stop offset="55%" stop-color="#E8A93B"/>
+      <stop offset="100%" stop-color="#A6691B"/>
+    </radialGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFE489"/>
+      <stop offset="100%" stop-color="#8B5410"/>
+    </linearGradient>
+  </defs>
+  <circle cx="90" cy="90" r="85" fill="url(#rim)"/>
+  <circle cx="90" cy="90" r="76" fill="url(#coin)"/>
+  <circle cx="90" cy="90" r="65" fill="none" stroke="#8B5410" stroke-width="1.5" stroke-dasharray="2.5 3.5" opacity="0.55"/>
+  <g>
+    <path d="M 62 50 L 62 130 L 100 130 C 115 130 125 121 125 109 C 125 100 120 93 113 90 C 118 87 122 81 122 73 C 122 61 113 50 98 50 Z M 76 63 L 95 63 C 102 63 107 67 107 73.5 C 107 80 102 84 95 84 L 76 84 Z M 76 97 L 98 97 C 106 97 111 101 111 108 C 111 115 106 119 98 119 L 76 119 Z" fill="#5C3608" opacity="0.4" transform="translate(1.2 1.2)"/>
+    <path d="M 62 50 L 62 130 L 100 130 C 115 130 125 121 125 109 C 125 100 120 93 113 90 C 118 87 122 81 122 73 C 122 61 113 50 98 50 Z M 76 63 L 95 63 C 102 63 107 67 107 73.5 C 107 80 102 84 95 84 L 76 84 Z M 76 97 L 98 97 C 106 97 111 101 111 108 C 111 115 106 119 98 119 L 76 119 Z" fill="#FFF4D6"/>
+  </g>
+  <ellipse cx="65" cy="48" rx="32" ry="11" fill="#FFFFFF" opacity="0.18"/>
 </svg>
