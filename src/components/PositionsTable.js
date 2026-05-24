@@ -3,8 +3,10 @@ import React, { useState, useMemo, useRef, useEffect } from 'react'
 import { BROKER_COLORS, BROKER_NAMES, CLASS_COLORS, formatCurrency, formatNative, toUSD, pnlColor } from '@/lib/constants'
 import { supabase } from '@/lib/supabase'
 
-// ─── SVG Sparkline with area fill ────────────────
-function SparklineSVG({ data, width, height, showDots, showLabels, showEvents }) {
+// ─── SVG Sparkline with area fill + opcional hover de puntos ────────────────
+function SparklineSVG({ data, width, height, showDots, showLabels, showEvents, interactive = false }) {
+  const [hoverIdx, setHoverIdx] = useState(null)
+
   if (!data || data.length < 2) return null
   const values = data.map(d => d.value)
   const invested = data[0].invested
@@ -23,8 +25,28 @@ function SparklineSVG({ data, width, height, showDots, showLabels, showEvents })
   const areaPoints = `${xFn(0)},${(height - pad).toFixed(1)} ${points} ${xFn(values.length - 1)},${(height - pad).toFixed(1)}`
   const invY = yFn(invested)
 
+  // Handler para tracking del cursor sobre la gráfica
+  const handleMove = (e) => {
+    if (!interactive) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    // Mapear x a índice del punto más cercano
+    const step = (width - pad * 2) / (values.length - 1)
+    const idx = Math.max(0, Math.min(values.length - 1, Math.round((x - pad) / step)))
+    setHoverIdx(idx)
+  }
+  const handleLeave = () => setHoverIdx(null)
+
+  const hoverPt = hoverIdx != null ? { x: Number(xFn(hoverIdx)), y: Number(yFn(values[hoverIdx])) } : null
+  const hoverData = hoverIdx != null ? data[hoverIdx] : null
+
   return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ display: 'block' }}>
+    <svg
+      width={width} height={height} viewBox={`0 0 ${width} ${height}`}
+      style={{ display: 'block', cursor: interactive ? 'crosshair' : 'default' }}
+      onMouseMove={handleMove}
+      onMouseLeave={handleLeave}
+    >
       <polygon points={areaPoints} fill={fillColor} />
       <line x1={pad} y1={invY} x2={width - pad} y2={invY} stroke="#94a3b8" strokeWidth="0.5" strokeDasharray="2 2" opacity="0.5" />
       <polyline points={points} fill="none" stroke={color} strokeWidth={showDots ? 1.5 : 1.2} strokeLinejoin="round" strokeLinecap="round" />
@@ -55,6 +77,34 @@ function SparklineSVG({ data, width, height, showDots, showLabels, showEvents })
         const mColor = isAmp ? '#22c55e' : '#ef4444'
         return <text key={'ev'+idx} x={ex} y={ey - (showDots ? 8 : 5)} fontSize={showDots ? '9' : '6'} fill={mColor} textAnchor="middle" fontWeight="bold">{marker}</text>
       })}
+
+      {/* Hover crosshair + dot + tooltip valor */}
+      {interactive && hoverPt && hoverData && (() => {
+        const pct = ((hoverData.value - invested) / invested * 100)
+        const dateStr = new Date(hoverData.week_date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: '2-digit' })
+        // Calcular si el label se sale por la derecha
+        const labelW = 90
+        const lblX = hoverPt.x + labelW + 6 > width ? hoverPt.x - labelW - 6 : hoverPt.x + 6
+        const lblAnchor = hoverPt.x + labelW + 6 > width ? 'start' : 'start'
+        return <g pointerEvents="none">
+          {/* Línea vertical */}
+          <line x1={hoverPt.x} y1={pad} x2={hoverPt.x} y2={height - pad} stroke="#475569" strokeWidth="0.8" strokeDasharray="2 2" opacity="0.6" />
+          {/* Dot grande resaltado */}
+          <circle cx={hoverPt.x} cy={hoverPt.y} r="4" fill={hoverData.value >= invested ? '#22c55e' : '#ef4444'} stroke="#fff" strokeWidth="2" />
+          {/* Caja de etiqueta */}
+          <rect
+            x={lblX} y={Math.max(2, hoverPt.y - 26)}
+            width={labelW} height="22" rx="3"
+            fill="#1e293b" opacity="0.92"
+          />
+          <text x={lblX + 5} y={Math.max(2, hoverPt.y - 26) + 9} fontSize="8" fill="#cbd5e1" fontFamily="monospace">
+            {dateStr}
+          </text>
+          <text x={lblX + 5} y={Math.max(2, hoverPt.y - 26) + 18} fontSize="9" fill="#fff" fontFamily="monospace" fontWeight="bold">
+            ${hoverData.value.toFixed(0)} ({pct >= 0 ? '+' : ''}{pct.toFixed(1)}%)
+          </text>
+        </g>
+      })()}
     </svg>
   )
 }
@@ -63,17 +113,36 @@ function Sparkline({ data, ticker, broker, invested }) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState({ x: 0, y: 0 })
   const wrapperRef = useRef(null)
+  const closeTimerRef = useRef(null)
 
   useEffect(() => {
     if (open && wrapperRef.current) {
       const rect = wrapperRef.current.getBoundingClientRect()
-      const tooltipWidth = 500 // 480 + padding margen
+      const tooltipWidth = 500 // 480 + margen
       setPos({
         x: Math.max(8, Math.min(rect.left, window.innerWidth - tooltipWidth)),
         y: rect.bottom + 6
       })
     }
   }, [open])
+
+  // Limpiar timer al desmontar
+  useEffect(() => () => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+  }, [])
+
+  // Abrir inmediato, cerrar con pequeño delay para permitir transición al popup
+  const handleEnter = () => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current)
+      closeTimerRef.current = null
+    }
+    setOpen(true)
+  }
+  const handleLeave = () => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+    closeTimerRef.current = setTimeout(() => setOpen(false), 150)
+  }
 
   if (!data || data.length < 2) return (
     <div className="w-[72px] h-[20px] bg-slate-50 rounded flex items-center justify-center">
@@ -85,14 +154,19 @@ function Sparkline({ data, ticker, broker, invested }) {
     <div
       ref={wrapperRef}
       className="relative"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
+      onMouseEnter={handleEnter}
+      onMouseLeave={handleLeave}
     >
       <div className="cursor-help">
         <SparklineSVG data={data} width={72} height={20} showDots={false} showLabels={false} showEvents={true} />
       </div>
       {open && (
-        <div className="fixed z-[9999] pointer-events-none" style={{ left: pos.x, top: pos.y }}>
+        <div
+          className="fixed z-[9999]"
+          style={{ left: pos.x, top: pos.y }}
+          onMouseEnter={handleEnter}
+          onMouseLeave={handleLeave}
+        >
           <SparkTooltip data={data} ticker={ticker} broker={broker} invested={invested} />
         </div>
       )}
@@ -131,7 +205,7 @@ function SparkTooltip({ data, ticker, broker, invested }) {
 
       {/* Gráfico grande */}
       <div className="bg-slate-50/70 rounded-lg p-3 mb-3 border border-slate-100">
-        <SparklineSVG data={data} width={448} height={140} showDots={true} showLabels={true} showEvents={true} />
+        <SparklineSVG data={data} width={448} height={140} showDots={true} showLabels={true} showEvents={true} interactive={true} />
       </div>
 
       {/* KPIs */}
