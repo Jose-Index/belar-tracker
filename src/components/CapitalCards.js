@@ -121,15 +121,17 @@ export default function CapitalCards({ snapshots, brokers, wallets, onUpdateValu
         )
       })}
       {/* TOTAL */}
-      <div className="relative bg-gradient-to-br from-sky-50 to-white rounded-xl border border-sky-200/60 p-4 overflow-hidden">
-        <div className="absolute top-0 left-0 right-0 h-[3px] bg-sky-500" />
+      <div className="relative rounded-xl border p-4 overflow-hidden"
+           style={{ background: 'linear-gradient(135deg, #E8F3EA 0%, #FFFFFF 100%)', borderColor: '#C8E0CE' }}>
+        <div className="absolute top-0 left-0 right-0 h-[3px]" style={{ background: '#1F7A3F' }} />
         <div className="flex items-center justify-between mb-1.5">
-          <span className="text-[9px] font-bold tracking-[0.12em] uppercase px-1.5 py-0.5 rounded bg-sky-100 text-sky-700">
+          <span className="text-[9px] font-bold tracking-[0.12em] uppercase px-1.5 py-0.5 rounded"
+                style={{ background: '#D6E9DA', color: '#1F7A3F' }}>
             TOTAL
           </span>
-          <MiniSpark values={historyByKey.total} color="#0ea5e9" />
+          <MiniSpark values={historyByKey.total} color="#1F7A3F" />
         </div>
-        <div className="text-[22px] font-bold font-mono text-sky-600 leading-tight">{formatCurrency(total)}</div>
+        <div className="text-[22px] font-bold font-mono leading-tight" style={{ color: '#1F7A3F' }}>{formatCurrency(total)}</div>
         <div className="flex items-center justify-between mt-1">
           <span className={`text-[11px] font-mono font-semibold ${pnlColor(totalChange)}`}>
             {totalChange >= 0 ? '▲' : '▼'} {totalChange >= 0 ? '+' : ''}{(totalChange * 100).toFixed(2)}%

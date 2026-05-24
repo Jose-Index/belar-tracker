@@ -903,12 +903,12 @@ export function Footer({ quotes }) {
   if (!quote) return null
 
   return (
-    <footer className="text-center py-12 mt-10">
-      <p className="text-[15px] text-slate-400 italic max-w-2xl mx-auto leading-relaxed">
+    <footer className="text-center py-14 mt-12 border-t border-stone-200/60">
+      <p className="text-[15px] italic max-w-2xl mx-auto leading-relaxed" style={{ color: '#78716C' }}>
         &ldquo;{quote.text}&rdquo;
-        {quote.author && <span className="not-italic font-semibold block mt-2 text-slate-500 text-[13px]"> — {quote.author}</span>}
+        {quote.author && <span className="not-italic font-semibold block mt-2 text-[13px]" style={{ color: '#57534E' }}> — {quote.author}</span>}
       </p>
-      <p className="text-[10px] text-slate-300 mt-5 tracking-wider">BELAR Tracker v10 · Capa JOSE · Ecosistema IA Personal</p>
+      <p className="text-[10px] mt-6 tracking-[0.18em] uppercase" style={{ color: '#A8A29E' }}>BELAR Tracker v11 · Capa JOSE · Ecosistema IA Personal</p>
     </footer>
   )
 }
