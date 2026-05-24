@@ -7,7 +7,6 @@ import TabNav from '@/components/TabNav'
 import CapitalCards from '@/components/CapitalCards'
 import EvolutionChart from '@/components/EvolutionChart'
 import PositionsTable from '@/components/PositionsTable'
-import { RadarBelar, RadarJose, ExceptionsSection } from '@/components/RadarModules'
 import { SourcesPanel } from '@/components/Sources'
 import {
   CalendarView, WeeklyHistory, ContributionsTable, YearlyResults,
@@ -17,15 +16,14 @@ import {
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState('dashboard')
+  const [tab, setTab] = useState('portfolio')
   const [btcPrice, setBtcPrice] = useState(null)
   const [eurUsdRate, setEurUsdRate] = useState(1.08)
-  const [etoroLive, setEtoroLive] = useState(null)
   const [data, setData] = useState({
     brokers: [], wallets: [], snapshots: [], positions: [],
-    contributions: [], yearlyResults: [], radarBelar: [],
-    radarJose: [], calendarEvents: [], quotes: [],
-    positionHistory: [], exceptions: [], brokerBalances: [],
+    contributions: [], yearlyResults: [], calendarEvents: [],
+    quotes: [], positionHistory: [], brokerBalances: [],
+    planRector: null, tableroRector: [],
   })
 
   const doFetch = useCallback(async ({ silent = false } = {}) => {
@@ -33,8 +31,7 @@ export default function Dashboard() {
     const [
       { data: brokers }, { data: wallets }, { data: snapshots },
       { data: positions }, { data: contributions }, { data: yearlyResults },
-      { data: radarBelar }, { data: radarJose }, { data: calendarEvents },
-      { data: quotes }, { data: positionHistory },
+      { data: calendarEvents }, { data: quotes }, { data: positionHistory },
     ] = await Promise.all([
       supabase.from('brokers').select('*').eq('active', true).order('sort_order'),
       supabase.from('wallets').select('*').eq('active', true).order('sort_order'),
@@ -42,18 +39,10 @@ export default function Dashboard() {
       supabase.from('positions').select('*').eq('is_open', true).order('platform'),
       supabase.from('contributions').select('*').order('date'),
       supabase.from('yearly_results').select('*').order('year'),
-      supabase.from('radar_belar').select('*').eq('is_active', true).order('added_date', { ascending: false }),
-      supabase.from('radar_jose').select('*').eq('is_active', true).order('created_at', { ascending: false }),
       supabase.from('calendar_events').select('*').order('date'),
       supabase.from('quotes').select('*').eq('is_active', true),
       supabase.from('position_history').select('position_id,week_date,value,invested,event,event_amount').order('week_date'),
     ])
-
-    let exceptions = []
-    try {
-      const { data: ex } = await supabase.from('exceptions').select('*').eq('is_active', true).order('activated_at', { ascending: false })
-      exceptions = ex || []
-    } catch (_) { exceptions = [] }
 
     let brokerBalances = []
     try {
@@ -61,41 +50,44 @@ export default function Dashboard() {
       brokerBalances = bb || []
     } catch (_) { brokerBalances = [] }
 
+    // Plan Rector + Tablero Rector (may not exist yet)
+    let planRector = null
+    let tableroRector = []
+    try {
+      const { data: pr } = await supabase.from('plan_rector').select('*').limit(1).single()
+      planRector = pr
+    } catch (_) {}
+    try {
+      const { data: tr } = await supabase.from('tablero_rector').select('*').order('sort_order')
+      tableroRector = tr || []
+    } catch (_) {}
+
     setData({
       brokers: brokers||[], wallets: wallets||[], snapshots: snapshots||[],
       positions: positions||[], contributions: contributions||[],
-      yearlyResults: yearlyResults||[], radarBelar: radarBelar||[],
-      radarJose: radarJose||[], calendarEvents: calendarEvents||[],
+      yearlyResults: yearlyResults||[], calendarEvents: calendarEvents||[],
       quotes: quotes||[], positionHistory: positionHistory||[],
-      exceptions, brokerBalances,
+      brokerBalances, planRector, tableroRector,
     })
     if (!silent) setLoading(false)
   }, [])
 
-  // fetchAll = carga inicial con splash · refreshData = refresco silencioso (sin parpadeo)
   const fetchAll = useCallback(() => doFetch({ silent: false }), [doFetch])
   const refreshData = useCallback(() => doFetch({ silent: true }), [doFetch])
 
   useEffect(() => {
     const loadLive = async () => {
       try {
-        const [tickerRes, etoroRes] = await Promise.all([
-          fetch('/api/tickers'),
-          fetch('/api/etoro?action=portfolio').catch(() => null),
-        ])
+        const tickerRes = await fetch('/api/tickers')
         const tickers = await tickerRes.json()
         const btc = tickers.find(t => t.symbol === 'BTC-USD')
         if (btc?.price) setBtcPrice(btc.price)
         const eur = tickers.find(t => t.symbol === 'EURUSD=X')
         if (eur?.price) setEurUsdRate(eur.price)
-        if (etoroRes) {
-          const etoro = await etoroRes.json()
-          if (etoro.ok) setEtoroLive(etoro)
-        }
       } catch(e) {}
     }
     loadLive()
-    const id = setInterval(loadLive, 30000)
+    const id = setInterval(loadLive, 15000)
     return () => clearInterval(id)
   }, [])
 
@@ -134,11 +126,15 @@ export default function Dashboard() {
         <TickerBar />
         <TabNav active={tab} onChange={setTab} />
       </div>
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-5 space-y-5">
-        {tab === 'dashboard' && <>
-          <CapitalCards snapshots={data.snapshots} brokers={data.brokers} wallets={data.wallets} onUpdateValues={handleUpdateValues} btcPrice={btcPrice} />
+      <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-5 space-y-5">
+
+        {/* ─── PORTFOLIO TAB ─── */}
+        {tab === 'portfolio' && <>
           <EvolutionChart snapshots={data.snapshots} />
+          <CapitalCards snapshots={data.snapshots} brokers={data.brokers} wallets={data.wallets} onUpdateValues={handleUpdateValues} btcPrice={btcPrice} />
+          <ResultsSummary snapshots={data.snapshots} contributions={data.contributions} />
           <PositionsTable positions={data.positions} positionHistory={data.positionHistory} onRefresh={refreshData} eurUsdRate={eurUsdRate} />
+          <CalendarView events={data.calendarEvents} onRefresh={refreshData} />
           <BrokerBalancesRegister
             brokerBalances={data.brokerBalances}
             positions={data.positions}
@@ -146,35 +142,33 @@ export default function Dashboard() {
             btcPrice={btcPrice}
             btcQty={btcQty}
             eurUsdRate={eurUsdRate}
-           
             onRefresh={refreshData}
           />
-          <ResultsSummary snapshots={data.snapshots} contributions={data.contributions} />
-        </>}
-        {tab === 'historico' && <>
           <YearlyResults results={data.yearlyResults} contributions={data.contributions} snapshots={data.snapshots} />
-          <EvolutionChart snapshots={data.snapshots} storageKey="historico" />
+        </>}
+
+        {/* ─── PLAN RECTOR TAB ─── */}
+        {tab === 'plan' && <>
+          <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="section-title">Plan Rector</div>
+            <p className="text-sm text-slate-400 italic">Próximamente: editor de texto libre con estilos + tablero rector drag & drop</p>
+          </div>
+        </>}
+
+        {/* ─── HERRAMIENTAS TAB ─── */}
+        {tab === 'tools' && <>
+          <SourcesPanel />
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
             <WeeklyHistory snapshots={data.snapshots} />
             <ContributionsTable contributions={data.contributions} onRefresh={refreshData} />
           </div>
-        </>}
-        {tab === 'radar' && <>
-          <RadarBelar items={data.radarBelar} onRefresh={refreshData} />
-          <ExceptionsSection items={data.exceptions} onRefresh={refreshData} />
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <RadarJose items={data.radarJose} onRefresh={refreshData} />
-            <CalendarView events={data.calendarEvents} onRefresh={refreshData} />
-          </div>
-        </>}
-        {tab === 'sources' && <SourcesPanel />}
-        {tab === 'tools' && <>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <Calculator />
             <BackupExport snapshots={data.snapshots} positions={data.positions} contributions={data.contributions} yearlyResults={data.yearlyResults} />
           </div>
           <Settings quotes={data.quotes} onRefresh={refreshData} />
         </>}
+
         <Footer quotes={data.quotes} />
       </main>
     </div>
