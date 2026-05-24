@@ -419,15 +419,15 @@ export function CalendarView({ events, onRefresh }) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5">
         {/* GRID VISUAL DEL MES */}
         <div>
-          <div className="grid grid-cols-7 gap-1 mb-1">
+          <div className="grid grid-cols-7 gap-1.5 mb-1.5">
             {dayShort.map(d => (
-              <div key={d} className="text-[9px] font-bold text-slate-400 uppercase tracking-widest text-center py-1">{d}</div>
+              <div key={d} className="text-[11px] font-bold text-slate-400 uppercase tracking-widest text-center py-1.5">{d}</div>
             ))}
           </div>
-          <div className="grid grid-cols-7 gap-1">
+          <div className="grid grid-cols-7 gap-1.5">
             {grid.map((cell, idx) => {
               const dateStr = cell.date.toISOString().split('T')[0]
               const dayEvents = eventsByDate[dateStr] || []
@@ -436,24 +436,24 @@ export function CalendarView({ events, onRefresh }) {
               return (
                 <div
                   key={idx}
-                  className={`relative min-h-[68px] rounded-md border p-1 text-[10px] transition-colors ${
+                  className={`relative min-h-[92px] rounded-md border p-1.5 transition-colors ${
                     !cell.inMonth ? 'bg-slate-50/40 border-slate-100 text-slate-300' :
                     isToday ? 'bg-blue-50 border-blue-300' :
                     isPast ? 'bg-white border-slate-100 text-slate-400' :
                     'bg-white border-slate-200 hover:border-slate-300'
                   }`}
                 >
-                  <div className={`text-[10px] font-bold mb-0.5 ${isToday ? 'text-blue-700' : ''}`}>
+                  <div className={`text-[13px] font-bold mb-1 ${isToday ? 'text-blue-700' : ''}`}>
                     {cell.date.getDate()}
                   </div>
-                  <div className="space-y-0.5">
+                  <div className="space-y-1">
                     {dayEvents.slice(0, 3).map(ev => {
                       const type = EVENT_TYPES[ev.event_type] || EVENT_TYPES.CUSTOM
                       return (
                         <div
                           key={ev.id}
                           title={`${ev.ticker ? ev.ticker + ' · ' : ''}${ev.title}`}
-                          className="truncate px-1 py-0.5 rounded text-[8.5px] font-semibold cursor-default"
+                          className="truncate px-1.5 py-0.5 rounded text-[11px] font-semibold cursor-default"
                           style={{ background: type.color + '18', color: type.color }}
                           onClick={() => handleDelete(ev.id)}
                         >
@@ -462,7 +462,7 @@ export function CalendarView({ events, onRefresh }) {
                       )
                     })}
                     {dayEvents.length > 3 && (
-                      <div className="text-[8px] text-slate-400 px-1">+{dayEvents.length - 3} más</div>
+                      <div className="text-[10px] text-slate-400 px-1">+{dayEvents.length - 3} más</div>
                     )}
                   </div>
                 </div>
@@ -473,29 +473,29 @@ export function CalendarView({ events, onRefresh }) {
 
         {/* LISTA LATERAL — PRÓXIMOS 30 DÍAS */}
         <div>
-          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Próximos 30 días</div>
-          <div className="space-y-1 max-h-[460px] overflow-y-auto pr-1">
-            {upcoming.length === 0 && <p className="text-[11px] text-slate-400 py-2 italic">Sin eventos</p>}
+          <div className="text-[12px] font-bold text-slate-500 uppercase tracking-widest mb-3">Próximos 30 días</div>
+          <div className="space-y-1.5 max-h-[520px] overflow-y-auto pr-1">
+            {upcoming.length === 0 && <p className="text-[12px] text-slate-400 py-2 italic">Sin eventos</p>}
             {upcoming.map(e => {
               const type = EVENT_TYPES[e.event_type] || EVENT_TYPES.CUSTOM
               const d = new Date(e.date)
               const diasRest = Math.round((d - new Date(todayStr)) / 86400000)
               return (
-                <div key={e.id} className="group flex items-start gap-2 py-1.5 px-2 rounded hover:bg-slate-50 text-[10.5px]">
-                  <div className="font-mono text-slate-400 w-12 shrink-0 text-right pt-px">
+                <div key={e.id} className="group flex items-start gap-2.5 py-2 px-2.5 rounded-md hover:bg-slate-50">
+                  <div className="font-mono text-slate-400 w-14 shrink-0 text-right pt-0.5 text-[11px]">
                     {d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider shrink-0" style={{ background: type.color + '18', color: type.color }}>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider shrink-0" style={{ background: type.color + '18', color: type.color }}>
                         {type.label}
                       </span>
-                      {e.ticker && <span className="font-mono font-bold text-slate-700 text-[10px]">{e.ticker}</span>}
-                      <span className="text-slate-400 text-[9px]">·{diasRest === 0 ? 'hoy' : `${diasRest}d`}</span>
+                      {e.ticker && <span className="font-mono font-bold text-slate-700 text-[12px]">{e.ticker}</span>}
+                      <span className="text-slate-400 text-[11px]">·{diasRest === 0 ? 'hoy' : `${diasRest}d`}</span>
                     </div>
-                    <div className="text-slate-500 mt-0.5 truncate">{e.title}</div>
+                    <div className="text-slate-600 mt-1 text-[12px] truncate">{e.title}</div>
                   </div>
-                  <button onClick={() => handleDelete(e.id)} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 text-[10px] shrink-0 transition">✕</button>
+                  <button onClick={() => handleDelete(e.id)} className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-500 text-[11px] shrink-0 transition pt-0.5">✕</button>
                 </div>
               )
             })}
