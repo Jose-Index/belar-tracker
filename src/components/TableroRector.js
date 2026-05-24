@@ -50,7 +50,7 @@ export default function TableroRector({ positions, tableroRector, onRefresh }) {
       currency: p.currency,
       invested: p.invested,
       current_value: p.current_value,
-      notes: null,         // las posiciones no tienen notas del tablero (van en positions.notes_belar si vuelve)
+      notes: p.notes_belar || '',
       updated_at: null,
       position_id: p.id,
       raw: p,
@@ -157,17 +157,24 @@ export default function TableroRector({ positions, tableroRector, onRefresh }) {
     onRefresh?.()
   }
 
-  // ── EDITAR NOTAS ──
+  // ── EDITAR NOTAS (posiciones y cards independientes) ──
   const startEditNotes = (card) => {
-    if (card.type !== 'card') return  // posiciones no editan notas aquí
     setEditingNotes({ type: card.type, id: card.raw.id, value: card.notes || '' })
   }
 
   const saveNotes = async () => {
     if (!editingNotes) return
-    await supabase.from('tablero_rector')
-      .update({ notes: editingNotes.value, updated_at: new Date().toISOString() })
-      .eq('id', editingNotes.id)
+    if (editingNotes.type === 'pos') {
+      // Posición abierta → positions.notes_belar
+      await supabase.from('positions')
+        .update({ notes_belar: editingNotes.value })
+        .eq('id', editingNotes.id)
+    } else {
+      // Card independiente → tablero_rector.notes
+      await supabase.from('tablero_rector')
+        .update({ notes: editingNotes.value, updated_at: new Date().toISOString() })
+        .eq('id', editingNotes.id)
+    }
     setEditingNotes(null)
     onRefresh?.()
   }
@@ -192,7 +199,6 @@ export default function TableroRector({ positions, tableroRector, onRefresh }) {
           >
             <option value="RADAR">RADAR</option>
             <option value="ENTRAR YA">ENTRAR YA</option>
-            <option value="xSALIR">xSALIR</option>
           </select>
           <button onClick={handleAdd} className="px-2.5 py-1 text-[10px] font-bold text-white bg-etoro rounded hover:bg-green-700 transition">
             +
@@ -298,7 +304,7 @@ function Column({ col, cards, isOver, dragId, onDragOver, onDrop, onCardDragStar
 // ─── CARD ─────────────────────
 function Card({ card, colColor, onDragStart, onDragEnd, onDelete, onEditNotes, editingNotes, setEditingNotes, onSaveNotes }) {
   const isPos = card.type === 'pos'
-  const isEditing = editingNotes && editingNotes.id === card.raw?.id && card.type === 'card'
+  const isEditing = editingNotes && editingNotes.id === card.raw?.id && editingNotes.type === card.type
   const pnlPct = isPos && card.invested ? ((card.current_value - card.invested) / card.invested * 100) : null
   const fmtDate = (d) => d ? new Date(d).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }) : ''
 
@@ -334,36 +340,33 @@ function Card({ card, colColor, onDragStart, onDragEnd, onDelete, onEditNotes, e
         </div>
       )}
 
-      {!isPos && (
-        <>
-          {isEditing ? (
-            <textarea
-              autoFocus
-              value={editingNotes.value}
-              onChange={e => setEditingNotes({ ...editingNotes, value: e.target.value })}
-              onBlur={onSaveNotes}
-              onKeyDown={e => {
-                if (e.key === 'Escape') setEditingNotes(null)
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) onSaveNotes()
-              }}
-              className="w-full mt-1 px-1.5 py-1 text-[10px] text-slate-700 bg-slate-50 border border-blue-300 rounded outline-none resize-none"
-              rows={3}
-              placeholder="Notas (Cmd+Enter para guardar)"
-            />
-          ) : (
-            <div
-              onClick={() => onEditNotes(card)}
-              className="text-[10px] text-slate-500 mt-0.5 cursor-text hover:bg-slate-50 -mx-1 px-1 py-0.5 rounded transition min-h-[14px]"
-            >
-              {card.notes || <span className="text-slate-300 italic">+ nota</span>}
-            </div>
-          )}
-          {card.updated_at && card.notes && (
-            <div className="text-[8px] text-slate-300 mt-0.5 font-mono">
-              {fmtDate(card.updated_at)}
-            </div>
-          )}
-        </>
+      {/* Notas para AMBOS tipos (posiciones y cards independientes) */}
+      {isEditing ? (
+        <textarea
+          autoFocus
+          value={editingNotes.value}
+          onChange={e => setEditingNotes({ ...editingNotes, value: e.target.value })}
+          onBlur={onSaveNotes}
+          onKeyDown={e => {
+            if (e.key === 'Escape') setEditingNotes(null)
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) onSaveNotes()
+          }}
+          className="w-full mt-1 px-1.5 py-1 text-[10px] text-slate-700 bg-slate-50 border border-blue-300 rounded outline-none resize-none"
+          rows={3}
+          placeholder="Notas (Cmd+Enter para guardar)"
+        />
+      ) : (
+        <div
+          onClick={() => onEditNotes(card)}
+          className="text-[10px] text-slate-500 mt-0.5 cursor-text hover:bg-slate-50 -mx-1 px-1 py-0.5 rounded transition min-h-[14px]"
+        >
+          {card.notes || <span className="text-slate-300 italic">+ nota</span>}
+        </div>
+      )}
+      {!isPos && card.updated_at && card.notes && (
+        <div className="text-[8px] text-slate-300 mt-0.5 font-mono">
+          {fmtDate(card.updated_at)}
+        </div>
       )}
     </div>
   )
