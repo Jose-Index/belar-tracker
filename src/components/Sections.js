@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useMemo } from 'react'
 import { EVENT_TYPES, formatCurrency, pnlColor, BROKER_COLORS, BROKER_NAMES, toUSD, getNextSaturday, toDateStrLocal, RESP_COLORS } from '@/lib/constants'
+import { MARKETS, getHolidaysInRange } from '@/lib/market-holidays'
 import { supabase } from '@/lib/supabase'
 
 // ─── BROKER BALANCES + REGISTRAR ────────────────────────────
@@ -309,6 +310,42 @@ export function CalendarView({ events, onRefresh }) {
     return { year: d.getFullYear(), month: d.getMonth() }
   })
 
+  // ── Festivos de bolsa: toggle + selección de mercados persistida ──
+  const DEFAULT_MARKETS = ['US', 'LSE', 'BME', 'XETRA', 'JPX', 'KRX'] // los que toca tu cartera
+  const [showHolidays, setShowHolidays] = useState(true)
+  const [enabledMarkets, setEnabledMarkets] = useState(() => new Set(DEFAULT_MARKETS))
+  const [showMarketPicker, setShowMarketPicker] = useState(false)
+
+  // Cargar preferencias desde localStorage
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('belar.calendar.holidays') || 'null')
+      if (saved) {
+        if (typeof saved.show === 'boolean') setShowHolidays(saved.show)
+        if (Array.isArray(saved.markets)) setEnabledMarkets(new Set(saved.markets))
+      }
+    } catch (_) {}
+  }, [])
+
+  // Persistir cambios
+  useEffect(() => {
+    try {
+      localStorage.setItem('belar.calendar.holidays', JSON.stringify({
+        show: showHolidays,
+        markets: Array.from(enabledMarkets),
+      }))
+    } catch (_) {}
+  }, [showHolidays, enabledMarkets])
+
+  const toggleMarket = (code) => {
+    setEnabledMarkets(prev => {
+      const next = new Set(prev)
+      if (next.has(code)) next.delete(code)
+      else next.add(code)
+      return next
+    })
+  }
+
   const handleAdd = async () => {
     if (!form.date || !form.title) return
     await supabase.from('calendar_events').insert(form)
@@ -333,6 +370,34 @@ export function CalendarView({ events, onRefresh }) {
     })
     return map
   }, [events])
+
+  // Agrupar festivos del mes visible (+ buffer) por fecha
+  const holidaysByDate = useMemo(() => {
+    if (!showHolidays) return {}
+    const { year, month } = viewMonth
+    // Buffer de un mes a cada lado para cubrir el grid completo (6 semanas)
+    const start = new Date(year, month - 1, 1).toISOString().split('T')[0]
+    const end = new Date(year, month + 2, 0).toISOString().split('T')[0]
+    const list = getHolidaysInRange(start, end, enabledMarkets)
+    const map = {}
+    list.forEach(h => {
+      if (!map[h.date]) map[h.date] = []
+      map[h.date].push(h)
+    })
+    return map
+  }, [viewMonth, showHolidays, enabledMarkets])
+
+  // Festivos próximos para el panel lateral (próximos 60 días)
+  const upcomingHolidays = useMemo(() => {
+    if (!showHolidays) return []
+    const today = new Date().toISOString().split('T')[0]
+    const limit = new Date()
+    limit.setDate(limit.getDate() + 60)
+    const limitStr = limit.toISOString().split('T')[0]
+    return getHolidaysInRange(today, limitStr, enabledMarkets)
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(0, 20)
+  }, [showHolidays, enabledMarkets])
 
   // Generar matriz del mes visible (6 semanas × 7 días)
   const grid = useMemo(() => {
@@ -401,6 +466,57 @@ export function CalendarView({ events, onRefresh }) {
           <button onClick={goToday} className="px-2.5 py-1 text-[10px] font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded uppercase tracking-wider">Hoy</button>
           <span className="px-3 py-1 text-xs font-semibold text-slate-700 capitalize min-w-[120px] text-center">{monthLabel}</span>
           <button onClick={() => navMonth(1)} className="px-2 py-1 text-xs text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded">›</button>
+          <button
+            onClick={() => setShowHolidays(v => !v)}
+            title={showHolidays ? 'Ocultar festivos de bolsa' : 'Mostrar festivos de bolsa'}
+            className={`ml-2 text-[10px] font-bold border px-2.5 py-1 rounded-md transition ${
+              showHolidays
+                ? 'text-slate-700 bg-slate-100 border-slate-300'
+                : 'text-slate-400 border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            {showHolidays ? '✓ Festivos' : 'Festivos'}
+          </button>
+          <div className="relative">
+            <button
+              onClick={() => setShowMarketPicker(v => !v)}
+              title="Selección de mercados"
+              className="text-[10px] font-bold text-slate-500 border border-slate-200 px-2 py-1 rounded-md hover:bg-slate-50 transition"
+            >
+              {enabledMarkets.size}/{Object.keys(MARKETS).length} ▾
+            </button>
+            {showMarketPicker && (
+              <div className="absolute right-0 top-full mt-1 z-30 bg-white border border-slate-200 rounded-lg shadow-lg p-2 min-w-[200px]">
+                <div className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1">Mercados</div>
+                {Object.entries(MARKETS).map(([code, m]) => (
+                  <label key={code} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-50 cursor-pointer text-[11px]">
+                    <input
+                      type="checkbox"
+                      checked={enabledMarkets.has(code)}
+                      onChange={() => toggleMarket(code)}
+                      className="w-3 h-3 cursor-pointer"
+                    />
+                    <span>{m.flag}</span>
+                    <span className="text-slate-700">{m.label}</span>
+                  </label>
+                ))}
+                <div className="flex gap-1 mt-2 pt-2 border-t border-slate-100">
+                  <button
+                    onClick={() => setEnabledMarkets(new Set(Object.keys(MARKETS)))}
+                    className="flex-1 text-[9px] font-bold text-slate-600 px-1 py-0.5 rounded hover:bg-slate-100"
+                  >TODOS</button>
+                  <button
+                    onClick={() => setEnabledMarkets(new Set(DEFAULT_MARKETS))}
+                    className="flex-1 text-[9px] font-bold text-slate-600 px-1 py-0.5 rounded hover:bg-slate-100"
+                  >Cartera</button>
+                  <button
+                    onClick={() => setEnabledMarkets(new Set())}
+                    className="flex-1 text-[9px] font-bold text-slate-600 px-1 py-0.5 rounded hover:bg-slate-100"
+                  >Ninguno</button>
+                </div>
+              </div>
+            )}
+          </div>
           <button onClick={() => setShowAdd(!showAdd)} className="ml-2 text-[10px] font-bold text-etoro border border-green-200 px-2.5 py-1 rounded-md hover:bg-green-50 transition">
             {showAdd ? 'Cancelar' : '+ Evento'}
           </button>
@@ -431,20 +547,47 @@ export function CalendarView({ events, onRefresh }) {
             {grid.map((cell, idx) => {
               const dateStr = cell.date.toISOString().split('T')[0]
               const dayEvents = eventsByDate[dateStr] || []
+              const dayHolidays = holidaysByDate[dateStr] || []
               const isToday = dateStr === todayStr
               const isPast = dateStr < todayStr
+              // Festivos completos (no early close) crean un sutil tinte amarillo de fondo
+              const fullHolidays = dayHolidays.filter(h => !h.early)
+              const hasFullHoliday = fullHolidays.length > 0 && cell.inMonth && !isToday
               return (
                 <div
                   key={idx}
                   className={`relative min-h-[92px] rounded-md border p-1.5 transition-colors ${
                     !cell.inMonth ? 'bg-slate-50/40 border-slate-100 text-slate-300' :
                     isToday ? 'bg-blue-50 border-blue-300' :
+                    hasFullHoliday ? 'bg-amber-50/40 border-amber-200/60' :
                     isPast ? 'bg-white border-slate-100 text-slate-400' :
                     'bg-white border-slate-200 hover:border-slate-300'
                   }`}
                 >
-                  <div className={`text-[13px] font-bold mb-1 ${isToday ? 'text-blue-700' : ''}`}>
-                    {cell.date.getDate()}
+                  <div className="flex items-start justify-between gap-1 mb-1">
+                    <div className={`text-[13px] font-bold ${isToday ? 'text-blue-700' : ''}`}>
+                      {cell.date.getDate()}
+                    </div>
+                    {/* Banderas de festivos en esquina superior derecha */}
+                    {cell.inMonth && dayHolidays.length > 0 && (
+                      <div
+                        className="flex flex-wrap gap-px text-[10px] leading-none max-w-[58%] justify-end"
+                        title={dayHolidays.map(h => `${MARKETS[h.market]?.flag || ''} ${MARKETS[h.market]?.label}: ${h.name}${h.early ? ' (cierre anticipado)' : ''}`).join('\n')}
+                      >
+                        {dayHolidays.slice(0, 5).map((h, i) => (
+                          <span
+                            key={i}
+                            className={h.early ? 'opacity-50' : ''}
+                            style={{ filter: h.early ? 'grayscale(0.6)' : 'none' }}
+                          >
+                            {MARKETS[h.market]?.flag || '🏛'}
+                          </span>
+                        ))}
+                        {dayHolidays.length > 5 && (
+                          <span className="text-[8px] text-slate-400 font-mono">+{dayHolidays.length - 5}</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="space-y-1">
                     {dayEvents.slice(0, 3).map(ev => {
@@ -500,6 +643,35 @@ export function CalendarView({ events, onRefresh }) {
               )
             })}
           </div>
+
+          {/* FESTIVOS PRÓXIMOS — 60 días */}
+          {showHolidays && upcomingHolidays.length > 0 && (
+            <div className="mt-5">
+              <div className="text-[12px] font-bold text-slate-500 uppercase tracking-widest mb-3">Festivos próximos · 60 días</div>
+              <div className="space-y-0.5 max-h-[280px] overflow-y-auto pr-1">
+                {upcomingHolidays.map((h, i) => {
+                  const d = new Date(h.date)
+                  const diasRest = Math.round((d - new Date(todayStr)) / 86400000)
+                  const m = MARKETS[h.market]
+                  return (
+                    <div key={i} className="flex items-center gap-2 py-1 px-2 rounded hover:bg-slate-50">
+                      <div className="font-mono text-slate-400 w-12 shrink-0 text-right text-[10.5px]">
+                        {d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+                      </div>
+                      <span className="text-[12px] shrink-0" title={m?.label}>{m?.flag}</span>
+                      <div className="flex-1 min-w-0 truncate text-[10.5px]">
+                        <span className="font-semibold" style={{ color: m?.color }}>{h.market}</span>
+                        <span className="text-slate-500"> · {h.name}{h.early ? ' (cierre ant.)' : ''}</span>
+                      </div>
+                      <span className="text-slate-400 text-[9.5px] shrink-0 font-mono">
+                        {diasRest === 0 ? 'hoy' : `${diasRest}d`}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
