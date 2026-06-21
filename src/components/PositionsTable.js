@@ -566,7 +566,7 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
               <th>Valor</th>
               <th>G/P $</th>
               <th>G/P %</th>
-              <th title="Rendimiento diario">%/D</th>
+              <th title="Proyección anualizada: (G/P% acumulado ÷ días abiertos) × 365. Atenuado si <14 días (ruido inicial) o >365 días (proyección lineal sobre histórico extenso).">%/Proy</th>
               <th>Clase</th>
               <th title="Apalancamiento">Apal.</th>
               <th>Peso</th>
@@ -583,11 +583,12 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
               const valueUSD = toUSD(value, cur, eurUsdRate)
               const weight = totalValue > 0 ? valueUSD / totalValue : 0
 
-              let dailyPct = null
+              let proyPct = null
+              let daysOpen = null
               if (p.entry_date) {
                 const entry = new Date(p.entry_date)
-                const days = Math.max(1, Math.floor((new Date() - entry) / 86400000))
-                dailyPct = pct / days
+                daysOpen = Math.max(1, Math.floor((new Date() - entry) / 86400000))
+                proyPct = (pct / daysOpen) * 365
               }
 
               const brokerColor = BROKER_COLORS[p.platform] || '#666'
@@ -701,11 +702,24 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
                   </td>
 
                   <td className="text-right">
-                    {dailyPct !== null ? (
-                      <span className={`font-mono text-[9px] ${dailyPct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                        {dailyPct >= 0 ? '+' : ''}{(dailyPct * 100).toFixed(2)}%
-                      </span>
-                    ) : <span className="text-slate-300 text-[9px]">—</span>}
+                    {proyPct !== null ? (() => {
+                      const attenuated = daysOpen < 14 || daysOpen > 365
+                      const tooltip =
+                        daysOpen < 14
+                          ? `Posición reciente (${daysOpen}d) — proyección con alto ruido inicial`
+                          : daysOpen > 365
+                            ? `Más de un año abierta (${daysOpen}d) — proyección lineal sobre histórico extenso`
+                            : `Proyección anualizada · ${daysOpen}d abiertos`
+                      return (
+                        <span
+                          title={tooltip}
+                          className={`font-mono text-[10px] font-semibold ${proyPct >= 0 ? 'text-green-600' : 'text-red-500'}`}
+                          style={attenuated ? { opacity: 0.4 } : {}}
+                        >
+                          {proyPct >= 0 ? '+' : ''}{proyPct.toFixed(1)}%
+                        </span>
+                      )
+                    })() : <span className="text-slate-300 text-[9px]">—</span>}
                   </td>
 
                   <td>
