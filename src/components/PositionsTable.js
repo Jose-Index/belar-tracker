@@ -716,7 +716,7 @@ export default function PositionsTable({ positions, positionHistory, onRefresh, 
                           className={`font-mono text-[10px] font-semibold ${proyPct >= 0 ? 'text-green-600' : 'text-red-500'}`}
                           style={attenuated ? { opacity: 0.4 } : {}}
                         >
-                          {proyPct >= 0 ? '+' : ''}{proyPct.toFixed(1)}%
+                          {proyPct >= 0 ? '+' : ''}{(proyPct * 100).toFixed(1)}%
                         </span>
                       )
                     })() : <span className="text-slate-300 text-[9px]">—</span>}
