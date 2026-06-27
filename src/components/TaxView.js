@@ -46,6 +46,7 @@ export default function TaxView({ taxData, onRefresh }) {
   const currentYear = new Date().getFullYear()
   const [model, setModel] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [selYear, setSelYear] = useState(currentYear)
 
   useEffect(() => {
     const base = taxData && typeof taxData === 'object' ? taxData : {}
@@ -105,8 +106,19 @@ export default function TaxView({ taxData, onRefresh }) {
         </div>
       </div>
 
-      <div className="px-5 pb-5 space-y-5">
-        {yearsSorted.map(y => {
+      <div className="px-5 pb-5 space-y-4">
+        {/* Selector de año */}
+        <div className="flex flex-wrap gap-1.5">
+          {yearsSorted.map(y => (
+            <button key={y} onClick={() => setSelYear(y)}
+              className={`text-[12px] font-bold px-3 py-1 rounded-md transition-all ${y === selYear ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 bg-slate-100 hover:bg-slate-200'}`}>
+              {y}{y === currentYear ? ' · en curso' : ''}
+            </button>
+          ))}
+        </div>
+
+        {(() => {
+          const y = selYear
           const isCur = y === currentYear
           const yt = model.years[y]
           return (
@@ -172,7 +184,7 @@ export default function TaxView({ taxData, onRefresh }) {
               </div>
             </div>
           )
-        })}
+        })()}
 
         <div className="text-[10px] text-slate-400 leading-relaxed border-t border-slate-100 pt-3">
           Previsión orientativa, no asesoramiento fiscal. IRPF del ahorro: 19% (0-6k) · 21% (6-50k) · 23% (50-200k) · 27% (200-300k) · 30% (&gt;300k), por persona (José y Ana).
