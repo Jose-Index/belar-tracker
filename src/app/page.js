@@ -10,6 +10,7 @@ import PositionsTable from '@/components/PositionsTable'
 import { SourcesPanel } from '@/components/Sources'
 import PlanRectorEditor from '@/components/PlanRectorEditor'
 import TableroRector from '@/components/TableroRector'
+import TaxView from '@/components/TaxView'
 import {
   CalendarView, WeeklyHistory, ContributionsTable, YearlyResults,
   ResultsSummary, Calculator, BackupExport, Settings, Footer,
@@ -25,7 +26,7 @@ export default function Dashboard() {
     brokers: [], wallets: [], snapshots: [], positions: [],
     contributions: [], yearlyResults: [], calendarEvents: [],
     quotes: [], positionHistory: [], brokerBalances: [],
-    planRector: null, tableroRector: [],
+    planRector: null, tableroRector: [], taxData: null,
   })
 
   const doFetch = useCallback(async ({ silent = false } = {}) => {
@@ -64,12 +65,19 @@ export default function Dashboard() {
       tableroRector = tr || []
     } catch (_) {}
 
+    // Impuestos (settings key-value JSON)
+    let taxData = null
+    try {
+      const { data: s } = await supabase.from('settings').select('value').eq('key', 'tax_provisions').maybeSingle()
+      taxData = s?.value ? (typeof s.value === 'string' ? JSON.parse(s.value) : s.value) : null
+    } catch (_) { taxData = null }
+
     setData({
       brokers: brokers||[], wallets: wallets||[], snapshots: snapshots||[],
       positions: positions||[], contributions: contributions||[],
       yearlyResults: yearlyResults||[], calendarEvents: calendarEvents||[],
       quotes: quotes||[], positionHistory: positionHistory||[],
-      brokerBalances, planRector, tableroRector,
+      brokerBalances, planRector, tableroRector, taxData,
     })
     if (!silent) setLoading(false)
   }, [])
@@ -167,6 +175,11 @@ export default function Dashboard() {
             <BackupExport snapshots={data.snapshots} positions={data.positions} contributions={data.contributions} yearlyResults={data.yearlyResults} />
           </div>
           <Settings quotes={data.quotes} onRefresh={refreshData} />
+        </>}
+
+        {/* ─── IMPUESTOS TAB ─── */}
+        {tab === 'impuestos' && <>
+          <TaxView taxData={data.taxData} onRefresh={refreshData} />
         </>}
 
         <Footer quotes={data.quotes} />
