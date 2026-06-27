@@ -53,12 +53,20 @@ export default function EvolutionChart({ snapshots, storageKey = 'dashboard' }) 
 
   if (!snapshots?.length) return null
 
+  let prevYear = null
   const chartData = snapshots.map(s => {
     const rate = getEurUsdRate(s)
     const totalUsd = s.total_usd || 0
+    const d = new Date(s.week_date)
+    const year = d.getFullYear()
+    const isYearStart = year !== prevYear
+    prevYear = year
     return {
       date: s.week_date,
-      label: new Date(s.week_date).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }),
+      label: d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }),
+      labelFull: d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }),
+      monthLabel: d.toLocaleDateString('es-ES', { month: 'short' }),
+      year, isYearStart,
       etoro: s.data?.etoro || 0, xtb: s.data?.xtb || 0,
       ibkr: s.data?.ibkr || 0, btc_usd: s.data?.btc_usd || 0,
       total: totalUsd,
@@ -72,11 +80,26 @@ export default function EvolutionChart({ snapshots, storageKey = 'dashboard' }) 
   // Determine if right axis is needed
   const showRightAxis = visible.total_eur
 
-  const CustomTooltip = ({ active, payload, label }) => {
-    if (!active || !payload) return null
+  // Tick de eje X: mes siempre; año debajo al cambiar de ejercicio (estilo TradingView)
+  const YearAwareTick = ({ x, y, payload }) => {
+    const item = chartData[payload?.index]
+    if (!item) return null
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text x={0} y={0} dy={10} textAnchor="middle" fontSize={9} fill="#94a3b8">{item.monthLabel}</text>
+        {item.isYearStart && (
+          <text x={0} y={0} dy={22} textAnchor="middle" fontSize={9} fontWeight={700} fill="#475569">{item.year}</text>
+        )}
+      </g>
+    )
+  }
+
+  const CustomTooltip = ({ active, payload }) => {
+    if (!active || !payload?.length) return null
+    const full = payload[0]?.payload?.labelFull || payload[0]?.payload?.date
     return (
       <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-3 text-xs">
-        <div className="font-semibold text-slate-600 mb-1">{label}</div>
+        <div className="font-semibold text-slate-600 mb-1">{full}</div>
         {payload.map(p => (
           <div key={p.dataKey} className="flex justify-between gap-4" style={{ color: p.color }}>
             <span>{p.name}</span>
@@ -106,7 +129,7 @@ export default function EvolutionChart({ snapshots, storageKey = 'dashboard' }) 
       <ResponsiveContainer width="100%" height={280}>
         <LineChart data={chartData} margin={{ top: 5, right: showRightAxis ? 50 : 15, bottom: 5, left: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-          <XAxis dataKey="label" tick={{ fontSize: 9, fill: '#94a3b8' }} interval="preserveStartEnd" />
+          <XAxis dataKey="date" tick={<YearAwareTick />} interval="preserveStartEnd" height={30} />
           <YAxis yAxisId="left" domain={['auto', 'auto']} tick={{ fontSize: 9, fill: '#94a3b8' }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} width={45} />
           {showRightAxis && (
             <YAxis yAxisId="right" orientation="right" domain={['auto', 'auto']}
