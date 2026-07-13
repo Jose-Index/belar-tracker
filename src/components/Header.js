@@ -21,24 +21,17 @@ export default function Header() {
   return (
     <header className="backdrop-blur-md border-b border-stone-200 px-4 sm:px-6 py-2.5 flex items-center justify-between flex-wrap gap-3" style={{ background: 'rgba(255, 255, 255, 0.7)' }}>
       <div className="flex items-center gap-2.5">
-        {/* Logo moneda inline — coherente con favicon */}
+        {/* Logo BT — coherente con favicon */}
         <div className="relative w-7 h-7 shrink-0">
           <svg viewBox="0 0 32 32" className="w-full h-full">
             <defs>
-              <radialGradient id="hdrCoin" cx="0.35" cy="0.3" r="0.85">
-                <stop offset="0%" stopColor="#FFD56B"/>
-                <stop offset="55%" stopColor="#E8A93B"/>
-                <stop offset="100%" stopColor="#A6691B"/>
-              </radialGradient>
-              <linearGradient id="hdrRim" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#FFE489"/>
-                <stop offset="100%" stopColor="#8B5410"/>
+              <linearGradient id="hdrBt" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#7E12C4"/>
+                <stop offset="100%" stopColor="#4A0075"/>
               </linearGradient>
             </defs>
-            <circle cx="16" cy="16" r="15" fill="url(#hdrRim)"/>
-            <circle cx="16" cy="16" r="13.5" fill="url(#hdrCoin)"/>
-            <text x="16" y="20.5" textAnchor="middle" fontFamily="Inter,sans-serif" fontSize="13" fontWeight="800" fill="#FFF4D6" letterSpacing="-0.5">B</text>
-            <ellipse cx="12" cy="10" rx="5" ry="2" fill="#ffffff" opacity="0.22"/>
+            <rect x="0" y="0" width="32" height="32" rx="7" fill="url(#hdrBt)"/>
+            <text x="16" y="21.5" textAnchor="middle" fontFamily="Inter,sans-serif" fontSize="15" fontWeight="800" fill="#FFFFFF" letterSpacing="-1">BT</text>
           </svg>
         </div>
         <div className="flex items-baseline gap-2">
