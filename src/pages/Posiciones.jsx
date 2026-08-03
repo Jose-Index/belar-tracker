@@ -300,10 +300,20 @@ export default function Posiciones() {
           <table className={'pos-tabla num' + (cierre ? ' modo-cierre' : '')}>
             <thead>
               <tr>
-                <th className="tl">ACTIVO</th><th className="tl">BROKER</th><th>ENTRADA</th>
-                <th>INVERTIDO</th><th>VALOR</th><th>G/P $</th><th>G/P %</th>
-                <th>%/día</th><th>%/sem</th>
-                <th>ESTADO</th><th className="tl">CLASE</th><th>APAL</th><th>PESO</th><th>FTE</th>
+                <th className="tl" title="Ticker. ● = evento próximo en calendario (rojo si quedan menos de 3 días). NEW/· = alta/actualización por captura IA.">ACTIVO</th>
+                <th className="tl">BROKER</th>
+                <th title="Fecha de entrada en la posición">ENTRADA</th>
+                <th title="Capital invertido (USD)">INVERTIDO</th>
+                <th title="Valor actual (USD). Fuente única: tus capturas del cierre de semana.">VALOR</th>
+                <th title="Ganancia/pérdida abierta en dólares">G/P $</th>
+                <th title="Ganancia/pérdida abierta en % sobre invertido">G/P %</th>
+                <th title="Variación de HOY del activo (precio vivo Yahoo vs cierre anterior)">%/día</th>
+                <th title="Variación desde el último cierre de semana">%/sem</th>
+                <th title="Tu valoración de la posición. ⚑ = el análisis IA discrepa (pasa el ratón por la bandera para ver su veredicto).">ESTADO</th>
+                <th className="tl" title="Clasificación: NÚCLEO (Ancla/Estructural/Gestión), MOMENTUM, TÁCTICA, DISRUPTIVA">CLASE</th>
+                <th title="Apalancamiento (x1 = sin apalancar; máximo de la casa x2)">APAL</th>
+                <th title="Peso de la posición sobre el total de posiciones">PESO</th>
+                <th title="FUENTE de la idea: en blanco = YO · B = BELAR · P = PRENSA · R = REDES">FTE</th>
                 {cierre && <th></th>}
               </tr>
             </thead>
@@ -342,7 +352,7 @@ export default function Posiciones() {
                   <td className="tl clase">{CLASES[p.clase] || p.clase}</td>
                   <td>{p.apalancamiento > 1 ? 'x' + Number(p.apalancamiento) : ''}</td>
                   <td>{p.peso == null ? '—' : p.peso.toFixed(1) + '%'}</td>
-                  <td className="fuente">{p.fuente === 'YO' ? '' : (p.fuente || '').slice(0, 1)}</td>
+                  <td className="fuente" title={'Fuente: ' + (p.fuente || 'YO')}>{p.fuente === 'YO' ? '' : (p.fuente || '').slice(0, 1)}</td>
                   {cierre && <td><button className="btn-borrar" title="Cerrar posición"
                     onClick={e => { e.stopPropagation(); borrarEnCierre(p) }}>✕</button></td>}
                 </tr>
@@ -355,6 +365,14 @@ export default function Posiciones() {
             ? 'Modo cierre: edita VALOR/INVERTIDO (Enter salta a la siguiente fila), ✕ cierra posición, y CERRAR SEMANA sella todo.'
             : '%/día = Yahoo Finance con etiqueta de frescura al pasar el ratón · %/semana = cierre vs cierre anterior'}
         </p>
+        {!cierre && (
+          <div className="pos-leyenda num">
+            <span><i className="ev-dot">●</i> evento en calendario (rojo &lt;3 días — el detalle, al pasar el ratón)</span>
+            <span><i className="badge new">NEW</i> alta por captura IA</span>
+            <span><i className="discrepancia">⚑</i> el análisis IA discrepa de tu ESTADO</span>
+            <span><b>FTE</b> fuente de la idea: en blanco YO · B Belar · P prensa · R redes</span>
+          </div>
+        )}
       </div>
 
       {sel && !cierre && (
