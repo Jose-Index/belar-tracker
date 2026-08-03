@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   fetchPosiciones, updatePosicion, altaPosicion, cerrarPosicion,
-  guardarLiquidez, cerrarSemana, fetchNotas, addNota,
+  guardarLiquidez, guardarBtcWallet, cerrarSemana, fetchNotas, addNota,
 } from '../lib/posiciones-db'
 import { getSimbolos, yahooDe, fetchQuotes, pctDia, frescura } from '../lib/quotes'
 import { asegurarCalendario, eventosProximos, estadoCalendario, analizarPosicion, guardarVeredicto } from '../lib/ia'
@@ -41,6 +41,7 @@ export default function Posiciones() {
   const [draft, setDraft] = useState({})        // {id: {invested?, current_value?}} en modo cierre
   const [liqDraft, setLiqDraft] = useState(null)
   const [liqTocada, setLiqTocada] = useState(false)
+  const [btcDraft, setBtcDraft] = useState(null)
   const [alta, setAlta] = useState(false)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
@@ -135,7 +136,8 @@ export default function Posiciones() {
 
   // ── Modo cierre: entrada/salida/commit ──
   function entrarCierre() {
-    setCierre(true); setDraft({}); setLiqDraft({ ...raw.liquidez }); setLiqTocada(false); setMsg(null)
+    setCierre(true); setDraft({}); setLiqDraft({ ...raw.liquidez }); setLiqTocada(false)
+    setBtcDraft(raw.btcQty); setMsg(null)
   }
   function salirSinCerrar() {
     setCierre(false); setDraft({}); setLiqDraft(null)
@@ -165,9 +167,10 @@ export default function Posiciones() {
       if (Object.keys(patch).length) await updatePosicion(Number(id), patch)
     }
     await guardarLiquidez(liqDraft)
+    await guardarBtcWallet(Number(btcDraft) || 0)
     // 2. recargar y commit
     const fresh = await fetchPosiciones()
-    const res = await cerrarSemana(fresh.positions, liqDraft)
+    const res = await cerrarSemana(fresh.positions, liqDraft, Number(btcDraft) || 0)
     setBusy(false)
     if (res.error) { setMsg('Error al cerrar semana: ' + res.error.message); return }
     setCierre(false); setDraft({}); setLiqDraft(null)
@@ -279,7 +282,11 @@ export default function Posiciones() {
                   onChange={e => { setLiqDraft({ ...liqDraft, [b]: e.target.value === '' ? '' : Number(e.target.value) }); setLiqTocada(true) }} />
               </label>
             ))}
-            <span className="liq-total">Total cuenta: ${fmt$(totalPos + totalLiq)}</span>
+            <label title="Monedero BTC personal (cantidad en BTC): se valora a precio de mercado en el cierre">₿ wallet
+              <input data-col="liq" value={btcDraft ?? ''} onKeyDown={keyNav}
+                onChange={e => setBtcDraft(e.target.value === '' ? '' : Number(e.target.value))} />
+            </label>
+            <span className="liq-total">Total cuenta: ${fmt$(totalPos + totalLiq)} + ₿</span>
           </div>
         )}
 

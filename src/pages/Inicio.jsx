@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  AreaChart, Area, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   ReferenceLine, ReferenceArea, CartesianGrid,
 } from 'recharts'
 import { supabase } from '../lib/supabase'
@@ -14,6 +14,9 @@ const fmtPct = v => v == null ? '—' : (v > 0 ? '+' : '') + v.toFixed(2) + '%'
 const pctClass = v => v == null ? '' : v > 0 ? 'up' : v < 0 ? 'down' : ''
 const fFecha = d => d ? d.slice(2).split('-').reverse().join('/') : '—'
 
+const BROKER_COLS = { etoro: '#2E6BF6', xtb: '#3BC9F5', ibkr: '#8A93A6', btc: '#17202E' }
+const BROKER_LBL = { etoro: 'eToro', xtb: 'XTB', ibkr: 'IBKR', btc: '₿ wallet' }
+
 export default function Inicio() {
   const [weeks, setWeeks] = useState(null)
   const [hitos, setHitos] = useState([])
@@ -21,12 +24,13 @@ export default function Inicio() {
   const [contribs, setContribs] = useState([])
   const [liquidez, setLiquidez] = useState({})
   const [divisa, setDivisa] = useState('$')
-  const [neto, setNeto] = useState(false)   // TWR: desempeño sin aportaciones
+  const [neto, setNeto] = useState(false)      // TWR: desempeño sin aportaciones
+  const [desglose, setDesglose] = useState(false)  // líneas por broker + BTC wallet
   const [altaHito, setAltaHito] = useState(false)
 
   async function cargar() {
     const [w, h, p, c, st] = await Promise.all([
-      supabase.from('weekly_snapshots').select('week_end,total_value,eurusd').order('week_end'),
+      supabase.from('weekly_snapshots').select('*').order('week_end'),
       supabase.from('hitos').select('*').order('fecha_ini'),
       supabase.from('positions').select('invested,current_value'),
       supabase.from('contributions').select('fecha,importe_eur,importe_usd'),
@@ -57,6 +61,19 @@ export default function Inicio() {
   }, [weeks, contribs, neto])
 
   const serieActiva = neto ? serieNeta.map(p => ({ fecha: p.fecha, idx: p.idx })) : serie
+
+  // Desglose por broker + monedero BTC (histórico migrado: legacy.data; nuevo: desglose)
+  const serieDesglose = useMemo(() => {
+    if (!weeks || !desglose) return []
+    return weeks.map(w => {
+      const d = w.desglose || w.legacy?.data || {}
+      return {
+        fecha: w.week_end,
+        etoro: d.etoro ?? null, xtb: d.xtb ?? null, ibkr: d.ibkr ?? null,
+        btc: d.btc_usd ?? null,
+      }
+    })
+  }, [weeks, desglose])
 
   // Boxes
   const totalPos = positions.reduce((a, p) => a + Number(p.current_value ?? p.invested), 0)
@@ -117,10 +134,12 @@ export default function Inicio() {
           <div className="evo-controles">
             <button className="btn-sec" onClick={() => setAltaHito(true)}>+ Hito</button>
             <div className="divisa-toggle num">
-              <button className={neto ? 'on' : ''} onClick={() => setNeto(!neto)}
+              <button className={desglose ? 'on' : ''} onClick={() => { setDesglose(!desglose); setNeto(false) }}
+                      title="Líneas por broker (eToro, XTB, IBKR) y monedero BTC personal">Desglose</button>
+              <button className={neto ? 'on' : ''} onClick={() => { setNeto(!neto); setDesglose(false) }}
                       title="Rentabilidad TWR base 100: la curva de la gestión, descontando las aportaciones de capital (como el valor liquidativo de un fondo)">Rentabilidad</button>
             </div>
-            <div className="divisa-toggle num" style={neto ? { opacity: .4, pointerEvents: 'none' } : null}>
+            <div className="divisa-toggle num" style={(neto || desglose) ? { opacity: .4, pointerEvents: 'none' } : null}>
               {['$', '€'].map(d => (
                 <button key={d} className={divisa === d ? 'on' : ''} onClick={() => setDivisa(d)}>{d}</button>
               ))}
@@ -128,6 +147,21 @@ export default function Inicio() {
           </div>
         </div>
         <ResponsiveContainer width="100%" height={340}>
+          {desglose ? (
+            <LineChart data={serieDesglose} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid stroke="#E3E8F0" vertical={false} />
+              <XAxis dataKey="fecha" tickFormatter={fFecha} tick={{ fontSize: 11, fontFamily: 'JetBrains Mono' }} minTickGap={60} />
+              <YAxis tickFormatter={fmtK} tick={{ fontSize: 11, fontFamily: 'JetBrains Mono' }} width={46} domain={['auto', 'auto']} />
+              <Tooltip content={<TipDesglose />} />
+              {hitos.map(h => h.fecha_fin
+                ? <ReferenceArea key={h.id} x1={h.fecha_ini} x2={h.fecha_fin} fill="#F0A020" fillOpacity={0.10} />
+                : <ReferenceLine key={h.id} x={h.fecha_ini} stroke="#8A93A6" strokeDasharray="4 3" />)}
+              {Object.keys(BROKER_COLS).map(k => (
+                <Line key={k} type="monotone" dataKey={k} stroke={BROKER_COLS[k]}
+                      strokeWidth={k === 'btc' ? 1.4 : 1.8} dot={false} connectNulls />
+              ))}
+            </LineChart>
+          ) : (
           <AreaChart data={serieActiva} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="gAzul" x1="0" y1="0" x2="0" y2="1">
@@ -144,7 +178,19 @@ export default function Inicio() {
               : <ReferenceLine key={h.id} x={h.fecha_ini} stroke="#8A93A6" strokeDasharray="4 3" />)}
             <Area type="monotone" dataKey={km} stroke="#2E6BF6" strokeWidth={2} fill="url(#gAzul)" connectNulls />
           </AreaChart>
+          )}
         </ResponsiveContainer>
+        {desglose && (
+          <div className="hitos-leyenda">
+            {Object.keys(BROKER_COLS).map(k => (
+              <span key={k} className="hito-chip">
+                <span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2,
+                               background: BROKER_COLS[k], marginRight: 6, verticalAlign: 'middle' }} />
+                {BROKER_LBL[k]}
+              </span>
+            ))}
+          </div>
+        )}
         {hitos.length > 0 && (
           <div className="hitos-leyenda">
             {hitos.map(h => (
@@ -181,6 +227,20 @@ export default function Inicio() {
       </div>
 
       {altaHito && <AltaHito onClose={() => setAltaHito(false)} onSave={guardarHito} />}
+    </div>
+  )
+}
+
+function TipDesglose({ active, payload, label }) {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="tip-evo num">
+      <div>{fFecha(label)}</div>
+      {payload.filter(p => p.value != null).map(p => (
+        <div key={p.dataKey}>
+          <span style={{ color: BROKER_COLS[p.dataKey] }}>●</span> {BROKER_LBL[p.dataKey]} <b>${fmt$(p.value)}</b>
+        </div>
+      ))}
     </div>
   )
 }
