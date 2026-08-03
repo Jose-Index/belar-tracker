@@ -4,7 +4,7 @@ import {
   guardarLiquidez, guardarBtcWallet, cerrarSemana, fetchNotas, addNota, fetchSeriePosicion,
 } from '../lib/posiciones-db'
 import { exportBackup } from '../lib/backup'
-import { AreaChart, Area, YAxis, XAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { AreaChart, Area, YAxis, XAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import { getSimbolos, yahooDe, fetchQuotes, pctDia, frescura } from '../lib/quotes'
 import { asegurarCalendario, eventosProximos, estadoCalendario, analizarPosicion, guardarVeredicto } from '../lib/ia'
 import IngestaIA from '../components/IngestaIA.jsx'
@@ -430,27 +430,30 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
         <div><dt>Valor</dt><dd>${fmt$(p.valor)} <span className={pctClass(p.gpPct)}>({fmtPct(p.gpPct)})</span></dd></div>
         <div><dt>SL</dt><dd>{p.sl_price ?? 'sin SL'}</dd></div>
         {p.ingest_source && <div><dt>Origen</dt><dd>{p.ingest_source}</dd></div>}
-        {serie.length > 1 && (
-          <div style={{ gridColumn: '1 / -1', marginTop: 4 }}>
-            <ResponsiveContainer width="100%" height={90}>
-              <AreaChart data={serie} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="gPos" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#2E6BF6" stopOpacity={0.22} />
-                    <stop offset="100%" stopColor="#2E6BF6" stopOpacity={0.02} />
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="fecha" hide />
-                <YAxis domain={['auto', 'auto']} hide />
-                <Tooltip labelFormatter={f => f?.slice(2).split('-').reverse().join('/')}
-                         formatter={v => ['$' + fmt$(v), 'valor']} />
-                <Area type="monotone" dataKey="v" stroke="#2E6BF6" strokeWidth={1.7} fill="url(#gPos)" isAnimationActive={false} />
-              </AreaChart>
-            </ResponsiveContainer>
-            <div className="hist-n num" style={{ textAlign: 'right' }}>{serie.length} cierres semanales</div>
-          </div>
-        )}
       </dl>
+      {serie.length > 1 && (
+        <div className="pos-grafica num">
+          <ResponsiveContainer width="100%" height={90}>
+            <AreaChart data={serie} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="gPos" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#2E6BF6" stopOpacity={0.22} />
+                  <stop offset="100%" stopColor="#2E6BF6" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="fecha" hide />
+              <YAxis domain={['auto', 'auto']} hide />
+              <Tooltip labelFormatter={f => f?.slice(2).split('-').reverse().join('/')}
+                       formatter={v => ['$' + fmt$(v), 'valor']} />
+              {p.sl_price && p.entry_price && p.invested &&
+                <ReferenceLine y={Number(p.invested) * (1 + (Number(p.sl_price) / Number(p.entry_price) - 1) * Number(p.apalancamiento || 1))}
+                               stroke="#E5484D" strokeDasharray="4 3" />}
+              <Area type="monotone" dataKey="v" stroke="#2E6BF6" strokeWidth={1.7} fill="url(#gPos)" isAnimationActive={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+          <div className="hist-n" style={{ textAlign: 'right' }}>{serie.length} cierres semanales{p.sl_price ? ' · línea roja = valor en SL' : ''}</div>
+        </div>
+      )}
       <div className="attr-selects">
         <label>Estado
           <select value={p.estado} onChange={e => setAttr('estado', e.target.value)}>
@@ -509,9 +512,6 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
       </ul>
 
       <button className="btn-cerrar-pos" onClick={onCerrar}>Cerrar posición…</button>
-      <p className="placeholder" style={{ padding: 14, marginTop: 12 }}>
-        Próximamente: gráfica con SL y cierres semanales · eventos · ANÁLISIS IA
-      </p>
     </aside>
   )
 }

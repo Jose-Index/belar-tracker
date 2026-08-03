@@ -114,3 +114,6 @@
 .pos-leyenda { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 6px; font-size: 11px; color: var(--texto-neutro); align-items: baseline; }
 .pos-leyenda i { font-style: normal; }
 .pos-leyenda .badge.new { position: static; margin: 0 2px 0 0; }
+
+/* ─── Gráfica del detalle de posición ─── */
+.pos-grafica { margin: 4px 0 12px; width: 100%; min-width: 0; display: block; }
