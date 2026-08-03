@@ -105,7 +105,7 @@ export default function Mercados() {
       <div className="m-boxes">
         {lista.map(s => (
           <BoxSimbolo key={s.id} s={s} q={quotes[s.yahoo_symbol]} pts={series[s.yahoo_symbol]}
-            comparable={COMPARABLES.includes(range)}
+            range={range} comparable={COMPARABLES.includes(range)}
             comparando={comparando?.id === s.id}
             onComparar={() => setComparando(comparando?.id === s.id ? null : s)}
             edit={edit} onQuitar={() => quitar(s)} onMover={d => mover(s, d)} />
@@ -139,9 +139,17 @@ export default function Mercados() {
 }
 
 // ─── Box: gráfica abierta + % del periodo + botón comparar ───────────────
-function BoxSimbolo({ s, q, pts, comparable, comparando, onComparar, edit, onQuitar, onMover }) {
+function BoxSimbolo({ s, q, pts, range, comparable, comparando, onComparar, edit, onQuitar, onMover }) {
   const serie = pts || []
-  const pct = serie.length > 1 ? (serie.at(-1).v - serie[0].v) / serie[0].v * 100 : null
+  // % como Apple/Yahoo: precio VIVO contra el cierre previo (1D) o contra el
+  // cierre de inicio del periodo. Nunca entre velas del propio gráfico.
+  let pct = null
+  if (range === '1d') {
+    if (q?.price && q?.prev_close) pct = (q.price - q.prev_close) / q.prev_close * 100
+  } else if (serie.length > 1) {
+    const fin = q?.price ?? serie.at(-1).v
+    pct = (fin - serie[0].v) / serie[0].v * 100
+  }
   const col = pct == null ? '#8A93A6' : pct >= 0 ? '#16A34A' : '#E5484D'
 
   return (
@@ -151,7 +159,9 @@ function BoxSimbolo({ s, q, pts, comparable, comparando, onComparar, edit, onQui
         <span className={'d ' + pctClass(pct)}>{fmtPct(pct)}</span>
       </div>
       <div className="m-box-precio" title={q ? frescura(q) : 'sin dato'}>
-        {q ? Number(q.price).toLocaleString('es-ES', { maximumFractionDigits: q.price > 100 ? 0 : 4 }) : '—'}
+        {q ? Number(q.price).toLocaleString('es-ES', q.price < 1
+          ? { minimumFractionDigits: 4, maximumFractionDigits: 4 }
+          : { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
       </div>
       <div className="m-box-chart">
         {serie.length > 1 ? (
