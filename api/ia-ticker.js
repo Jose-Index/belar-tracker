@@ -28,8 +28,9 @@ export default async function handler(req, res) {
   try {
     const candidatos = await buscarYahoo(q)
 
-    // Si lo tecleado ya ES un símbolo exacto de Yahoo, no hay nada que resolver
-    const exacto = candidatos.find(c => c.symbol.toUpperCase() === q.toUpperCase())
+    // Atajo símbolo exacto: solo si viene tecleado COMO ticker (mayúsculas tal cual).
+    // "oro" en minúsculas NO es el ETF "ORO": eso lo decide la IA con el criterio canónico.
+    const exacto = q === q.toUpperCase() && candidatos.find(c => c.symbol === q)
     if (exacto) { res.status(200).json({ symbol: exacto.symbol, nombre: exacto.nombre, via: 'exacto' }); return }
 
     const msg = await anthropic({
