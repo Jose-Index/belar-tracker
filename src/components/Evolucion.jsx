@@ -92,7 +92,8 @@ export default function Evolucion() {
     }
     return {
       id: h.id, frac: i / n, fracFin: j >= 0 ? j / n : null,
-      etq: `${h.etiqueta} · ${fFecha(h.fecha_ini)}${h.fecha_fin ? '–' + fFecha(h.fecha_fin) : ''}`,
+      texto: h.etiqueta,
+      fechas: `${fFecha(h.fecha_ini)}${h.fecha_fin ? ' – ' + fFecha(h.fecha_fin) : ''}`,
     }
   }).filter(Boolean)
   const izq = frac => `calc(${PLOT_L}px + (100% - ${PLOT_L + PLOT_R}px) * ${frac})`
@@ -156,10 +157,16 @@ export default function Evolucion() {
             {m.fracFin != null && m.fracFin > m.frac &&
               <i className="hito-banda" style={{ left: izq(m.frac), width: ancho(m.fracFin - m.frac) }} />}
             <i className="hito-linea" style={{ left: izq(m.frac) }} />
-            <i className="hito-marca" style={{ left: izq(m.frac) }} data-etq={m.etq}
+            <i className="hito-marca" style={{ left: izq(m.frac) }}
                onMouseEnter={() => setHover(m.id)} onMouseLeave={() => setHover(null)} />
             {hover === m.id && (
-              <i className="hito-etq" style={{ left: izq(m.frac) }}>{m.etq}</i>
+              <i className="hito-etq" style={{
+                left: izq(m.frac),
+                transform: m.frac > 0.72 ? 'translateX(-92%)' : m.frac < 0.2 ? 'translateX(-8%)' : 'translateX(-50%)',
+              }}>
+                <b>{m.texto}</b>
+                <i>{m.fechas}</i>
+              </i>
             )}
           </span>
         ))}

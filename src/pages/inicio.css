@@ -143,8 +143,11 @@
 .hito-etq {
   top: -4px; transform: translateX(-50%); z-index: 5;
   background: var(--flotante); color: #EEF2F8; border: 1px solid var(--flotante-borde);
-  font: 500 11.5px var(--font-ui); font-style: normal; white-space: nowrap;
-  padding: 5px 10px; border-radius: 7px; box-shadow: 0 6px 20px rgba(13,20,32,.16);
+  font: 500 11.5px var(--font-ui); font-style: normal; line-height: 1.45;
+  white-space: normal; max-width: 30ch; text-align: left;   /* etiquetas largas: varias líneas */
+  padding: 6px 10px; border-radius: 7px; box-shadow: 0 6px 20px rgba(13,20,32,.16);
 }
+.hito-etq b { display: block; font-weight: 600; }
+.hito-etq i { display: block; font-style: normal; color: #AEB9C9; font-family: var(--font-datos); font-size: 10.5px; margin-top: 2px; }
 .hitos-tabla { margin-top: 14px; max-height: 220px; overflow-y: auto; border-top: 1px solid var(--borde); padding-top: 8px; }
 .hitos-tabla table { font-size: 12px; }
