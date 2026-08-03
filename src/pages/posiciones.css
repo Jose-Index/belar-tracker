@@ -148,3 +148,21 @@
   .pos-tabla th, .pos-tabla td { padding: 5px 6px; }
   .pos-leyenda { font-size: 10px; gap: 10px; }
 }
+
+/* ─── Columnas clave: VALOR · G/P $ · G/P % (las tres que se leen primero) ─── */
+.pos-tabla th.col-clave {
+  color: var(--texto); font-weight: 700;
+  background: #F4F7FC; border-bottom: 2px solid var(--borde);
+}
+.pos-tabla td.col-clave {
+  font-size: 13.5px; font-weight: 600;
+  background: rgba(46, 107, 246, 0.035);
+}
+.pos-tabla .col-ini { border-left: 1px solid var(--borde); }
+.pos-tabla .col-fin { border-right: 1px solid var(--borde); }
+/* En las filas con fondo de estado, el realce no compite: solo peso tipográfico */
+.pos-tabla tbody tr.fondo-OJO td.col-clave,
+.pos-tabla tbody tr.fondo-DUDA td.col-clave,
+.pos-tabla tbody tr.fondo-XSALIR td.col-clave,
+.pos-tabla tbody tr.sel td.col-clave { background: transparent; }
+@media (max-width: 900px) { .pos-tabla td.col-clave { font-size: 12px; } }

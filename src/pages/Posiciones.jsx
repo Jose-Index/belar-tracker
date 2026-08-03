@@ -319,9 +319,9 @@ export default function Posiciones() {
                 <th className="tl">BROKER</th>
                 <th title="Fecha de entrada en la posición">ENTRADA</th>
                 <th title="Capital invertido (USD)">INVERTIDO</th>
-                <th title="Valor actual (USD). Fuente única: tus capturas del cierre de semana.">VALOR</th>
-                <th title="Ganancia/pérdida abierta en dólares">G/P $</th>
-                <th title="Ganancia/pérdida abierta en % sobre invertido">G/P %</th>
+                <th className="col-clave col-ini" title="Valor actual (USD). Fuente única: tus capturas del cierre de semana.">VALOR</th>
+                <th className="col-clave" title="Ganancia/pérdida abierta en dólares">G/P $</th>
+                <th className="col-clave col-fin" title="Ganancia/pérdida abierta en % sobre invertido">G/P %</th>
                 <th title="Variación de HOY del activo (precio vivo Yahoo vs cierre anterior)">%/día</th>
                 <th title="Variación desde el último cierre de semana">%/sem</th>
                 <th title="Tu valoración de la posición. ⚑ = el análisis IA discrepa (pasa el ratón por la bandera para ver su veredicto).">ESTADO</th>
@@ -351,12 +351,12 @@ export default function Posiciones() {
                     ? <input data-col="inv" defaultValue={p.invested} onKeyDown={keyNav}
                         onChange={e => setDraft(d => ({ ...d, [p.id]: { ...d[p.id], invested: Number(e.target.value) } }))} />
                     : fmt$(p.invested)}</td>
-                  <td>{cierre
+                  <td className="col-clave col-ini">{cierre
                     ? <input data-col="val" defaultValue={p.valor} onKeyDown={keyNav}
                         onChange={e => setDraft(d => ({ ...d, [p.id]: { ...d[p.id], current_value: Number(e.target.value) } }))} />
                     : fmt$(p.valor)}</td>
-                  <td className={pctClass(p.gp)}>{fmt$(p.gp)}</td>
-                  <td className={pctClass(p.gpPct)}>{fmtPct(p.gpPct)}</td>
+                  <td className={'col-clave ' + pctClass(p.gp)}>{fmt$(p.gp)}</td>
+                  <td className={'col-clave col-fin ' + pctClass(p.gpPct)}>{fmtPct(p.gpPct)}</td>
                   <td className={pctClass(p.dia)} title={p.diaFresco || ''}>{fmtPct(p.dia)}</td>
                   <td className={pctClass(p.sem)}>{fmtPct(p.sem)}</td>
                   <td>
