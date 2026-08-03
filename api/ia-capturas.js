@@ -10,11 +10,12 @@ const PROMPT = `Eres el extractor de datos de BTP (Belar Tracker Pro), el tracke
 Analiza las capturas de pantalla adjuntas de sus brokers (eToro, XTB y/o IBKR) y extrae TODAS las posiciones visibles.
 
 Devuelve EXCLUSIVAMENTE un JSON con esta forma, sin texto adicional:
-{"extracciones":[{"broker":"etoro|xtb|ibkr","liquidez":123.45,"posiciones":[{"nombre":"NVIDIA Corp","ticker":"NVDA","invertido":1717.08,"valor":1728.69,"apalancamiento":1}]}]}
+{"extracciones":[{"broker":"etoro|xtb|ibkr","liquidez":123.45,"posiciones":[{"nombre":"NVIDIA Corp","ticker":"NVDA","invertido":1717.08,"valor":1728.69,"gp":11.61,"apalancamiento":1}]}]}
 
 Reglas:
 - broker: dedúcelo del diseño de la app (eToro fondo claro/verde con avatares, XTB rojo/oscuro xStation, IBKR sobrio azul/blanco). Si no es deducible usa "etoro".
-- invertido = importe invertido/amount; valor = valor actual/market value. En USD (es la moneda operativa). Usa punto decimal.
+- invertido = importe invertido/amount/base de coste/valor de apertura; valor = valor actual/neto/de mercado. En USD (moneda operativa). Usa punto decimal.
+- gp = la columna G/P $ / Beneficio neto / PyG no realizadas SI está visible (con su signo); si no, null. Sirve de verificación aritmética: invertido + gp = valor.
 - ticker: el símbolo si aparece; si solo hay nombre comercial, tu mejor conversión a ticker (p.ej. "NVIDIA Corp"→"NVDA"). CopyTraders de eToro: usa el nombre del trader tal cual.
 - apalancamiento: x1 si no se indica.
 - liquidez: el saldo disponible/cash SI aparece en la captura; si no, null.

@@ -46,7 +46,24 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
         ))
         if (pos) {
           vistos.add(pos.id)
-          updates.push({ pos, invertido: r.invertido, valor: r.valor, sel: true })
+          // Verificación aritmética con G/P (invertido + gp = valor).
+          // Política prudente: LA CAPTURA MANDA. Solo se corrige INVERTIDO cuando la BD
+          // lo confirma (valor−gp = invertido actual). Todo lo demás que no cuadre se
+          // marca para revisión, nunca se "corrige" por deducción. CopyTraders exentos
+          // (su G/P de eToro es otra métrica y no cuadra por diseño).
+          let { invertido, valor, gp } = r
+          let curado = false, dudosa = false
+          const esCopy = simbolos.find(x => x.ticker.toUpperCase() === t)?.asset_type === 'copy'
+          if (!esCopy && gp != null && invertido != null && valor != null &&
+              Math.abs(invertido + gp - valor) > 0.05) {
+            const invBD = Number(pos.invested)
+            if (Math.abs((valor - gp) - invBD) < 0.05 && Math.abs(invertido - invBD) >= 0.05) {
+              invertido = invBD; curado = true
+            } else {
+              dudosa = true
+            }
+          }
+          updates.push({ pos, invertido, valor, sel: true, curado, dudosa })
         } else {
           nuevas.push({ ...r, broker: ex.broker, sel: true })
         }
@@ -98,6 +115,8 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
             <span>valor {fmt$(u.pos.current_value)} → <b>{fmt$(u.valor)}</b></span>
             {u.invertido != null && Math.abs(u.invertido - u.pos.invested) > 0.01 &&
               <span className="warn">invertido {fmt$(u.pos.invested)} → <b>{fmt$(u.invertido)}</b></span>}
+            {u.curado && <span className="warn" title="Lectura corregida por verificación aritmética (invertido + G/P = valor)">✓aritm.</span>}
+            {u.dudosa && <span className="down" title="Los importes no cuadran con G/P y no se pudo corregir: revisa a mano">⚠ revisar</span>}
           </label>
         ))}
       </>}
