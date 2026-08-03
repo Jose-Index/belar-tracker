@@ -1,0 +1,12 @@
+{
+  "name": "Belar Tracker Pro",
+  "short_name": "BTP",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F6F8FB",
+  "theme_color": "#0D1420",
+  "icons": [
+    { "src": "/btp-icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/btp-icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
