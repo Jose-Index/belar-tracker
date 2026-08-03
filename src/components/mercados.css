@@ -57,3 +57,10 @@
 .m-box.arrastrable:active { cursor: grabbing; }
 .m-box.sobre { outline: 2px dashed var(--azul-belar); outline-offset: 2px; }
 .m-box .acciones .agarre { color: var(--texto-neutro); cursor: grab; font-size: 13px; user-select: none; }
+
+@media (max-width: 900px) {
+  .m-boxes { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .mercados-head { flex-wrap: wrap; gap: 8px; }
+  .periodos { flex-wrap: wrap; }
+  .comparativa .comp-head h3 { font-size: 12.5px; }
+}

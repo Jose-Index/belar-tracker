@@ -19,13 +19,10 @@ export const ESTADOS = {
   XSALIR: { label: 'xSALIR', urg: 0 },
 }
 const CLASES = {
-  NUCLEO_ANCLA: 'NÚCLEO·A', NUCLEO_ESTRUCTURAL: 'NÚCLEO·E', NUCLEO_GESTION: 'NÚCLEO·G',
-  MOMENTUM: 'MOMENTUM', TACTICA: 'TÁCTICA', DISRUPTIVA: 'DISRUPT.',
+  NUCLEO: 'NÚCLEO', MOMENTUM: 'MOMENTUM', TACTICA: 'TÁCTICA', DISRUPTIVA: 'DISRUPT.',
 }
 const CLASE_AYUDA = {
-  NUCLEO_ANCLA: 'NÚCLEO ANCLA — defensivo. Sostiene la cartera cuando todo cae (oro, refugio). SL amplio (−15/−20%) o sin SL: solo sale por invalidación estructural, no por ruido.',
-  NUCLEO_ESTRUCTURAL: 'NÚCLEO ESTRUCTURAL — crecimiento a largo plazo, tesis de años. Revisión semestral, SL amplio (−10/−15%) sobre MA200 o soporte estructural.',
-  NUCLEO_GESTION: 'NÚCLEO GESTIÓN PROFESIONAL — capital delegado en un CopyTrader verificado. No lo gestionas tú: no lleva SL propio, se vigila con alarma de precio.',
+  NUCLEO: 'NÚCLEO — la base de la cartera: tesis de largo plazo y posiciones defensivas. Revisión semestral, SL amplio (−10/−20%) o sin SL: solo sale por invalidación estructural, nunca por ruido.',
   MOMENTUM: 'MOMENTUM — crecimiento sostenido (beta >1.3, volatilidad >3%, breakout con volumen). Trailing SL activo (−7/−10%, mínimo 2×ATR).',
   TACTICA: 'TÁCTICA — oportunidad de corto/medio plazo. SL técnico activo (−5/−8%, mínimo 2×ATR) sobre soporte claro.',
   DISRUPTIVA: 'DISRUPTIVA — smallcap especulativa. Sizing pequeño, SL muy amplio o sin SL: la invalidación es la tesis, no el precio.',
@@ -34,7 +31,7 @@ const FUENTES = ['YO', 'BELAR', 'PRENSA', 'REDES']
 const BROKERS = ['etoro', 'xtb', 'ibkr']
 const ORDEN_BROKER = { etoro: 0, xtb: 1, ibkr: 2 }   // orden de la casa, no alfabético
 const ORDENES = [
-  { id: 'broker', label: 'Broker A-Z' }, { id: 'entrada', label: 'Entrada' },
+  { id: 'broker', label: 'Broker' }, { id: 'entrada', label: 'Entrada' },
   { id: 'clase', label: 'Clase' }, { id: 'estado', label: 'Estado' },
   { id: 'sem', label: '%/semana' }, { id: 'dia', label: '%/día' },
   { id: 'peso', label: 'Peso' }, { id: 'gp', label: 'G/P %' },

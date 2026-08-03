@@ -87,16 +87,36 @@ a:hover { color: var(--azul-hover); }
   text-align: center;
 }
 
-/* ---- Móvil ---- */
-@media (max-width: 760px) {
-  .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr 28px; }
+/* ---- Móvil: layout vertical, menú en franja superior, tablas con scroll ---- */
+@media (max-width: 900px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; height: auto; min-height: 100%; }
   .menu {
-    grid-row: auto; flex-direction: row; overflow-x: auto;
+    grid-row: auto; flex-direction: row; overflow-x: auto; gap: 4px;
     border-right: none; border-bottom: 1px solid var(--borde);
-    padding: 8px;
+    padding: 8px 10px; position: sticky; top: 0; z-index: 20;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
   }
-  .menu .brand { padding: 4px 8px; }
+  .menu::-webkit-scrollbar { display: none; }
+  .menu .item { white-space: nowrap; padding: 7px 11px; font-size: 12.5px; }
+  .menu .brand { padding: 4px 6px; flex: none; }
   .menu .brand span { display: none; }
-  .footer-frase { grid-column: 1; }
-  .content { padding: 14px; }
+  .content { padding: 12px; overflow-x: hidden; }
+  .footer-frase { grid-column: 1; position: static; height: auto; padding: 8px 12px; text-align: center; font-size: 11px; line-height: 1.4; }
+
+  h1 { font-size: 20px; }
+  h2 { font-size: 15.5px; }
+  .card { padding: 12px; }
+
+  /* Tablas: scroll horizontal propio, nunca desbordan la pantalla */
+  .tabla-hist, .pos-tabla { min-width: 560px; }
+  .historico, .card > table { overflow-x: auto; }
+  .historico table { display: table; }
+
+  /* Formularios en columna */
+  .repo-alta, .aporte-form { flex-direction: column; align-items: stretch; }
+  .repo-alta input, .repo-alta select, .aporte-form input, .aporte-form select { width: 100% !important; }
+  .aporte-form label { width: 100%; }
+
+  .divisa-toggle { flex-wrap: wrap; }
 }
+

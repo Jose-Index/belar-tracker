@@ -1,6 +1,7 @@
 import { Routes, Route, NavLink } from 'react-router-dom'
 import Inicio from './pages/Inicio.jsx'
 import Historico from './pages/Historico.jsx'
+import Fuentes from './pages/Fuentes.jsx'
 import Posiciones from './pages/Posiciones.jsx'
 import Repositorio from './pages/Repositorio.jsx'
 import Alertas from './pages/Alertas.jsx'
@@ -18,6 +19,7 @@ const MENU = [
   { to: '/alertas', label: 'Alertas' },
   { to: '/patrimonio', label: 'Patrimonio €' },
   { to: '/calendario', label: 'Calendario' },
+  { to: '/fuentes', label: 'Fuentes' },
   { to: '/herramientas', label: 'Herramientas' },
 ]
 
@@ -46,6 +48,7 @@ export default function App() {
           <Route path="/alertas" element={<Alertas />} />
           <Route path="/patrimonio" element={<Patrimonio />} />
           <Route path="/calendario" element={<Calendario />} />
+          <Route path="/fuentes" element={<Fuentes />} />
           <Route path="/herramientas" element={<Herramientas />} />
           <Route path="/sandbox" element={<Sandbox />} />
         </Routes>

@@ -83,3 +83,40 @@
 .frase-fila { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; align-items: baseline; }
 .frase-fila.off .frase-txt { opacity: .4; }
 .frase-fila a { cursor: pointer; color: var(--texto-neutro); font-size: 11.5px; }
+
+/* ─── Calculadora de % ─── */
+.calc-card .divisa-toggle button { font-size: 11px; }
+.calc-campos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.calc-campos label { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; color: var(--texto-sec); min-width: 0; }
+.calc-campos input { font: 500 15px var(--font-datos); padding: 9px 10px; border: 1px solid var(--borde); border-radius: 8px; width: 100%; min-width: 0; }
+.calc-salida { margin-top: 12px; border-top: 1px solid var(--borde); padding-top: 10px; display: flex; flex-direction: column; gap: 2px; min-height: 52px; justify-content: center; }
+.calc-salida b { font-size: 26px; letter-spacing: -0.01em; }
+.calc-salida span { font-size: 11.5px; color: var(--texto-neutro); }
+.calc-salida.vacia span { color: var(--texto-neutro); }
+
+/* ─── Tabla de frases ─── */
+.tabla-frases td { vertical-align: middle; }
+.tabla-frases tr.off td { opacity: .45; }
+.frase-toggle { font-size: 11px; cursor: pointer; color: var(--texto-neutro); border: 1px solid var(--borde); border-radius: 10px; padding: 2px 9px; }
+.frase-toggle:hover { border-color: var(--azul-belar); color: var(--azul-belar); }
+
+/* ─── Fuentes ─── */
+.fuentes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; margin-top: 10px; }
+.fuente-card { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--borde); border-radius: 10px; padding: 10px 12px; color: inherit; transition: border-color .15s; }
+.fuente-card:hover { border-color: var(--azul-belar); color: inherit; }
+.fuente-card img { border-radius: 3px; flex: none; margin-top: 2px; }
+.fuente-nombre { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.fuente-tag { font: 500 9.5px var(--font-datos); border-radius: 8px; padding: 1px 7px; }
+.fuente-desc { font-size: 11.5px; color: var(--texto-sec); margin-top: 3px; line-height: 1.45; }
+
+@media (max-width: 900px) {
+  .boxes, .boxes.cuentas { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .box-v { font-size: 18px; }
+  .box-per { gap: 7px; font-size: 9.5px; }
+  .herr-grid { grid-template-columns: 1fr; }
+  .fuentes-grid { grid-template-columns: 1fr; }
+  .calc-campos { grid-template-columns: 1fr; }
+  .evo-head { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .cal-dia { flex-direction: column; gap: 2px; }
+  .cal-fecha { width: auto; }
+}

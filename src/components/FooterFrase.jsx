@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
-// Frase del día: rotación DIARIA (misma frase todo el día), del fondo curado + frases de José.
+// Frase aleatoria en CADA carga/refresco (decisión José 03/08), del fondo curado + suyas.
 export default function FooterFrase() {
   const [frase, setFrase] = useState(null)
 
@@ -9,8 +9,7 @@ export default function FooterFrase() {
     supabase.from('frases').select('texto,autor').eq('activa', true)
       .then(({ data }) => {
         if (!data?.length) return
-        const day = Math.floor(Date.now() / 86400000)
-        setFrase(data[day % data.length])
+        setFrase(data[Math.floor(Math.random() * data.length)])
       })
   }, [])
 

@@ -11,89 +11,147 @@ export default function Herramientas() {
       <h1>Herramientas</h1>
       <div className="herr-grid">
         <Calculadora />
-        <Frases />
         <Backup />
         <Acceso />
       </div>
-      <Fuentes />
+      <Frases />
+      <Simbolos />
     </div>
   )
 }
 
-// ─── Calculadora de posición: riesgo real con SL y apalancamiento ───
+// ─── Calculadora de porcentajes: dos modos ───
 function Calculadora() {
-  const [c, setC] = useState({ importe: '', entrada: '', sl: '', apal: 1 })
-  const imp = Number(c.importe), ent = Number(c.entrada), sl = Number(c.sl), ap = Number(c.apal) || 1
-  const distPct = ent && sl ? (sl - ent) / ent * 100 : null
-  const riesgo = imp && distPct != null ? imp * Math.abs(distPct) / 100 * ap : null
-  const inp = (k, ph, step = '0.01') => (
-    <label>{ph}<input type="number" step={step} inputMode="decimal" value={c[k]}
-      onChange={e => setC({ ...c, [k]: e.target.value })} /></label>
+  const [modo, setModo] = useState('pct')      // 'pct': A y B → % · 'valor': A y % → B
+  const [a, setA] = useState('')
+  const [b, setB] = useState('')
+  const [p, setP] = useState('')
+
+  const nA = parseFloat(String(a).replace(',', '.'))
+  const nB = parseFloat(String(b).replace(',', '.'))
+  const nP = parseFloat(String(p).replace(',', '.'))
+
+  let res = null
+  if (modo === 'pct' && isFinite(nA) && isFinite(nB) && nA !== 0) {
+    const pct = (nB - nA) / nA * 100
+    res = {
+      titular: (pct > 0 ? '+' : '') + pct.toFixed(2) + '%',
+      clase: pct > 0 ? 'up' : pct < 0 ? 'down' : '',
+      pie: `Diferencia ${(nB - nA) > 0 ? '+' : ''}${fmt$(nB - nA)} · multiplicador ×${(nB / nA).toFixed(3)}`,
+    }
+  } else if (modo === 'valor' && isFinite(nA) && isFinite(nP)) {
+    const fin = nA * (1 + nP / 100)
+    res = {
+      titular: fmt$(fin),
+      clase: nP > 0 ? 'up' : nP < 0 ? 'down' : '',
+      pie: `Variación ${(fin - nA) > 0 ? '+' : ''}${fmt$(fin - nA)} sobre ${fmt$(nA)}`,
+    }
+  }
+
+  const campo = (etq, val, set, ph) => (
+    <label>{etq}
+      <input type="text" inputMode="decimal" value={val} placeholder={ph}
+             onChange={e => set(e.target.value)} />
+    </label>
   )
+
   return (
-    <div className="card">
-      <h3>Calculadora de posición</h3>
-      <div className="calc-grid num">
-        {inp('importe', 'Importe $')}
-        {inp('entrada', 'Precio entrada')}
-        {inp('sl', 'Precio SL')}
-        {inp('apal', 'Apalancamiento', '1')}
+    <div className="card calc-card">
+      <h3>Calculadora de %</h3>
+      <div className="divisa-toggle" style={{ marginBottom: 12 }}>
+        <button className={modo === 'pct' ? 'on' : ''} onClick={() => setModo('pct')}
+                title="Con dos cantidades, el porcentaje de variación entre ellas">A y B → %</button>
+        <button className={modo === 'valor' ? 'on' : ''} onClick={() => setModo('valor')}
+                title="Con una cantidad y un porcentaje, la cantidad resultante">A y % → B</button>
       </div>
-      {riesgo != null && (
-        <div className="calc-res num">
-          <div>Distancia SL: <b className={distPct < 0 ? 'down' : 'up'}>{distPct.toFixed(2)}%</b></div>
-          <div>Riesgo si salta: <b className="down">${fmt$(riesgo)}</b> ({(riesgo / imp * 100).toFixed(1)}% del importe)</div>
-          {ap > 2 && <div className="down">⚠ Apalancamiento &gt; x2: fuera de las reglas de la casa.</div>}
-        </div>
-      )}
+      <div className="calc-campos num">
+        {campo('A · inicial', a, setA, '1000')}
+        {modo === 'pct'
+          ? campo('B · final', b, setB, '1150')
+          : campo('% variación', p, setP, '15  ·  −8')}
+      </div>
+      <div className={'calc-salida num ' + (res ? '' : 'vacia')}>
+        {res ? (
+          <>
+            <b className={res.clase}>{res.titular}</b>
+            <span>{res.pie}</span>
+          </>
+        ) : <span>Rellena los dos campos.</span>}
+      </div>
     </div>
   )
 }
 
-// ─── Editor de frases del footer ───
+// ─── Editor de frases del footer: tabla completa y editable ───
 function Frases() {
   const [rows, setRows] = useState([])
   const [nueva, setNueva] = useState({ texto: '', autor: '' })
-  const [abierto, setAbierto] = useState(false)
+  const [filtro, setFiltro] = useState('TODAS')
+
   const cargar = async () => {
     const { data } = await supabase.from('frases').select('*').order('id')
     setRows(data || [])
   }
   useEffect(() => { cargar() }, [])
+
   async function alta(e) {
     e.preventDefault()
     if (!nueva.texto.trim()) return
     await supabase.from('frases').insert({ texto: nueva.texto.trim(), autor: nueva.autor.trim() || null, origen: 'jose' })
     setNueva({ texto: '', autor: '' }); cargar()
   }
+  const editar = async (r, campo, valor) => {
+    await supabase.from('frases').update({ [campo]: valor.trim() || null }).eq('id', r.id); cargar()
+  }
+  const alternar = async r => { await supabase.from('frases').update({ activa: !r.activa }).eq('id', r.id); cargar() }
+  const borrar = async r => {
+    if (!confirm(`¿Borrar la frase «${r.texto.slice(0, 60)}…»?`)) return
+    await supabase.from('frases').delete().eq('id', r.id); cargar()
+  }
+
+  const visibles = filtro === 'TODAS' ? rows
+    : filtro === 'ACTIVAS' ? rows.filter(r => r.activa)
+    : filtro === 'PAUSADAS' ? rows.filter(r => !r.activa)
+    : rows.filter(r => r.origen === 'jose')
+
   return (
-    <div className="card">
-      <h3>Frases del footer <span className="hist-n num">{rows.filter(r => r.activa).length} activas</span></h3>
-      <form onSubmit={alta} style={{ display: 'grid', gap: 8 }}>
-        <input placeholder="Nueva frase…" value={nueva.texto} onChange={e => setNueva({ ...nueva, texto: e.target.value })} className="herr-inp" />
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input placeholder="autor" value={nueva.autor} onChange={e => setNueva({ ...nueva, autor: e.target.value })} className="herr-inp" style={{ flex: 1 }} />
-          <button className="btn-sec">+ Añadir</button>
-        </div>
-      </form>
-      <a className="edit-toggle" style={{ display: 'inline-block', marginTop: 10 }} onClick={() => setAbierto(!abierto)}>
-        {abierto ? 'ocultar lista' : 'ver lista completa'}
-      </a>
-      {abierto && (
-        <div className="frases-lista">
-          {rows.map(r => (
-            <div key={r.id} className={'frase-fila' + (r.activa ? '' : ' off')}>
-              <span className="frase-txt">«{r.texto}» {r.autor && <i>— {r.autor}</i>}</span>
-              <span>
-                <a onClick={async () => { await supabase.from('frases').update({ activa: !r.activa }).eq('id', r.id); cargar() }}>
-                  {r.activa ? 'pausar' : 'activar'}
-                </a>
-                {' '}<a className="borrar-x" onClick={async () => { if (confirm('¿Borrar frase?')) { await supabase.from('frases').delete().eq('id', r.id); cargar() } }}>✕</a>
-              </span>
-            </div>
+    <div className="card historico" style={{ marginTop: 14 }}>
+      <div className="repo-head">
+        <h2 style={{ margin: 0 }}>Frases del footer <span className="hist-n num">{rows.filter(r => r.activa).length} activas de {rows.length}</span></h2>
+        <div className="divisa-toggle">
+          {['TODAS', 'ACTIVAS', 'PAUSADAS', 'MÍAS'].map(f => (
+            <button key={f} className={filtro === f ? 'on' : ''} onClick={() => setFiltro(f)}>{f}</button>
           ))}
         </div>
-      )}
+      </div>
+
+      <form className="repo-alta" onSubmit={alta}>
+        <input placeholder="Nueva frase…" value={nueva.texto} style={{ flex: 1, minWidth: 240 }}
+               onChange={e => setNueva({ ...nueva, texto: e.target.value })} />
+        <input placeholder="autor" value={nueva.autor} style={{ width: 150 }}
+               onChange={e => setNueva({ ...nueva, autor: e.target.value })} />
+        <button className="btn-sec">+ Añadir</button>
+      </form>
+
+      <table className="tabla-hist tabla-frases" style={{ marginTop: 10 }}>
+        <thead><tr><th style={{ width: 40 }}>#</th><th className="tl">FRASE</th><th className="tl">AUTOR</th><th>ORIGEN</th><th>ESTADO</th><th /></tr></thead>
+        <tbody>
+          {visibles.map((r, i) => (
+            <tr key={r.id} className={r.activa ? '' : 'off'}>
+              <td className="num" style={{ color: 'var(--texto-neutro)' }}>{i + 1}</td>
+              <td className="tl"><input className="sb-inp" style={{ width: '100%' }} defaultValue={r.texto}
+                     onBlur={e => e.target.value !== r.texto && editar(r, 'texto', e.target.value)} /></td>
+              <td className="tl"><input className="sb-inp" style={{ width: 140 }} defaultValue={r.autor || ''}
+                     placeholder="—" onBlur={e => e.target.value !== (r.autor || '') && editar(r, 'autor', e.target.value)} /></td>
+              <td className="num" style={{ fontSize: 10.5, color: 'var(--texto-neutro)' }}>{r.origen}</td>
+              <td><a className="frase-toggle" onClick={() => alternar(r)}>{r.activa ? 'activa' : 'pausada'}</a></td>
+              <td><a className="borrar-x" onClick={() => borrar(r)}>✕</a></td>
+            </tr>
+          ))}
+          {!visibles.length && <tr><td colSpan={6} className="placeholder">Sin frases en este filtro.</td></tr>}
+        </tbody>
+      </table>
+      <p className="comp-nota">El footer muestra una frase al azar en cada carga o refresco. Las pausadas no entran en el sorteo.</p>
     </div>
   )
 }
@@ -152,8 +210,8 @@ function Acceso() {
   )
 }
 
-// ─── Fuentes: tabla symbols (símbolo canónico + aliases de capturas) ───
-function Fuentes() {
+// ─── Símbolos y alias: matching de capturas y precios Yahoo ───
+function Simbolos() {
   const [rows, setRows] = useState([])
   const [abierto, setAbierto] = useState(false)
   const cargar = async () => {
@@ -165,24 +223,24 @@ function Fuentes() {
     await supabase.from('symbols').update({ [campo]: valor.trim() || null }).eq('id', r.id); cargar()
   }
   return (
-    <div className="card" style={{ marginTop: 14 }}>
-      <h3 style={{ cursor: 'pointer' }} onClick={() => setAbierto(!abierto)}>
-        {abierto ? '▾' : '▸'} Fuentes · símbolos <span className="hist-n num">{rows.length}</span>
-      </h3>
+    <div className="card historico" style={{ marginTop: 14 }}>
+      <h2 style={{ cursor: 'pointer', margin: 0 }} onClick={() => setAbierto(!abierto)}>
+        {abierto ? '▾' : '▸'} Símbolos y alias <span className="hist-n num">{rows.length}</span>
+      </h2>
       {abierto && (
         <>
-          <p style={{ fontSize: 12.5, color: 'var(--texto-sec)', marginTop: 0 }}>
-            Símbolo canónico por activo (Yahoo) y aliases para el matching de capturas. Precios: Yahoo Finance vía la API propia, sin caché.
+          <p className="comp-nota" style={{ marginTop: 4 }}>
+            Símbolo canónico Yahoo por activo y alias con los que aparece en las capturas de los brokers (los usa la ingesta IA para casar posiciones).
           </p>
           <table className="tabla-hist num">
-            <thead><tr><th>TICKER</th><th>YAHOO</th><th>NOMBRE</th><th>ALIASES (coma)</th></tr></thead>
+            <thead><tr><th>TICKER</th><th>YAHOO</th><th className="tl">NOMBRE</th><th className="tl">ALIAS (coma)</th></tr></thead>
             <tbody>
               {rows.map(r => (
                 <tr key={r.id}>
                   <td style={{ fontWeight: 700 }}>{r.ticker}</td>
                   <td><input className="sb-inp" defaultValue={r.yahoo_symbol || ''} onBlur={e => e.target.value !== (r.yahoo_symbol || '') && editar(r, 'yahoo_symbol', e.target.value)} /></td>
-                  <td><input className="sb-inp" style={{ width: 150 }} defaultValue={r.display_name || ''} onBlur={e => e.target.value !== (r.display_name || '') && editar(r, 'display_name', e.target.value)} /></td>
-                  <td><input className="sb-inp" style={{ width: 220 }} defaultValue={(r.aliases || []).join(', ')} onBlur={async e => {
+                  <td className="tl"><input className="sb-inp" style={{ width: 160 }} defaultValue={r.display_name || ''} onBlur={e => e.target.value !== (r.display_name || '') && editar(r, 'display_name', e.target.value)} /></td>
+                  <td className="tl"><input className="sb-inp" style={{ width: 240 }} defaultValue={(r.aliases || []).join(', ')} onBlur={async e => {
                     const arr = e.target.value.split(',').map(x => x.trim()).filter(Boolean)
                     await supabase.from('symbols').update({ aliases: arr.length ? arr : null }).eq('id', r.id); cargar()
                   }} /></td>
