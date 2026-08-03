@@ -82,12 +82,18 @@ export default function Mercados() {
     } catch { setPropuesta({ error: 'sin respuesta del resolutor' }) }
     setBuscando(false)
   }
-  async function mover(s, dir) {
-    const i = lista.indexOf(s), j = i + dir
-    if (j < 0 || j >= lista.length) return
-    const o = lista[j]
-    await supabase.from('symbols').update({ watchlist_pos: o.watchlist_pos }).eq('id', s.id)
-    await supabase.from('symbols').update({ watchlist_pos: s.watchlist_pos }).eq('id', o.id)
+  // Reordenación por drag & drop: optimista en pantalla, posiciones 1..n en BD
+  async function soltar(fromId, toId) {
+    if (fromId === toId) return
+    const i = lista.findIndex(x => x.id === fromId), j = lista.findIndex(x => x.id === toId)
+    if (i < 0 || j < 0) return
+    const nueva = [...lista]
+    const [mov] = nueva.splice(i, 1)
+    nueva.splice(j, 0, mov)
+    setLista(nueva)
+    await Promise.all(nueva.map((s, k) =>
+      s.watchlist_pos === k + 1 ? null : supabase.from('symbols').update({ watchlist_pos: k + 1 }).eq('id', s.id)
+    ).filter(Boolean))
     cargarLista()
   }
 
@@ -108,7 +114,7 @@ export default function Mercados() {
             range={range} comparable={COMPARABLES.includes(range)}
             comparando={comparando?.id === s.id}
             onComparar={() => setComparando(comparando?.id === s.id ? null : s)}
-            edit={edit} onQuitar={() => quitar(s)} onMover={d => mover(s, d)} />
+            edit={edit} onQuitar={() => quitar(s)} onSoltar={fromId => soltar(fromId, s.id)} />
         ))}
         {edit && (
           <form className="m-box m-box-add" onSubmit={añadir}>
@@ -139,8 +145,9 @@ export default function Mercados() {
 }
 
 // ─── Box: gráfica abierta + % del periodo + botón comparar ───────────────
-function BoxSimbolo({ s, q, pts, range, comparable, comparando, onComparar, edit, onQuitar, onMover }) {
+function BoxSimbolo({ s, q, pts, range, comparable, comparando, onComparar, edit, onQuitar, onSoltar }) {
   const serie = pts || []
+  const [sobre, setSobre] = useState(false)
   // % como Apple/Yahoo: precio VIVO contra el cierre previo (1D) o contra el
   // cierre de inicio del periodo. Nunca entre velas del propio gráfico.
   let pct = null
@@ -153,7 +160,16 @@ function BoxSimbolo({ s, q, pts, range, comparable, comparando, onComparar, edit
   const col = pct == null ? '#8A93A6' : pct >= 0 ? '#16A34A' : '#E5484D'
 
   return (
-    <div className={'m-box card num' + (comparando ? ' on' : '')}>
+    <div className={'m-box card num' + (comparando ? ' on' : '') + (edit ? ' arrastrable' : '') + (sobre ? ' sobre' : '')}
+         draggable={edit}
+         onDragStart={e => e.dataTransfer.setData('text/btp-symbol', String(s.id))}
+         onDragOver={e => { if (edit) { e.preventDefault(); setSobre(true) } }}
+         onDragLeave={() => setSobre(false)}
+         onDrop={e => {
+           e.preventDefault(); setSobre(false)
+           const fromId = Number(e.dataTransfer.getData('text/btp-symbol'))
+           if (fromId) onSoltar(fromId)
+         }}>
       <div className="m-box-head">
         <span className="t" title={s.display_name || ''}>{s.ticker}</span>
         <span className={'d ' + pctClass(pct)}>{fmtPct(pct)}</span>
@@ -183,8 +199,7 @@ function BoxSimbolo({ s, q, pts, range, comparable, comparando, onComparar, edit
       <div className="m-box-pie">
         {edit ? (
           <span className="acciones">
-            <a onClick={() => onMover(-1)}>‹</a>
-            <a onClick={() => onMover(1)}>›</a>
+            <span className="agarre" title="Arrastra el box para reordenar">⠿</span>
             <a className="x" onClick={onQuitar}>✕</a>
           </span>
         ) : (
