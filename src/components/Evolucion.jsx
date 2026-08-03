@@ -73,8 +73,10 @@ export default function Evolucion() {
   }, [weeks, desglose, neto, contribs])
 
   async function guardarHito(h) {
-    await supabase.from('hitos').insert(h)
-    cargar()
+    const { error } = await supabase.from('hitos').insert(h)
+    if (error) return { error: error.message }
+    await cargar()
+    return {}
   }
 
   // Hitos: marca discreta en una capa propia sobre la gráfica (recharts 3 no admite
@@ -221,13 +223,17 @@ function TipEvo({ active, payload, label, divisa, neto }) {
 function GestorHitos({ hitos, onClose, onSave, onRecargar }) {
   const hoy = new Date().toISOString().slice(0, 10)
   const [f, setF] = useState({ etiqueta: '', fecha_ini: hoy, fecha_fin: '' })
+  const [err, setErr] = useState('')
   return (
     <div className="modal-fondo" onClick={onClose}>
       <form className="card modal num" onClick={e => e.stopPropagation()}
-            onSubmit={e => {
+            onSubmit={async e => {
               e.preventDefault()
-              if (!f.etiqueta.trim()) return
-              onSave({ ...f, fecha_fin: f.fecha_fin || null, autor: 'jose' })
+              setErr('')
+              if (!f.etiqueta.trim()) { setErr('La etiqueta es obligatoria.'); return }
+              if (f.fecha_fin && f.fecha_fin < f.fecha_ini) { setErr('La fecha de fin es anterior a la de inicio.'); return }
+              const r = await onSave({ ...f, fecha_fin: f.fecha_fin || null, autor: 'jose' })
+              if (r?.error) { setErr('No se ha podido guardar: ' + r.error); return }
               setF({ etiqueta: '', fecha_ini: hoy, fecha_fin: '' })
             }}>
         <h2>Hitos</h2>
@@ -238,6 +244,7 @@ function GestorHitos({ hitos, onClose, onSave, onRecargar }) {
           <label>Inicio<input type="date" value={f.fecha_ini} onChange={e => setF({ ...f, fecha_ini: e.target.value })} /></label>
           <label>Fin (opcional)<input type="date" value={f.fecha_fin} onChange={e => setF({ ...f, fecha_fin: e.target.value })} /></label>
         </div>
+        {err && <p className="auth-err" style={{ margin: '4px 0 0' }}>{err}</p>}
         <div className="modal-botones">
           <button type="button" className="btn-sec" onClick={onClose}>Cerrar</button>
           <button className="btn-primario">Añadir hito</button>
