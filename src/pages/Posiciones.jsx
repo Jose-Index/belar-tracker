@@ -460,7 +460,8 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
               </defs>
               <XAxis dataKey="fecha" hide />
               <YAxis domain={['auto', 'auto']} hide />
-              <Tooltip labelFormatter={f => f?.slice(2).split('-').reverse().join('/')}
+              <Tooltip labelFormatter={f => f?.slice(2).split('-').reverse().join('/')} isAnimationActive={false}
+                       animationDuration={0} wrapperClassName="tip-recharts"
                        formatter={v => ['$' + fmt$(v), 'valor']} />
               {p.sl_price && p.entry_price && p.invested &&
                 <ReferenceLine y={Number(p.invested) * (1 + (Number(p.sl_price) / Number(p.entry_price) - 1) * Number(p.apalancamiento || 1))}

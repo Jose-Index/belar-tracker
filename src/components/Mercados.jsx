@@ -267,7 +267,8 @@ function Comparativa({ s, pts, range, onCerrar }) {
           <XAxis dataKey="t" type="number" scale="time" domain={['dataMin', 'dataMax']}
                  tickFormatter={fFecha} tick={{ fontSize: 10.5, fontFamily: 'JetBrains Mono' }} minTickGap={70} />
           <YAxis tickFormatter={v => v.toFixed(0) + '%'} tick={{ fontSize: 10.5, fontFamily: 'JetBrains Mono' }} width={46} />
-          <Tooltip labelFormatter={fFecha}
+          <Tooltip labelFormatter={fFecha} isAnimationActive={false} animationDuration={0}
+                   wrapperClassName="tip-recharts"
                    formatter={(v, k) => [fmtPct(v), k === 'sim' ? s.ticker : 'Cartera']} />
           <ReferenceLine y={0} stroke="#8A93A6" strokeDasharray="4 3" />
           <Line type="monotone" dataKey="sim" stroke="#3BC9F5" strokeWidth={1.8} dot={false} connectNulls />

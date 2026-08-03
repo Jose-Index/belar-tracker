@@ -12,7 +12,13 @@
 .divisa-toggle button { font: 600 13px var(--font-datos); padding: 5px 12px; border: none; background: var(--superficie); color: var(--texto-sec); cursor: pointer; }
 .divisa-toggle button.on { background: var(--azul-belar); color: white; }
 
-.tip-evo { background: var(--tinta); color: white; padding: 8px 12px; border-radius: 8px; font-size: 12.5px; display: grid; gap: 2px; }
+.tip-evo {
+  background: var(--flotante); color: #EEF2F8; padding: 8px 12px; border-radius: 8px;
+  font-size: 12.5px; display: grid; gap: 2px; border: 1px solid var(--flotante-borde);
+  box-shadow: 0 6px 20px rgba(13, 20, 32, .16);
+}
+/* Sin animación de recharts: el tooltip no debe "vibrar" al mover el ratón */
+.recharts-tooltip-wrapper { transition: none !important; pointer-events: none; }
 
 .hitos-leyenda { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .hito-chip { font: 500 11.5px var(--font-ui); color: var(--texto-sec); background: var(--papel); border: 1px solid var(--borde); border-radius: 14px; padding: 3px 10px; }
@@ -136,9 +142,9 @@
 /* Etiqueta del hito: solo con el ratón encima */
 .hito-etq {
   top: -4px; transform: translateX(-50%); z-index: 5;
-  background: var(--tinta, #17202E); color: #fff;
+  background: var(--flotante); color: #EEF2F8; border: 1px solid var(--flotante-borde);
   font: 500 11.5px var(--font-ui); font-style: normal; white-space: nowrap;
-  padding: 5px 10px; border-radius: 7px; box-shadow: 0 4px 14px rgba(23,32,46,.18);
+  padding: 5px 10px; border-radius: 7px; box-shadow: 0 6px 20px rgba(13,20,32,.16);
 }
 .hitos-tabla { margin-top: 14px; max-height: 220px; overflow-y: auto; border-top: 1px solid var(--borde); padding-top: 8px; }
 .hitos-tabla table { font-size: 12px; }

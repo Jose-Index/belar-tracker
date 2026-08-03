@@ -12,6 +12,8 @@
   --papel: #F6F8FB;
   --superficie: #FFFFFF;
   --borde: #E3E8F0;
+  --flotante: #333F52;          /* gris oscuro de identidad: tooltips y etiquetas */
+  --flotante-borde: #46536A;
 
   /* Texto */
   --texto: #17202E;

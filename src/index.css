@@ -120,3 +120,14 @@ a:hover { color: var(--azul-hover); }
   .divisa-toggle { flex-wrap: wrap; }
 }
 
+/* Tooltips por defecto de recharts (Mercados, detalle de posición): mismo gris de identidad */
+.tip-recharts .recharts-default-tooltip {
+  background: var(--flotante) !important; border: 1px solid var(--flotante-borde) !important;
+  border-radius: 8px !important; box-shadow: 0 6px 20px rgba(13, 20, 32, .16);
+  color: #EEF2F8 !important; font-size: 12px !important; padding: 7px 11px !important;
+}
+.tip-recharts .recharts-tooltip-label { color: #AEB9C9 !important; margin-bottom: 3px !important; }
+.tip-recharts .recharts-tooltip-item { color: #EEF2F8 !important; padding: 0 !important; }
+
+/* Sin animación de recharts en ningún tooltip: no debe "vibrar" al mover el ratón */
+.recharts-tooltip-wrapper { transition: none !important; pointer-events: none; }

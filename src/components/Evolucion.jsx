@@ -127,7 +127,7 @@ export default function Evolucion() {
               <CartesianGrid stroke="#E3E8F0" vertical={false} />
               <XAxis dataKey="fecha" tickFormatter={fFecha} tick={{ fontSize: 11, fontFamily: 'JetBrains Mono' }} minTickGap={60} />
               <YAxis tickFormatter={neto ? (v => v.toFixed(0)) : fmtK} tick={{ fontSize: 11, fontFamily: 'JetBrains Mono' }} width={PLOT_L} domain={['auto', 'auto']} />
-              <Tooltip content={<TipDesglose neto={neto} />} />
+              <Tooltip content={<TipDesglose neto={neto} />} isAnimationActive={false} animationDuration={0} cursor={{ stroke: '#C9D2E0', strokeWidth: 1 }} />
               {neto && <ReferenceLine y={100} stroke="#8A93A6" strokeDasharray="4 3" />}
               {Object.keys(BROKER_COLS).map(k => (
                 <Line key={k} type="monotone" dataKey={k} stroke={BROKER_COLS[k]}
@@ -145,7 +145,7 @@ export default function Evolucion() {
               <CartesianGrid stroke="#E3E8F0" vertical={false} />
               <XAxis dataKey="fecha" tickFormatter={fFecha} tick={{ fontSize: 11, fontFamily: 'JetBrains Mono' }} minTickGap={60} />
               <YAxis tickFormatter={fmtK} tick={{ fontSize: 11, fontFamily: 'JetBrains Mono' }} width={PLOT_L} domain={['auto', 'auto']} />
-              <Tooltip content={<TipEvo divisa={divisa} neto={neto} />} />
+              <Tooltip content={<TipEvo divisa={divisa} neto={neto} />} isAnimationActive={false} animationDuration={0} cursor={{ stroke: '#C9D2E0', strokeWidth: 1 }} />
               <Area type="monotone" dataKey={km} stroke="#2E6BF6" strokeWidth={2} fill="url(#gAzul)" connectNulls />
             </AreaChart>
           )}
