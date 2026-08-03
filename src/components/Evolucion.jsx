@@ -73,6 +73,26 @@ export default function Evolucion() {
     setAltaHito(false); cargar()
   }
 
+  // Hitos: SOLO una marca discreta en la gráfica. La etiqueta aparece al pasar
+  // el ratón por encima (decisión José: no deben leerse a simple vista).
+  const marcasHito = () => hitos.flatMap(h => {
+    const etq = `${h.etiqueta} · ${fFecha(h.fecha_ini)}${h.fecha_fin ? '–' + fFecha(h.fecha_fin) : ''}`
+    const rombo = ({ viewBox }) => (
+      <g className="hito-marca" transform={`translate(${viewBox.x}, 6)`}>
+        <title>{etq}</title>
+        <rect x={-14} y={-6} width={28} height={22} fill="transparent" />
+        <path d="M0,-4 L4,0 L0,4 L-4,0 Z" />
+      </g>
+    )
+    const linea = (
+      <ReferenceLine key={'l' + h.id} x={h.fecha_ini} stroke="#C9D2E0" strokeDasharray="3 4"
+                     label={rombo} isFront />
+    )
+    return h.fecha_fin
+      ? [<ReferenceArea key={'a' + h.id} x1={h.fecha_ini} x2={h.fecha_fin} fill="#F0A020" fillOpacity={0.055} />, linea]
+      : [linea]
+  })
+
   if (!weeks) return <p className="placeholder">Cargando…</p>
 
   return (
@@ -80,7 +100,7 @@ export default function Evolucion() {
       <div className="evo-head">
         <h2>Evolución del Portfolio</h2>
         <div className="evo-controles">
-          <button className="btn-sec" onClick={() => setAltaHito(true)}>+ Hito</button>
+          <button className="btn-sec" onClick={() => setAltaHito(true)} title="Añadir o borrar hitos">Hitos</button>
           <div className="divisa-toggle num">
             <button className={desglose ? 'on' : ''} onClick={() => setDesglose(!desglose)}
                     title="Líneas por broker (eToro, XTB, IBKR) y monedero BTC personal. Combinable con Rentabilidad: TWR base 100 por broker, cada uno con sus aportaciones">Desglose</button>
@@ -102,9 +122,7 @@ export default function Evolucion() {
             <YAxis tickFormatter={neto ? (v => v.toFixed(0)) : fmtK} tick={{ fontSize: 11, fontFamily: 'JetBrains Mono' }} width={46} domain={['auto', 'auto']} />
             <Tooltip content={<TipDesglose neto={neto} />} />
             {neto && <ReferenceLine y={100} stroke="#8A93A6" strokeDasharray="4 3" />}
-            {hitos.map(h => h.fecha_fin
-              ? <ReferenceArea key={h.id} x1={h.fecha_ini} x2={h.fecha_fin} fill="#F0A020" fillOpacity={0.10} />
-              : <ReferenceLine key={h.id} x={h.fecha_ini} stroke="#8A93A6" strokeDasharray="4 3" />)}
+            {marcasHito()}
             {Object.keys(BROKER_COLS).map(k => (
               <Line key={k} type="monotone" dataKey={k} stroke={BROKER_COLS[k]}
                     strokeWidth={k === 'btc' ? 1.4 : 1.8} dot={false} connectNulls />
@@ -122,9 +140,7 @@ export default function Evolucion() {
           <XAxis dataKey="fecha" tickFormatter={fFecha} tick={{ fontSize: 11, fontFamily: 'JetBrains Mono' }} minTickGap={60} />
           <YAxis tickFormatter={fmtK} tick={{ fontSize: 11, fontFamily: 'JetBrains Mono' }} width={46} domain={['auto', 'auto']} />
           <Tooltip content={<TipEvo divisa={divisa} neto={neto} />} />
-          {hitos.map(h => h.fecha_fin
-            ? <ReferenceArea key={h.id} x1={h.fecha_ini} x2={h.fecha_fin} fill="#F0A020" fillOpacity={0.10} />
-            : <ReferenceLine key={h.id} x={h.fecha_ini} stroke="#8A93A6" strokeDasharray="4 3" />)}
+          {marcasHito()}
           <Area type="monotone" dataKey={km} stroke="#2E6BF6" strokeWidth={2} fill="url(#gAzul)" connectNulls />
         </AreaChart>
         )}
@@ -140,17 +156,7 @@ export default function Evolucion() {
           ))}
         </div>
       )}
-      {hitos.length > 0 && (
-        <div className="hitos-leyenda">
-          {hitos.map(h => (
-            <span key={h.id} className="hito-chip" title={`${fFecha(h.fecha_ini)}${h.fecha_fin ? '–' + fFecha(h.fecha_fin) : ''}`}>
-              {h.etiqueta}
-              <a onClick={async () => { await supabase.from('hitos').delete().eq('id', h.id); cargar() }}>✕</a>
-            </span>
-          ))}
-        </div>
-      )}
-      {altaHito && <AltaHito onClose={() => setAltaHito(false)} onSave={guardarHito} />}
+      {altaHito && <GestorHitos hitos={hitos} onClose={() => setAltaHito(false)} onSave={guardarHito} onRecargar={cargar} />}
     </div>
   )
 }
@@ -183,14 +189,14 @@ function TipEvo({ active, payload, label, divisa, neto }) {
   )
 }
 
-function AltaHito({ onClose, onSave }) {
+function GestorHitos({ hitos, onClose, onSave, onRecargar }) {
   const hoy = new Date().toISOString().slice(0, 10)
   const [f, setF] = useState({ etiqueta: '', fecha_ini: hoy, fecha_fin: '', tipo: 'mercado' })
   return (
     <div className="modal-fondo" onClick={onClose}>
       <form className="card modal num" onClick={e => e.stopPropagation()}
             onSubmit={e => { e.preventDefault(); if (f.etiqueta.trim()) onSave({ ...f, fecha_fin: f.fecha_fin || null, autor: 'jose' }) }}>
-        <h2>Nuevo hito</h2>
+        <h2>Hitos</h2>
         <div className="alta-grid">
           <label style={{ gridColumn: '1 / -1' }}>Etiqueta
             <input autoFocus value={f.etiqueta} onChange={e => setF({ ...f, etiqueta: e.target.value })}
@@ -201,9 +207,31 @@ function AltaHito({ onClose, onSave }) {
             {['mercado', 'macro', 'cripto', 'personal'].map(t => <option key={t}>{t}</option>)}</select></label>
         </div>
         <div className="modal-botones">
-          <button type="button" className="btn-sec" onClick={onClose}>Cancelar</button>
-          <button className="btn-primario">Guardar</button>
+          <button type="button" className="btn-sec" onClick={onClose}>Cerrar</button>
+          <button className="btn-primario">Añadir hito</button>
         </div>
+
+        {hitos.length > 0 && (
+          <div className="hitos-tabla">
+            <table className="tabla-hist">
+              <thead><tr><th className="tl">HITO</th><th>FECHAS</th><th>TIPO</th><th /></tr></thead>
+              <tbody>
+                {hitos.map(h => (
+                  <tr key={h.id}>
+                    <td className="tl">{h.etiqueta}</td>
+                    <td>{fFecha(h.fecha_ini)}{h.fecha_fin ? '–' + fFecha(h.fecha_fin) : ''}</td>
+                    <td style={{ color: 'var(--texto-neutro)', fontSize: 11 }}>{h.tipo}</td>
+                    <td><a className="borrar-x" onClick={async () => {
+                      if (!confirm(`¿Borrar el hito «${h.etiqueta}»?`)) return
+                      await supabase.from('hitos').delete().eq('id', h.id); onRecargar()
+                    }}>✕</a></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="comp-nota">En la gráfica solo se ve un rombo discreto por hito; la etiqueta aparece al pasar el ratón por encima.</p>
       </form>
     </div>
   )

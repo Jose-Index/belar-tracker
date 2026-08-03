@@ -120,3 +120,10 @@
   .cal-dia { flex-direction: column; gap: 2px; }
   .cal-fecha { width: auto; }
 }
+
+/* ─── Marca de hito: discreta, la etiqueta llega al pasar el ratón ─── */
+.hito-marca path { fill: #B8C2D2; transition: fill .15s, transform .15s; transform-origin: center; }
+.hito-marca:hover path { fill: var(--azul-belar); transform: scale(1.5); }
+.hito-marca { cursor: help; }
+.hitos-tabla { margin-top: 14px; max-height: 220px; overflow-y: auto; border-top: 1px solid var(--borde); padding-top: 8px; }
+.hitos-tabla table { font-size: 12px; }
