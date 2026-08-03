@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { exportBackup } from '../lib/backup'
 import './inicio.css'
 
 const fmt$ = v => v == null || isNaN(v) ? '—' : Number(v).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -98,37 +99,23 @@ function Frases() {
 }
 
 // ─── Backup manual: descarga JSON completo con fecha ───
-const TABLAS = ['positions', 'position_history', 'position_snapshots', 'weekly_snapshots', 'contributions',
-  'calendar_events', 'alerts', 'repositorio', 'plan_rector', 'hitos', 'frases', 'position_notes',
-  'symbols', 'yearly_results', 'app_state', 'verdict_history', 'positions_sandbox']
 function Backup() {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
   async function bajar() {
     setBusy(true); setMsg('')
-    const out = { exportado: new Date().toISOString(), tablas: {} }
-    for (const t of TABLAS) {
-      const { data, error } = await supabase.from(t).select('*')
-      out.tablas[t] = error ? { error: error.message } : data
-    }
-    const blob = new Blob([JSON.stringify(out, null, 1)], { type: 'application/json' })
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = `btp-backup-${new Date().toISOString().slice(0, 10)}.json`
-    a.click(); URL.revokeObjectURL(a.href)
-    const n = Object.values(out.tablas).reduce((s, v) => s + (Array.isArray(v) ? v.length : 0), 0)
-    setMsg(`Backup descargado: ${n} filas de ${TABLAS.length} tablas.`)
+    try { const n = await exportBackup(); setMsg(`Backup descargado: ${n} filas.`) }
+    catch (e) { setMsg('Error: ' + e.message) }
     setBusy(false)
   }
   return (
     <div className="card">
       <h3>Backup</h3>
       <p style={{ fontSize: 13, color: 'var(--texto-sec)', marginTop: 0 }}>
-        Export completo de la base de datos a un JSON con fecha. Guárdalo donde quieras: cada descarga es una versión, nunca se sobrescribe nada.
+        Export completo de la base de datos a un JSON con fecha. Cada descarga es una versión, nunca se sobrescribe nada. Además, cada CERRAR SEMANA exitoso descarga el suyo automáticamente.
       </p>
       <button className="btn-primario" onClick={bajar} disabled={busy}>{busy ? 'Exportando…' : '⬇ Descargar backup'}</button>
       {msg && <p style={{ fontSize: 12.5, color: 'var(--alza)', marginBottom: 0 }}>{msg}</p>}
-      <p className="comp-nota">El backup automático tras cada cierre de semana llegará con la Fase 6 final.</p>
     </div>
   )
 }

@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   fetchPosiciones, updatePosicion, altaPosicion, cerrarPosicion,
-  guardarLiquidez, guardarBtcWallet, cerrarSemana, fetchNotas, addNota,
+  guardarLiquidez, guardarBtcWallet, cerrarSemana, fetchNotas, addNota, fetchSeriePosicion,
 } from '../lib/posiciones-db'
+import { exportBackup } from '../lib/backup'
+import { AreaChart, Area, YAxis, XAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { getSimbolos, yahooDe, fetchQuotes, pctDia, frescura } from '../lib/quotes'
 import { asegurarCalendario, eventosProximos, estadoCalendario, analizarPosicion, guardarVeredicto } from '../lib/ia'
 import IngestaIA from '../components/IngestaIA.jsx'
@@ -174,7 +176,10 @@ export default function Posiciones() {
     setBusy(false)
     if (res.error) { setMsg('Error al cerrar semana: ' + res.error.message); return }
     setCierre(false); setDraft({}); setLiqDraft(null)
-    setMsg(`Semana cerrada · ${res.week_end}`)
+    // Backup automático versionado, SOLO tras commit exitoso (regla aprobada con "OJO")
+    let bk = ''
+    try { const n = await exportBackup('btp-backup-cierre'); bk = ` · backup descargado (${n} filas)` } catch { bk = ' · ⚠ backup automático falló' }
+    setMsg(`Semana cerrada · ${res.week_end}${bk}`)
     recargar()
   }
 
@@ -366,8 +371,13 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
   const [nueva, setNueva] = useState('')
   const [ia, setIa] = useState(null)        // resultado recién generado
   const [iaBusy, setIaBusy] = useState(false)
+  const [serie, setSerie] = useState([])
 
-  useEffect(() => { fetchNotas(p.id).then(({ data }) => setNotas(data || [])); setIa(null) }, [p.id])
+  useEffect(() => {
+    fetchNotas(p.id).then(({ data }) => setNotas(data || [])); setIa(null)
+    fetchSeriePosicion(p.ticker, p.broker).then(({ data }) =>
+      setSerie((data || []).map(s => ({ fecha: s.week_end, v: Number(s.value) }))))
+  }, [p.id])
 
   async function analizar() {
     setIaBusy(true)
@@ -402,6 +412,26 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
         <div><dt>Valor</dt><dd>${fmt$(p.valor)} <span className={pctClass(p.gpPct)}>({fmtPct(p.gpPct)})</span></dd></div>
         <div><dt>SL</dt><dd>{p.sl_price ?? 'sin SL'}</dd></div>
         {p.ingest_source && <div><dt>Origen</dt><dd>{p.ingest_source}</dd></div>}
+        {serie.length > 1 && (
+          <div style={{ gridColumn: '1 / -1', marginTop: 4 }}>
+            <ResponsiveContainer width="100%" height={90}>
+              <AreaChart data={serie} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="gPos" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#2E6BF6" stopOpacity={0.22} />
+                    <stop offset="100%" stopColor="#2E6BF6" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="fecha" hide />
+                <YAxis domain={['auto', 'auto']} hide />
+                <Tooltip labelFormatter={f => f?.slice(2).split('-').reverse().join('/')}
+                         formatter={v => ['$' + fmt$(v), 'valor']} />
+                <Area type="monotone" dataKey="v" stroke="#2E6BF6" strokeWidth={1.7} fill="url(#gPos)" isAnimationActive={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+            <div className="hist-n num" style={{ textAlign: 'right' }}>{serie.length} cierres semanales</div>
+          </div>
+        )}
       </dl>
       <div className="attr-selects">
         <label>Estado

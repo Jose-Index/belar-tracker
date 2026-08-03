@@ -67,29 +67,22 @@ export async function cerrarSemana(positions, liquidez, btcQty = 0) {
     porBroker[b] = Math.round((pos + (Number(liquidez[b]) || 0)) * 100) / 100
   }
 
-  // Monedero BTC personal: qty × precio actual (la serie histórica siempre lo incluyó)
-  let btcUsd = 0
-  if (btcQty > 0) {
-    try {
-      const r = await fetch('/api/quotes?symbols=BTC-USD').then(x => x.json())
-      const precio = r.quotes?.[0]?.price
-      if (precio) btcUsd = Math.round(btcQty * precio * 100) / 100
-    } catch { /* sin precio: btcUsd 0 y se avisa abajo */ }
-  }
+  // Monedero BTC personal (la serie histórica siempre lo incluyó) + EURUSD del momento
+  let btcUsd = 0, eurusd = null
+  try {
+    const r = await fetch('/api/quotes?symbols=BTC-USD,EURUSD%3DX').then(x => x.json())
+    const q = Object.fromEntries((r.quotes || []).map(x => [x.symbol, x.price]))
+    if (btcQty > 0 && q['BTC-USD']) btcUsd = Math.round(btcQty * q['BTC-USD'] * 100) / 100
+    if (q['EURUSD=X']) eurusd = Math.round(q['EURUSD=X'] * 10000) / 10000
+  } catch { /* sin precio: btcUsd 0 y se avisa abajo; eurusd null */ }
 
   const totalPos = positions.reduce((a, p) => a + Number(p.current_value ?? p.invested), 0)
   const total = Math.round((totalPos + totalLiq + btcUsd) * 100) / 100
   const desglose = { ...porBroker, btc_usd: btcUsd, btc_qty: btcQty }
 
-  let { error: e1 } = await supabase.from('weekly_snapshots').upsert({
-    week_end, total_value: total, liquidez, desglose,
+  const { error: e1 } = await supabase.from('weekly_snapshots').upsert({
+    week_end, total_value: total, liquidez, desglose, eurusd,
   }, { onConflict: 'week_end' })
-  if (e1 && String(e1.message).includes('desglose')) {
-    // Columna aún no creada (DDL pendiente): guardar sin desglose antes que fallar
-    ;({ error: e1 } = await supabase.from('weekly_snapshots').upsert({
-      week_end, total_value: total, liquidez,
-    }, { onConflict: 'week_end' }))
-  }
   if (e1) return { error: e1 }
   if (btcQty > 0 && btcUsd === 0) console.warn('BTC wallet sin precio: total sin monedero')
 
@@ -104,6 +97,12 @@ export async function cerrarSemana(positions, liquidez, btcQty = 0) {
   await supabase.from('positions').update({ ingest_badge: null }).not('ingest_badge', 'is', null)
   await supabase.from('app_state').upsert({ key: 'last_week_close', value: { date: week_end }, updated_at: new Date().toISOString() })
   return { week_end }
+}
+
+// Serie semanal de UNA posición para la gráfica del detalle
+export function fetchSeriePosicion(ticker, broker) {
+  return supabase.from('position_snapshots').select('week_end,value,invested')
+    .eq('ticker', ticker).eq('broker', broker).order('week_end')
 }
 
 export function fetchNotas(positionId) {

@@ -23,7 +23,7 @@ export default function Inicio() {
   async function cargar() {
     const [w, p, c, st] = await Promise.all([
       supabase.from('weekly_snapshots').select('*').order('week_end'),
-      supabase.from('positions').select('broker,invested,current_value'),
+      supabase.from('positions').select('broker,invested,current_value,entry_price,sl_price,apalancamiento'),
       supabase.from('contributions').select('fecha,broker,importe_eur,importe_usd'),
       supabase.from('app_state').select('key,value').in('key', ['liquidez', 'btc_wallet']),
     ])
@@ -78,6 +78,17 @@ export default function Inicio() {
   const iniAño = serie.find(s => s.fecha >= `${año}-01-01`)
   const añoPct = ult && iniAño && iniAño !== ult ? (ult.usd - iniAño.usd) / iniAño.usd * 100 : null
 
+  // Filtro Platt: si todos los SLs saltan a la vez, ¿cuánto se pierde?
+  // Pérdida por posición = valor actual − valor en SL (entrada, apalancamiento).
+  const conSL = positions.filter(p => p.sl_price && p.entry_price && p.invested)
+  const plattPerdida = conSL.reduce((a, p) => {
+    const retSL = (Number(p.sl_price) / Number(p.entry_price) - 1) * Number(p.apalancamiento || 1)
+    const valorEnSL = Number(p.invested) * (1 + retSL)
+    return a + Math.max(0, Number(p.current_value ?? p.invested) - valorEnSL)
+  }, 0)
+  const plattPct = totalCuenta ? plattPerdida / totalCuenta * 100 : null
+  const plattOk = plattPct != null && plattPct <= 10
+
   if (!weeks) return <p className="placeholder">Cargando…</p>
 
   return (
@@ -105,10 +116,17 @@ export default function Inicio() {
           <span className={'box-v ' + pctClass(añoPct)}>{fmtPct(añoPct)}</span>
           <span className="box-s">aportado {año}: {fmt$(aportadoAño)}€ · total: {fmt$(aportadoTotal)}€</span>
         </div>
-        <div className="card box box-platt">
+        <div className="card box box-platt"
+             title="Filtro Platt: pérdida si TODOS los SLs saltaran a la vez, sobre el capital total. Umbral de aviso: 10%. Posiciones sin SL no computan (no saltan).">
           <span className="box-t">Platt</span>
-          <span className="box-v warn">—</span>
-          <span className="box-s">pendiente de SLs calibrados en BTP</span>
+          {conSL.length
+            ? <span className={'box-v ' + (plattOk ? 'up' : 'warn')}>−{plattPct.toFixed(1)}%</span>
+            : <span className="box-v warn">—</span>}
+          <span className="box-s">
+            {conSL.length
+              ? `−$${fmtK(plattPerdida)} si saltan los ${conSL.length} SLs · umbral 10%`
+              : `sin SLs calibrados aún (${positions.length} posiciones)`}
+          </span>
         </div>
       </div>
 
