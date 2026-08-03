@@ -100,3 +100,12 @@
 .alta-grid label { display: grid; gap: 4px; font-size: 11px; color: var(--texto-neutro); font-family: var(--font-ui); }
 .alta-grid input, .alta-grid select { font: inherit; font-size: 13px; padding: 7px 8px; border-radius: 7px; border: 1px solid var(--borde); width: 100%; box-sizing: border-box; }
 .modal-botones { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+
+/* ─── Fase 5: IA ─── */
+.ev-dot { margin-left: 6px; font-size: 8px; color: var(--texto-neutro); vertical-align: 2px; }
+.ev-dot.urgente { color: var(--aviso); font-size: 10px; }
+.discrepancia { margin-left: 5px; color: var(--aviso); cursor: help; }
+.ia-bloque { margin-bottom: 10px; }
+.ia-head { display: flex; justify-content: space-between; align-items: center; }
+.ia-res p { font-size: 13px; margin: 8px 0; line-height: 1.45; }
+.ia-meta { font-size: 12px; color: var(--texto-sec); margin: 4px 0; }

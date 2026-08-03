@@ -4,6 +4,8 @@ import {
   guardarLiquidez, cerrarSemana, fetchNotas, addNota,
 } from '../lib/posiciones-db'
 import { getSimbolos, yahooDe, fetchQuotes, pctDia, frescura } from '../lib/quotes'
+import { asegurarCalendario, eventosProximos, estadoCalendario, analizarPosicion, guardarVeredicto } from '../lib/ia'
+import IngestaIA from '../components/IngestaIA.jsx'
 import './posiciones.css'
 
 // ─── Constantes de la spec ───────────────────────────────────────────────
@@ -44,6 +46,9 @@ export default function Posiciones() {
   const [msg, setMsg] = useState(null)
   const [quotes, setQuotes] = useState({})     // yahoo_symbol -> quote
   const [simbolos, setSimbolos] = useState([])
+  const [eventos, setEventos] = useState([])
+  const [calAt, setCalAt] = useState(null)
+  const [analizando, setAnalizando] = useState(null)  // texto de progreso
   const tablaRef = useRef(null)
 
   useEffect(() => { localStorage.setItem('btp-orden', orden) }, [orden])
@@ -63,8 +68,24 @@ export default function Posiciones() {
     setSimbolos(sims)
     const ys = data.positions.map(p => yahooDe(p.ticker, sims)).filter(Boolean)
     setQuotes(await fetchQuotes(ys))
+    setEventos(await eventosProximos())
+    estadoCalendario().then(setCalAt)
   }
   useEffect(() => { recargar() }, [])
+
+  // Calendario automático: si BTP está abierto y han pasado >24h, se refresca solo (silencioso)
+  useEffect(() => {
+    if (!raw?.positions?.length) return
+    let vivo = true
+    async function tick() {
+      const r = await asegurarCalendario(raw.positions.map(p => p.ticker))
+      if (!vivo) return
+      if (!r.fresco && !r.error) { setEventos(await eventosProximos()); setCalAt(r.at) }
+    }
+    tick()
+    const id = setInterval(tick, 3600 * 1000)
+    return () => { vivo = false; clearInterval(id) }
+  }, [raw?.positions?.length])
 
   // ── Cálculo de derivados ──
   const rows = useMemo(() => {
@@ -79,7 +100,11 @@ export default function Posiciones() {
       const inv = Number(p.invested)
       const v0 = snap(p.ticker, p.broker, w0), v1 = snap(p.ticker, p.broker, w1)
       const q = quotes[yahooDe(p.ticker, simbolos)]
+      const evs = eventos.filter(e => e.ticker === p.ticker)
+      const evEarn = evs.find(e => e.event_type === 'earnings')
+      const diasEarn = evEarn ? Math.ceil((new Date(evEarn.event_date) - Date.now()) / 86400000) : null
       return {
+        evs, evUrgente: diasEarn != null && diasEarn <= 3,
         ...p, valor: val,
         gp: val - inv,
         gpPct: inv ? (val - inv) / inv * 100 : null,
@@ -89,7 +114,7 @@ export default function Posiciones() {
         peso: total ? val / total * 100 : null,
       }
     })
-  }, [raw, quotes, simbolos])
+  }, [raw, quotes, simbolos, eventos])
 
   const sorted = useMemo(() => {
     if (!rows) return null
@@ -158,6 +183,41 @@ export default function Posiciones() {
     setBusy(false); setSelId(null); recargar()
   }
 
+  // Aplicar lo aceptado en la revisión de capturas: valores a borrador (los sella
+  // CERRAR SEMANA), cierres y altas al momento, badges de trazabilidad.
+  async function aplicarDiff(d) {
+    setBusy(true)
+    const stamp = new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+    const nuevoDraft = { ...draft }
+    for (const u of d.updates) {
+      if (!u.sel) continue
+      nuevoDraft[u.pos.id] = {
+        ...nuevoDraft[u.pos.id],
+        ...(u.valor != null ? { current_value: u.valor } : {}),
+        ...(u.invertido != null && Math.abs(u.invertido - u.pos.invested) > 0.01 ? { invested: u.invertido } : {}),
+      }
+      await updatePosicion(u.pos.id, { ingest_badge: 'UPD', ingest_source: `captura ${u.pos.broker} ${stamp}` })
+    }
+    setDraft(nuevoDraft)
+    for (const f of d.faltantes) if (f.sel) await cerrarPosicion(f.pos, 'xSL')
+    for (const n of d.nuevas) {
+      if (!n.sel) continue
+      const inv = n.invertido ?? n.valor
+      if (!inv) continue
+      await altaPosicion({
+        ticker: (n.ticker || n.nombre || '?').toUpperCase(), broker: n.broker,
+        entry_date: new Date().toISOString().slice(0, 10),
+        invested: inv, current_value: n.valor ?? inv,
+        apalancamiento: n.apalancamiento || 1,
+        ingest_badge: 'NEW', ingest_source: `captura ${n.broker} ${stamp}`,
+      })
+    }
+    if (Object.keys(d.liq).length) { setLiqDraft(l => ({ ...l, ...d.liq })); setLiqTocada(true) }
+    setBusy(false)
+    setMsg('Capturas aplicadas al borrador — revisa y pulsa CERRAR SEMANA para sellar.')
+    recargar()
+  }
+
   async function cerrarManual(p) {
     if (!window.confirm(`¿Cerrar ${p.ticker} (${p.broker})? Se registrará en el histórico (motivo: manual).`)) return
     setBusy(true)
@@ -177,6 +237,8 @@ export default function Posiciones() {
         <div className="pos-head">
           <h1>Posiciones <span className="pos-n num">{sorted.length}</span></h1>
           <div className="pos-controls">
+            {calAt && <span className="sello num" title="Actualización automática cada 24h con BTP abierto">
+              Calendario · hace {Math.max(0, Math.round((Date.now() - new Date(calAt)) / 3600000))}h</span>}
             {raw.lastClose && <span className="sello num">Último cierre: {raw.lastClose.date?.split('-').reverse().join('/')}</span>}
             <label>Orden:{' '}
               <select value={orden} onChange={e => setOrden(e.target.value)} disabled={cierre}>
@@ -184,6 +246,17 @@ export default function Posiciones() {
               </select>
             </label>
             <button className="btn-sec" onClick={() => setAlta(true)}>+ Posición</button>
+            {!cierre && (
+              <button className="btn-sec" disabled={!!analizando} onClick={async () => {
+                if (!window.confirm(`Análisis IA completo de ${sorted.length} posiciones (búsqueda web real, ~2-4 min, coste del orden de 1-3€). ¿Adelante?`)) return
+                for (let i = 0; i < sorted.length; i++) {
+                  const p = sorted[i]
+                  setAnalizando(`Analizando ${p.ticker} (${i + 1}/${sorted.length})…`)
+                  try { await guardarVeredicto(p, await analizarPosicion(p)) } catch (e) { console.warn(p.ticker, e) }
+                }
+                setAnalizando(null); setMsg('Análisis IA completado.'); recargar()
+              }}>{analizando || 'ANÁLISIS IA'}</button>
+            )}
             {!cierre
               ? <button className="btn-cierre" onClick={entrarCierre}>MODO CIERRE SEMANA</button>
               : <button className="btn-cierre on" onClick={commitCierre} disabled={busy}>
@@ -194,6 +267,8 @@ export default function Posiciones() {
         </div>
 
         {msg && <p className="pos-msg num">{msg}</p>}
+
+        {cierre && <IngestaIA positions={raw.positions} onAplicar={aplicarDiff} />}
 
         {cierre && (
           <div className="card liq-bar num">
@@ -227,6 +302,10 @@ export default function Posiciones() {
                     {p.ticker}
                     {p.ingest_badge === 'NEW' && <span className="badge new">NEW</span>}
                     {p.ingest_badge === 'UPD' && <span className="badge upd">·</span>}
+                    {p.evs.length > 0 && (
+                      <span className={'ev-dot' + (p.evUrgente ? ' urgente' : '')}
+                            title={p.evs.map(e => `${e.event_date.slice(2).split('-').reverse().join('/')} · ${e.titulo}`).join('\n')}>●</span>
+                    )}
                   </td>
                   <td className="tl broker">{p.broker}</td>
                   <td>{p.entry_date ? p.entry_date.slice(2).split('-').reverse().join('/') : '—'}</td>
@@ -242,7 +321,11 @@ export default function Posiciones() {
                   <td className={pctClass(p.gpPct)}>{fmtPct(p.gpPct)}</td>
                   <td className={pctClass(p.dia)} title={p.diaFresco || ''}>{fmtPct(p.dia)}</td>
                   <td className={pctClass(p.sem)}>{fmtPct(p.sem)}</td>
-                  <td><span className={'chip chip-' + p.estado}>{ESTADOS[p.estado]?.label || p.estado}</span></td>
+                  <td>
+                    <span className={'chip chip-' + p.estado}>{ESTADOS[p.estado]?.label || p.estado}</span>
+                    {p.veredicto_ia && p.veredicto_ia !== p.estado &&
+                      <span className="discrepancia" title={`Veredicto IA: ${ESTADOS[p.veredicto_ia]?.label || p.veredicto_ia}`}>⚑</span>}
+                  </td>
                   <td className="tl clase">{CLASES[p.clase] || p.clase}</td>
                   <td>{p.apalancamiento > 1 ? 'x' + Number(p.apalancamiento) : ''}</td>
                   <td>{p.peso == null ? '—' : p.peso.toFixed(1) + '%'}</td>
@@ -273,8 +356,20 @@ export default function Posiciones() {
 function PanelDetalle({ p, onClose, onChange, onCerrar }) {
   const [notas, setNotas] = useState([])
   const [nueva, setNueva] = useState('')
+  const [ia, setIa] = useState(null)        // resultado recién generado
+  const [iaBusy, setIaBusy] = useState(false)
 
-  useEffect(() => { fetchNotas(p.id).then(({ data }) => setNotas(data || [])) }, [p.id])
+  useEffect(() => { fetchNotas(p.id).then(({ data }) => setNotas(data || [])); setIa(null) }, [p.id])
+
+  async function analizar() {
+    setIaBusy(true)
+    try {
+      const v = await analizarPosicion(p)
+      await guardarVeredicto(p, v)
+      setIa(v); onChange()
+    } catch (e) { setIa({ error: String(e.message || e) }) }
+    setIaBusy(false)
+  }
 
   async function setAttr(campo, valor) {
     await updatePosicion(p.id, { [campo]: valor })
@@ -316,6 +411,30 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
             {FUENTES.map(f => <option key={f}>{f}</option>)}
           </select>
         </label>
+      </div>
+
+      <div className="ia-bloque">
+        <div className="ia-head">
+          <h3>Análisis IA</h3>
+          <button className="btn-sec" disabled={iaBusy} onClick={analizar}>
+            {iaBusy ? 'Analizando…' : p.veredicto_ia ? 'Re-analizar' : 'Analizar'}
+          </button>
+        </div>
+        {ia?.error && <p className="auth-err">{ia.error}</p>}
+        {(ia && !ia.error) ? (
+          <div className="ia-res">
+            <span className={'chip chip-' + ia.veredicto}>{ESTADOS[ia.veredicto]?.label || ia.veredicto}</span>
+            <p>{ia.justificacion}</p>
+            <p className="ia-meta"><b>Dimensión:</b> {ia.dimension}</p>
+            <p className="ia-meta"><b>Invalidación:</b> {ia.invalidacion}</p>
+            {ia.alerta && <p className="auth-err">⚑ {ia.alerta} (enviado a Alertas)</p>}
+          </div>
+        ) : p.veredicto_ia && (
+          <p className="ia-meta">
+            Último veredicto: <span className={'chip chip-' + p.veredicto_ia}>{ESTADOS[p.veredicto_ia]?.label || p.veredicto_ia}</span>
+            {p.veredicto_ia_at && <span className="num"> · {p.veredicto_ia_at.slice(2, 10).split('-').reverse().join('/')}</span>}
+          </p>
+        )}
       </div>
 
       <h3>Notas</h3>

@@ -24,7 +24,7 @@ export function updatePosicion(id, patch) {
 }
 
 export async function altaPosicion(p) {
-  return supabase.from('positions').insert({ ...p, ingest_source: 'alta manual' })
+  return supabase.from('positions').insert({ ingest_source: 'alta manual', ...p })
 }
 
 // Borrar = cerrar: registro en histórico ANTES de borrar. Nunca delete seco.
