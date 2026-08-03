@@ -238,7 +238,8 @@ export default function Posiciones() {
     <div className="pos-layout">
       <div>
         <div className="pos-head">
-          <h1>Posiciones <span className="pos-n num">{sorted.length}</span></h1>
+          <h1>Posiciones <span className="pos-n num">{sorted.length}</span>
+            <a href="/sandbox" style={{ fontSize: 11.5, fontWeight: 500, marginLeft: 10, color: 'var(--texto-neutro)', textDecoration: 'none' }}>sandbox ↗</a></h1>
           <div className="pos-controls">
             {calAt && <span className="sello num" title="Actualización automática cada 24h con BTP abierto">
               Calendario · hace {Math.max(0, Math.round((Date.now() - new Date(calAt)) / 3600000))}h</span>}

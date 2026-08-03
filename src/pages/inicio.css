@@ -45,3 +45,41 @@
 .hist-n { font-size: 11.5px; color: var(--texto-neutro); font-weight: 500; margin-left: 8px; }
 .borrar-x { color: var(--baja); cursor: pointer; opacity: .5; }
 .borrar-x:hover { opacity: 1; }
+
+/* ─── Repositorio / Alertas / Calendario / Sandbox / Herramientas ─── */
+.repo-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.repo-alta { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.repo-alta input, .repo-alta select { font: 500 12.5px var(--font-datos); padding: 7px 9px; border: 1px solid var(--borde); border-radius: 8px; }
+.repo-estado { font: 600 11.5px var(--font-ui); border: none; background: transparent; cursor: pointer; }
+.repo-nota input { font: 500 12px var(--font-datos); border: none; background: transparent; width: 100%; color: var(--texto-sec); }
+.repo-nota input:focus { outline: 1px solid var(--borde); border-radius: 4px; }
+.plan-textarea { width: 100%; font: 500 13px var(--font-datos); padding: 10px; border: 1px solid var(--borde); border-radius: 8px; resize: vertical; }
+.plan-vista { font-size: 13.5px; line-height: 1.6; margin-top: 10px; }
+.alertas-lista { margin-top: 12px; display: grid; gap: 8px; }
+.alerta-fila { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--borde); border-radius: 10px; padding: 10px 12px; }
+.alerta-sev { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex: none; }
+.alerta-cuerpo { flex: 1; }
+.alerta-titulo { font-size: 13.5px; }
+.alerta-detalle { font-size: 12.5px; color: var(--texto-sec); margin-top: 2px; }
+.alerta-meta { font-size: 10.5px; color: var(--texto-neutro); margin-top: 4px; }
+.cal-lista { margin-top: 14px; display: grid; gap: 10px; }
+.cal-dia { display: flex; gap: 14px; }
+.cal-fecha { flex: none; width: 92px; font-size: 12px; color: var(--texto-sec); padding-top: 2px; }
+.cal-fecha.urg { color: var(--baja); font-weight: 700; }
+.cal-eventos { flex: 1; display: grid; gap: 4px; }
+.cal-evento { display: flex; gap: 8px; align-items: baseline; font-size: 13px; }
+.cal-tipo { flex: none; }
+.cal-src { font-size: 9.5px; border: 1px solid var(--borde); border-radius: 8px; padding: 1px 7px; color: var(--texto-neutro); }
+.sb-inp { font: 500 12px var(--font-datos); width: 90px; padding: 4px 6px; border: 1px solid transparent; border-radius: 6px; background: transparent; }
+.sb-inp:hover, .sb-inp:focus { border-color: var(--borde); background: #fff; }
+.herr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.herr-grid h3 { margin-top: 0; }
+.herr-inp { font: inherit; font-size: 13.5px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--borde); }
+.calc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.calc-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; color: var(--texto-sec); }
+.calc-grid input { font: 500 13px var(--font-datos); padding: 7px 9px; border: 1px solid var(--borde); border-radius: 8px; }
+.calc-res { margin-top: 12px; font-size: 13px; display: grid; gap: 4px; }
+.frases-lista { margin-top: 8px; display: grid; gap: 6px; max-height: 300px; overflow-y: auto; }
+.frase-fila { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; align-items: baseline; }
+.frase-fila.off .frase-txt { opacity: .4; }
+.frase-fila a { cursor: pointer; color: var(--texto-neutro); font-size: 11.5px; }
