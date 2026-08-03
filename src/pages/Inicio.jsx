@@ -5,7 +5,7 @@ import {
 } from 'recharts'
 import { supabase } from '../lib/supabase'
 import { serieTWR, serieTWRDesglose } from '../lib/twr'
-import Mercados from '../components/Mercados.jsx'
+import { fetchQuotes } from '../lib/quotes'
 import './inicio.css'
 
 const fmt$ = v => v == null ? '—' : Number(v).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -23,6 +23,8 @@ export default function Inicio() {
   const [positions, setPositions] = useState([])
   const [contribs, setContribs] = useState([])
   const [liquidez, setLiquidez] = useState({})
+  const [btcQty, setBtcQty] = useState(0)
+  const [btcPrecio, setBtcPrecio] = useState(null)
   const [divisa, setDivisa] = useState('$')
   const [neto, setNeto] = useState(false)      // TWR: desempeño sin aportaciones
   const [desglose, setDesglose] = useState(false)  // líneas por broker + BTC wallet
@@ -32,12 +34,15 @@ export default function Inicio() {
     const [w, h, p, c, st] = await Promise.all([
       supabase.from('weekly_snapshots').select('*').order('week_end'),
       supabase.from('hitos').select('*').order('fecha_ini'),
-      supabase.from('positions').select('invested,current_value'),
+      supabase.from('positions').select('broker,invested,current_value'),
       supabase.from('contributions').select('fecha,broker,importe_eur,importe_usd'),
-      supabase.from('app_state').select('key,value').eq('key', 'liquidez'),
+      supabase.from('app_state').select('key,value').in('key', ['liquidez', 'btc_wallet']),
     ])
+    const estado = Object.fromEntries((st.data || []).map(r => [r.key, r.value]))
     setWeeks(w.data || []); setHitos(h.data || []); setPositions(p.data || [])
-    setContribs(c.data || []); setLiquidez(st.data?.[0]?.value || {})
+    setContribs(c.data || []); setLiquidez(estado.liquidez || {})
+    setBtcQty(Number(estado.btc_wallet?.qty) || 0)
+    fetchQuotes(['BTC-USD']).then(q => setBtcPrecio(q['BTC-USD']?.price || null))
   }
   useEffect(() => { cargar() }, [])
 
@@ -81,6 +86,14 @@ export default function Inicio() {
   const totalPos = positions.reduce((a, p) => a + Number(p.current_value ?? p.invested), 0)
   const totalInv = positions.reduce((a, p) => a + Number(p.invested), 0)
   const totalLiq = Object.values(liquidez).reduce((a, v) => a + (Number(v) || 0), 0)
+  const btcUsd = btcQty && btcPrecio ? btcQty * btcPrecio : 0
+  const totalCuenta = totalPos + totalLiq + btcUsd
+  // Saldos por cuenta: posiciones + liquidez del broker; BTC a precio vivo
+  const cuentas = ['etoro', 'xtb', 'ibkr'].map(b => {
+    const pos = positions.filter(p => p.broker === b).reduce((a, p) => a + Number(p.current_value ?? p.invested), 0)
+    const liq = Number(liquidez[b]) || 0
+    return { b, pos, liq, total: pos + liq }
+  })
   const gp = totalPos - totalInv
   const gpPct = totalInv ? gp / totalInv * 100 : null
   const ult = serie.at(-1), pen = serie.at(-2)
@@ -100,13 +113,11 @@ export default function Inicio() {
 
   return (
     <div>
-      <Mercados />
-
       <div className="boxes num">
         <div className="card box">
           <span className="box-t">Valor total cuenta</span>
-          <span className="box-v">${fmt$(totalPos + totalLiq)}</span>
-          <span className="box-s">posiciones ${fmtK(totalPos)} + liquidez ${fmtK(totalLiq)}</span>
+          <span className="box-v">${fmt$(totalCuenta)}</span>
+          <span className="box-s">posiciones ${fmtK(totalPos)} + liquidez ${fmtK(totalLiq)} + ₿ ${fmtK(btcUsd)}</span>
         </div>
         <div className="card box">
           <span className="box-t">G/P abierto</span>
@@ -127,6 +138,21 @@ export default function Inicio() {
           <span className="box-t">Platt</span>
           <span className="box-v warn">—</span>
           <span className="box-s">pendiente de SLs calibrados en BTP</span>
+        </div>
+      </div>
+
+      <div className="boxes cuentas num">
+        {cuentas.map(c => (
+          <div key={c.b} className="card box">
+            <span className="box-t" style={{ color: BROKER_COLS[c.b] }}>{BROKER_LBL[c.b]}</span>
+            <span className="box-v">${fmt$(c.total)}</span>
+            <span className="box-s">posiciones ${fmtK(c.pos)} + liquidez ${fmt$(c.liq)}</span>
+          </div>
+        ))}
+        <div className="card box">
+          <span className="box-t" style={{ color: BROKER_COLS.btc }}>{BROKER_LBL.btc}</span>
+          <span className="box-v">{btcUsd ? '$' + fmt$(btcUsd) : '—'}</span>
+          <span className="box-s">{btcQty} ₿ {btcPrecio ? '× $' + fmtK(btcPrecio) : '· sin precio'}</span>
         </div>
       </div>
 

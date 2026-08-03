@@ -26,3 +26,8 @@
 .tabla-hist th:first-child, .tabla-hist td:first-child { text-align: left; }
 
 @media (max-width: 1100px) { .boxes { grid-template-columns: repeat(2, 1fr); } }
+
+/* ─── Saldos por cuenta ─── */
+.boxes.cuentas { grid-template-columns: repeat(4, 1fr); margin-top: 0; }
+.boxes.cuentas .box-t { font-weight: 700; }
+@media (max-width: 1100px) { .boxes.cuentas { grid-template-columns: repeat(2, 1fr); } }
