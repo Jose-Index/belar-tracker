@@ -27,6 +27,7 @@ export default function Evolucion() {
   const [neto, setNeto] = useState(false)
   const [desglose, setDesglose] = useState(false)
   const [gestor, setGestor] = useState(false)
+  const [hover, setHover] = useState(null)   // hito con el ratón encima
 
   async function cargar() {
     const [w, h, c] = await Promise.all([
@@ -155,7 +156,11 @@ export default function Evolucion() {
             {m.fracFin != null && m.fracFin > m.frac &&
               <i className="hito-banda" style={{ left: izq(m.frac), width: ancho(m.fracFin - m.frac) }} />}
             <i className="hito-linea" style={{ left: izq(m.frac) }} />
-            <i className="hito-marca" style={{ left: izq(m.frac) }} title={m.etq} />
+            <i className="hito-marca" style={{ left: izq(m.frac) }} data-etq={m.etq}
+               onMouseEnter={() => setHover(m.id)} onMouseLeave={() => setHover(null)} />
+            {hover === m.id && (
+              <i className="hito-etq" style={{ left: izq(m.frac) }}>{m.etq}</i>
+            )}
           </span>
         ))}
       </div>

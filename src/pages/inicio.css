@@ -124,6 +124,7 @@
 /* ─── Marca de hito: capa sobre la gráfica, discreta; etiqueta al pasar el ratón ─── */
 .evo-chart { position: relative; }
 .hito-grupo > i { position: absolute; pointer-events: none; }
+.hito-grupo > i.hito-marca { pointer-events: auto; }
 .hito-banda { top: 12px; bottom: 30px; background: #F0A020; opacity: .07; }
 .hito-linea { top: 12px; bottom: 30px; border-left: 1px dashed #D3DBE6; }
 .hito-marca {
@@ -132,5 +133,12 @@
   pointer-events: auto; cursor: help; transition: background .15s, transform .15s;
 }
 .hito-marca:hover { background: var(--azul-belar); transform: rotate(45deg) scale(1.45); }
+/* Etiqueta del hito: solo con el ratón encima */
+.hito-etq {
+  top: -4px; transform: translateX(-50%); z-index: 5;
+  background: var(--tinta, #17202E); color: #fff;
+  font: 500 11.5px var(--font-ui); font-style: normal; white-space: nowrap;
+  padding: 5px 10px; border-radius: 7px; box-shadow: 0 4px 14px rgba(23,32,46,.18);
+}
 .hitos-tabla { margin-top: 14px; max-height: 220px; overflow-y: auto; border-top: 1px solid var(--borde); padding-top: 8px; }
 .hitos-tabla table { font-size: 12px; }
