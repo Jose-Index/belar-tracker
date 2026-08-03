@@ -118,7 +118,7 @@ export default function Inicio() {
             <button className="btn-sec" onClick={() => setAltaHito(true)}>+ Hito</button>
             <div className="divisa-toggle num">
               <button className={neto ? 'on' : ''} onClick={() => setNeto(!neto)}
-                      title="TWR base 100: desempeño real descontando aportaciones de capital">Neto</button>
+                      title="Rentabilidad TWR base 100: la curva de la gestión, descontando las aportaciones de capital (como el valor liquidativo de un fondo)">Rentabilidad</button>
             </div>
             <div className="divisa-toggle num" style={neto ? { opacity: .4, pointerEvents: 'none' } : null}>
               {['$', '€'].map(d => (

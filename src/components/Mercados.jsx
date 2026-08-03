@@ -219,7 +219,7 @@ function Comparativa({ s, pts, range, onCerrar }) {
           <Line type="monotone" dataKey="car" stroke="#2E6BF6" strokeWidth={2} dot={false} connectNulls />
         </LineChart>
       </ResponsiveContainer>
-      <p className="comp-nota">Ambas series parten de 0% al inicio del periodo ({fFecha(datos.serie[0].t)}): desempeño relativo. La cartera va en NETO (TWR, sin efecto de aportaciones) y con resolución semanal.</p>
+      <p className="comp-nota">Ambas series parten de 0% al inicio del periodo ({fFecha(datos.serie[0].t)}): desempeño relativo. La cartera va en RENTABILIDAD (TWR, sin efecto de las aportaciones) y con resolución semanal.</p>
     </div>
   )
 }
