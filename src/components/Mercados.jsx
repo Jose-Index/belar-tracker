@@ -1,42 +1,68 @@
 import { useEffect, useState } from 'react'
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import {
+  AreaChart, Area, LineChart, Line, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, ReferenceLine, CartesianGrid,
+} from 'recharts'
 import { supabase } from '../lib/supabase'
-import { fetchQuotes, fetchHistory, frescura, pctDia } from '../lib/quotes'
+import { fetchQuotes, fetchHistory, frescura } from '../lib/quotes'
 import './mercados.css'
 
 const PERIODOS = [['1d', '1D'], ['5d', '1S'], ['1mo', '1M'], ['6mo', '6M'], ['ytd', 'YTD'], ['1y', '1A'], ['5y', '5A'], ['max', 'MAX']]
+const COMPARABLES = ['1mo', '6mo', 'ytd', '1y', '5y', 'max']  // la cartera es semanal: 1D/1S no comparan
 const fmtPct = v => v == null ? '—' : (v > 0 ? '+' : '') + v.toFixed(2) + '%'
 const pctClass = v => v == null ? '' : v > 0 ? 'up' : v < 0 ? 'down' : ''
+const fFecha = t => {
+  const d = new Date(t)
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getFullYear()).slice(2)}`
+}
 
 export default function Mercados() {
-  const [lista, setLista] = useState([])       // symbols con watchlist_pos
+  const [lista, setLista] = useState([])
   const [quotes, setQuotes] = useState({})
-  const [sel, setSel] = useState(null)
+  const [series, setSeries] = useState({})      // yahoo_symbol -> points
+  const [range, setRange] = useState(() => localStorage.getItem('btp-mercados-range') || '6mo')
+  const [comparando, setComparando] = useState(null)  // symbol row
   const [edit, setEdit] = useState(false)
   const [nuevo, setNuevo] = useState('')
 
-  async function cargar() {
+  useEffect(() => { localStorage.setItem('btp-mercados-range', range) }, [range])
+
+  async function cargarLista() {
     const { data } = await supabase.from('symbols').select('*')
       .not('watchlist_pos', 'is', null).order('watchlist_pos')
     setLista(data || [])
     setQuotes(await fetchQuotes((data || []).map(s => s.yahoo_symbol)))
+    return data || []
   }
-  useEffect(() => { cargar() }, [])
+  useEffect(() => { cargarLista() }, [])
+
+  // Series de todos los boxes para el periodo seleccionado
+  useEffect(() => {
+    if (!lista.length) return
+    let vivo = true
+    setSeries({})
+    Promise.all(lista.map(async s => {
+      try {
+        const h = await fetchHistory(s.yahoo_symbol, range)
+        return [s.yahoo_symbol, h.points || []]
+      } catch { return [s.yahoo_symbol, []] }
+    })).then(pares => { if (vivo) setSeries(Object.fromEntries(pares)) })
+    return () => { vivo = false }
+  }, [lista, range])
 
   async function quitar(s) {
     await supabase.from('symbols').update({ watchlist_pos: null }).eq('id', s.id)
-    cargar()
+    cargarLista()
   }
   async function añadir(e) {
     e.preventDefault()
     const t = nuevo.trim().toUpperCase()
     if (!t) return
     const pos = (lista.at(-1)?.watchlist_pos || 0) + 1
-    // si existe el símbolo se promociona; si no, se crea con yahoo=ticker
     const { data: ex } = await supabase.from('symbols').select('id').eq('ticker', t).maybeSingle()
     if (ex) await supabase.from('symbols').update({ watchlist_pos: pos }).eq('id', ex.id)
     else await supabase.from('symbols').insert({ ticker: t, yahoo_symbol: t, asset_type: 'stock', watchlist_pos: pos })
-    setNuevo(''); cargar()
+    setNuevo(''); cargarLista()
   }
   async function mover(s, dir) {
     const i = lista.indexOf(s), j = i + dir
@@ -44,89 +70,152 @@ export default function Mercados() {
     const o = lista[j]
     await supabase.from('symbols').update({ watchlist_pos: o.watchlist_pos }).eq('id', s.id)
     await supabase.from('symbols').update({ watchlist_pos: s.watchlist_pos }).eq('id', o.id)
-    cargar()
+    cargarLista()
   }
 
   return (
     <div className="mercados">
-      <div className="chips">
-        {lista.map(s => {
-          const q = quotes[s.yahoo_symbol]
-          const d = pctDia(q)
-          return (
-            <button key={s.id} className={'chip-m num' + (sel?.id === s.id ? ' on' : '')}
-                    title={q ? frescura(q) : 'sin dato'}
-                    onClick={() => setSel(sel?.id === s.id ? null : s)}>
-              <span className="t">{s.ticker}</span>
-              <span className="p">{q ? Number(q.price).toLocaleString('es-ES', { maximumFractionDigits: q.price > 100 ? 0 : 4 }) : '—'}</span>
-              <span className={'d ' + pctClass(d)}>{fmtPct(d)}</span>
-              {edit && <span className="acciones">
-                <a onClick={e => { e.stopPropagation(); mover(s, -1) }}>‹</a>
-                <a onClick={e => { e.stopPropagation(); mover(s, 1) }}>›</a>
-                <a className="x" onClick={e => { e.stopPropagation(); quitar(s) }}>✕</a>
-              </span>}
-            </button>
-          )
-        })}
+      <div className="mercados-head">
+        <div className="periodos num">
+          {PERIODOS.map(([r, l]) => (
+            <button key={r} className={range === r ? 'on' : ''} onClick={() => { setRange(r); setComparando(null) }}>{l}</button>
+          ))}
+        </div>
+        <a className="edit-toggle" onClick={() => setEdit(!edit)}>{edit ? 'hecho' : 'editar'}</a>
+      </div>
+
+      <div className="m-boxes">
+        {lista.map(s => (
+          <BoxSimbolo key={s.id} s={s} q={quotes[s.yahoo_symbol]} pts={series[s.yahoo_symbol]}
+            comparable={COMPARABLES.includes(range)}
+            comparando={comparando?.id === s.id}
+            onComparar={() => setComparando(comparando?.id === s.id ? null : s)}
+            edit={edit} onQuitar={() => quitar(s)} onMover={d => mover(s, d)} />
+        ))}
         {edit && (
-          <form className="chip-add" onSubmit={añadir}>
+          <form className="m-box m-box-add" onSubmit={añadir}>
             <input placeholder="+ ticker Yahoo" value={nuevo} onChange={e => setNuevo(e.target.value)} />
           </form>
         )}
-        <a className="edit-toggle" onClick={() => setEdit(!edit)}>{edit ? 'hecho' : 'editar'}</a>
       </div>
-      {sel && <GraficaSimbolo s={sel} q={quotes[sel.yahoo_symbol]} />}
+
+      {comparando && COMPARABLES.includes(range) && (
+        <Comparativa s={comparando} pts={series[comparando.yahoo_symbol] || []} range={range}
+                     onCerrar={() => setComparando(null)} />
+      )}
     </div>
   )
 }
 
-function GraficaSimbolo({ s, q }) {
-  const [range, setRange] = useState('6mo')
+// ─── Box: gráfica abierta + % del periodo + botón comparar ───────────────
+function BoxSimbolo({ s, q, pts, comparable, comparando, onComparar, edit, onQuitar, onMover }) {
+  const serie = pts || []
+  const pct = serie.length > 1 ? (serie.at(-1).v - serie[0].v) / serie[0].v * 100 : null
+  const col = pct == null ? '#8A93A6' : pct >= 0 ? '#16A34A' : '#E5484D'
+
+  return (
+    <div className={'m-box card num' + (comparando ? ' on' : '')}>
+      <div className="m-box-head">
+        <span className="t" title={s.display_name || ''}>{s.ticker}</span>
+        <span className={'d ' + pctClass(pct)}>{fmtPct(pct)}</span>
+      </div>
+      <div className="m-box-precio" title={q ? frescura(q) : 'sin dato'}>
+        {q ? Number(q.price).toLocaleString('es-ES', { maximumFractionDigits: q.price > 100 ? 0 : 4 }) : '—'}
+      </div>
+      <div className="m-box-chart">
+        {serie.length > 1 ? (
+          <ResponsiveContainer width="100%" height={64}>
+            <AreaChart data={serie} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id={'mg' + s.id} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={col} stopOpacity={0.22} />
+                  <stop offset="100%" stopColor={col} stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <YAxis domain={['dataMin', 'dataMax']} hide />
+              <Area type="monotone" dataKey="v" stroke={col} strokeWidth={1.6}
+                    fill={`url(#mg${s.id})`} isAnimationActive={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        ) : <div className="m-box-cargando">···</div>}
+      </div>
+      <div className="m-box-pie">
+        {edit ? (
+          <span className="acciones">
+            <a onClick={() => onMover(-1)}>‹</a>
+            <a onClick={() => onMover(1)}>›</a>
+            <a className="x" onClick={onQuitar}>✕</a>
+          </span>
+        ) : (
+          <button className="btn-vs" disabled={!comparable} onClick={onComparar}
+                  title={comparable ? 'Comparar con la evolución del portfolio' : 'Comparación disponible de 1M en adelante (la cartera es semanal)'}>
+            {comparando ? '✕ cerrar' : 'vs cartera'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Comparativa rebasada: activo vs cartera desde el inicio del periodo ──
+function Comparativa({ s, pts, range, onCerrar }) {
   const [datos, setDatos] = useState(null)
 
   useEffect(() => {
-    setDatos(null)
-    fetchHistory(s.yahoo_symbol, range).then(setDatos)
-  }, [s.id, range])
+    let vivo = true
+    async function montar() {
+      const { data: weeks } = await supabase.from('weekly_snapshots')
+        .select('week_end,total_value').order('week_end')
+      if (!vivo || !weeks?.length || pts.length < 2) { setDatos({ vacio: true }); return }
+      const desde = pts[0].t
+      const cartera = weeks
+        .map(w => ({ t: new Date(w.week_end + 'T00:00:00').getTime(), v: Number(w.total_value) }))
+        .filter(p => p.t >= desde - 4 * 86400000)
+      if (cartera.length < 2) { setDatos({ vacio: true }); return }
+      // Rebase a 0%: ambas series parten del mismo punto y se mide el desvío
+      const reb = (serie) => {
+        const base = serie[0].v
+        return serie.map(p => ({ t: p.t, pct: (p.v - base) / base * 100 }))
+      }
+      const sim = reb(pts), car = reb(cartera)
+      // fusionar por timestamp para recharts (dos claves)
+      const mapa = new Map()
+      for (const p of sim) mapa.set(p.t, { t: p.t, sim: p.pct })
+      for (const p of car) mapa.set(p.t, { ...(mapa.get(p.t) || { t: p.t }), car: p.pct })
+      const serie = [...mapa.values()].sort((a, b) => a.t - b.t)
+      setDatos({ serie, finSim: sim.at(-1).pct, finCar: car.at(-1).pct })
+    }
+    montar()
+    return () => { vivo = false }
+  }, [s.id, range, pts])
 
-  const pts = datos?.points || []
-  const sube = pts.length > 1 && pts.at(-1).v >= pts[0].v
-  const col = sube ? '#16A34A' : '#E5484D'   // semántico: dirección del periodo
+  if (!datos) return <div className="card comparativa"><p className="placeholder" style={{ padding: 24 }}>Montando comparativa…</p></div>
+  if (datos.vacio) return <div className="card comparativa"><p className="placeholder" style={{ padding: 24 }}>No hay datos de cartera suficientes en este periodo.</p></div>
 
   return (
-    <div className="card grafica-simbolo">
-      <div className="gs-head">
-        <h3 className="num">{s.display_name || s.ticker}
-          {q && <span className="gs-precio"> {Number(q.price).toLocaleString('es-ES')} <span className="gs-fresco">{frescura(q)}</span></span>}
+    <div className="card comparativa num">
+      <div className="comp-head">
+        <h3>
+          <span className="dot" style={{ background: '#3BC9F5' }} /> {s.ticker} <b className={pctClass(datos.finSim)}>{fmtPct(datos.finSim)}</b>
+          <span className="dot" style={{ background: '#2E6BF6', marginLeft: 18 }} /> Cartera <b className={pctClass(datos.finCar)}>{fmtPct(datos.finCar)}</b>
+          <span className="comp-desvio">desvío {fmtPct(datos.finSim - datos.finCar)}</span>
         </h3>
-        <div className="periodos num">
-          {PERIODOS.map(([r, l]) => (
-            <button key={r} className={range === r ? 'on' : ''} onClick={() => setRange(r)}>{l}</button>
-          ))}
-        </div>
+        <button onClick={onCerrar}>✕</button>
       </div>
-      {!datos ? <p className="placeholder" style={{ padding: 30 }}>Cargando serie…</p> : (
-        <ResponsiveContainer width="100%" height={220}>
-          <AreaChart data={pts} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-            <defs>
-              <linearGradient id={'g' + s.id} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={col} stopOpacity={0.18} />
-                <stop offset="100%" stopColor={col} stopOpacity={0.02} />
-              </linearGradient>
-            </defs>
-            <XAxis dataKey="t" tickFormatter={t => {
-              const d = new Date(t)
-              return range === '1d' || range === '5d'
-                ? `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
-                : `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getFullYear()).slice(2)}`
-            }} tick={{ fontSize: 10.5, fontFamily: 'JetBrains Mono' }} minTickGap={70} />
-            <YAxis domain={['auto', 'auto']} tick={{ fontSize: 10.5, fontFamily: 'JetBrains Mono' }} width={56}
-                   tickFormatter={v => Number(v).toLocaleString('es-ES', { maximumFractionDigits: v > 100 ? 0 : 3 })} />
-            <Tooltip formatter={v => Number(v).toLocaleString('es-ES')} labelFormatter={t => new Date(t).toLocaleString('es-ES')} />
-            <Area type="monotone" dataKey="v" stroke={col} strokeWidth={1.8} fill={`url(#g${s.id})`} />
-          </AreaChart>
-        </ResponsiveContainer>
-      )}
+      <ResponsiveContainer width="100%" height={260}>
+        <LineChart data={datos.serie} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <CartesianGrid stroke="#E3E8F0" vertical={false} />
+          <XAxis dataKey="t" type="number" scale="time" domain={['dataMin', 'dataMax']}
+                 tickFormatter={fFecha} tick={{ fontSize: 10.5, fontFamily: 'JetBrains Mono' }} minTickGap={70} />
+          <YAxis tickFormatter={v => v.toFixed(0) + '%'} tick={{ fontSize: 10.5, fontFamily: 'JetBrains Mono' }} width={46} />
+          <Tooltip labelFormatter={fFecha}
+                   formatter={(v, k) => [fmtPct(v), k === 'sim' ? s.ticker : 'Cartera']} />
+          <ReferenceLine y={0} stroke="#8A93A6" strokeDasharray="4 3" />
+          <Line type="monotone" dataKey="sim" stroke="#3BC9F5" strokeWidth={1.8} dot={false} connectNulls />
+          <Line type="monotone" dataKey="car" stroke="#2E6BF6" strokeWidth={2} dot={false} connectNulls />
+        </LineChart>
+      </ResponsiveContainer>
+      <p className="comp-nota">Ambas series parten de 0% al inicio del periodo ({fFecha(datos.serie[0].t)}): lo que ves es desempeño relativo. La cartera tiene resolución semanal (cierres).</p>
     </div>
   )
 }
