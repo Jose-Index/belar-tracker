@@ -38,15 +38,37 @@ export async function estadoCalendario() {
   return data?.value?.at || null
 }
 
+// Universo vigilado del calendario: posiciones ABIERTAS + repositorio (ENTRAR YA / RADAR).
+// Las cerradas no pintan nada aquí (regla José 03/08).
+export async function tickersVigilados() {
+  const [p, r] = await Promise.all([
+    supabase.from('positions').select('ticker'),
+    supabase.from('repositorio').select('ticker').in('estado', ['ENTRAR_YA', 'RADAR']),
+  ])
+  return [...new Set([...(p.data || []).map(x => x.ticker), ...(r.data || []).map(x => x.ticker)])]
+}
+
+// Purga eventos futuros de tickers fuera del universo (los manuales se respetan)
+export async function purgarCalendario(vigilados) {
+  const hoy = new Date().toISOString().slice(0, 10)
+  const { data } = await supabase.from('calendar_events').select('id,ticker,source').gte('event_date', hoy)
+  const fuera = (data || []).filter(e => e.ticker && e.source !== 'manual' && !vigilados.includes(e.ticker)).map(e => e.id)
+  if (fuera.length) await supabase.from('calendar_events').delete().in('id', fuera)
+  return fuera.length
+}
+
 export async function refrescarCalendario(tickers) {
+  const vigilados = await tickersVigilados()
+  const universo = [...new Set([...(tickers || []), ...vigilados])]
   const r = await fetch('/api/ia-calendario', {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ tickers }),
+    body: JSON.stringify({ tickers: universo }),
   })
   const j = await r.json()
   if (j.error) throw new Error(j.error)
   const hoy = new Date().toISOString().slice(0, 10)
   await supabase.from('calendar_events').delete().eq('source', 'ia').gte('event_date', hoy)
+  await purgarCalendario(universo)
   const eventos = (j.eventos || []).filter(e => e.event_date >= hoy).map(e => ({
     ticker: e.ticker || null, event_date: e.event_date,
     event_type: ['earnings', 'exdiv', 'fed', 'bce', 'cripto'].includes(e.event_type) ? e.event_type : 'otro',

@@ -1,6 +1,7 @@
 // Calendario global: eventos IA (auto cada 24h) + manuales, próximos 60 días.
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { tickersVigilados, purgarCalendario } from '../lib/ia'
 import './inicio.css'
 
 const TIPO = { earnings: '📊', exdiv: '💰', fed: '🏛', bce: '🏛', cripto: '₿', revision: '🔍', otro: '·' }
@@ -14,9 +15,12 @@ export default function Calendario() {
 
   async function cargar() {
     const lim = new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10)
+    // Universo: posiciones abiertas + repositorio (ENTRAR YA / RADAR). Cerradas fuera.
+    const vigilados = await tickersVigilados()
+    await purgarCalendario(vigilados)
     const { data } = await supabase.from('calendar_events').select('*')
       .gte('event_date', hoy).lte('event_date', lim).order('event_date')
-    setRows(data || [])
+    setRows((data || []).filter(e => !e.ticker || vigilados.includes(e.ticker)))
   }
   useEffect(() => { cargar() }, [])
 
