@@ -25,6 +25,8 @@ export default function Mercados() {
   const [comparando, setComparando] = useState(null)  // symbol row
   const [edit, setEdit] = useState(false)
   const [nuevo, setNuevo] = useState('')
+  const [buscando, setBuscando] = useState(false)
+  const [propuesta, setPropuesta] = useState(null)  // {symbol, nombre, duda} pendiente de confirmar
 
   useEffect(() => { localStorage.setItem('btp-mercados-range', range) }, [range])
 
@@ -55,15 +57,30 @@ export default function Mercados() {
     await supabase.from('symbols').update({ watchlist_pos: null }).eq('id', s.id)
     cargarLista()
   }
+  async function insertarSimbolo(symbol, nombre) {
+    const pos = (lista.at(-1)?.watchlist_pos || 0) + 1
+    const { data: ex } = await supabase.from('symbols').select('id').eq('yahoo_symbol', symbol).maybeSingle()
+    if (ex) await supabase.from('symbols').update({ watchlist_pos: pos }).eq('id', ex.id)
+    else await supabase.from('symbols').insert({
+      ticker: symbol, yahoo_symbol: symbol, display_name: nombre || null,
+      asset_type: 'stock', watchlist_pos: pos,
+    })
+    setNuevo(''); setPropuesta(null); cargarLista()
+  }
+
+  // Resolver IA: "oro" → GC=F, "eurostoxx" → ^STOXX50E. Símbolo exacto entra directo.
   async function añadir(e) {
     e.preventDefault()
-    const t = nuevo.trim().toUpperCase()
-    if (!t) return
-    const pos = (lista.at(-1)?.watchlist_pos || 0) + 1
-    const { data: ex } = await supabase.from('symbols').select('id').eq('ticker', t).maybeSingle()
-    if (ex) await supabase.from('symbols').update({ watchlist_pos: pos }).eq('id', ex.id)
-    else await supabase.from('symbols').insert({ ticker: t, yahoo_symbol: t, asset_type: 'stock', watchlist_pos: pos })
-    setNuevo(''); cargarLista()
+    const q = nuevo.trim()
+    if (!q || buscando) return
+    setBuscando(true); setPropuesta(null)
+    try {
+      const r = await fetch('/api/ia-ticker?q=' + encodeURIComponent(q)).then(x => x.json())
+      if (r.error) setPropuesta({ error: r.error })
+      else if (r.via === 'exacto') await insertarSimbolo(r.symbol, r.nombre)
+      else setPropuesta(r)   // confirmación: José valida antes de añadir
+    } catch { setPropuesta({ error: 'sin respuesta del resolutor' }) }
+    setBuscando(false)
   }
   async function mover(s, dir) {
     const i = lista.indexOf(s), j = i + dir
@@ -95,7 +112,20 @@ export default function Mercados() {
         ))}
         {edit && (
           <form className="m-box m-box-add" onSubmit={añadir}>
-            <input placeholder="+ ticker Yahoo" value={nuevo} onChange={e => setNuevo(e.target.value)} />
+            <input placeholder='+ ticker o "oro", "eurostoxx"…' value={nuevo}
+                   onChange={e => { setNuevo(e.target.value); setPropuesta(null) }} disabled={buscando} />
+            {buscando && <span className="m-add-estado">resolviendo…</span>}
+            {propuesta?.error && <span className="m-add-estado err">{propuesta.error}</span>}
+            {propuesta && !propuesta.error && (
+              <div className="m-add-propuesta num">
+                <b>{propuesta.symbol}</b> · {propuesta.nombre || '—'}
+                {propuesta.duda && <span className="duda" title={propuesta.duda}> ⚠</span>}
+                <span className="acciones">
+                  <a onClick={() => insertarSimbolo(propuesta.symbol, propuesta.nombre)}>✓ añadir</a>
+                  <a className="x" onClick={() => setPropuesta(null)}>✕</a>
+                </span>
+              </div>
+            )}
           </form>
         )}
       </div>
