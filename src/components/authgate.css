@@ -24,3 +24,4 @@
 .auth-card button:disabled { opacity: .6; }
 .auth-err { color: var(--baja); font-size: 13px; margin: 0; }
 .auth-ok { font-size: 13.5px; color: var(--texto-sec); margin: 0; line-height: 1.5; }
+.auth-alt { font-size: 12.5px; text-align: center; cursor: pointer; }

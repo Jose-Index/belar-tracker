@@ -55,3 +55,48 @@
   .pos-layout { grid-template-columns: 1fr; }
   .pos-panel { width: auto; position: static; }
 }
+
+/* ─── Fase 3: modo cierre, alta, notas ─── */
+.sello { color: var(--texto-neutro); font-size: 12px; }
+.pos-msg { color: var(--azul-belar); font-weight: 600; font-size: 13px; }
+.btn-cierre.on { background: var(--azul-belar); color: white; }
+.btn-escape { border: none; background: none; color: var(--texto-neutro); cursor: pointer; font-size: 12px; text-decoration: underline; }
+.btn-sec { font: 500 13px var(--font-ui); padding: 7px 12px; border-radius: 9px; cursor: pointer; border: 1px solid var(--borde); background: var(--superficie); color: var(--texto-sec); }
+.btn-primario { font: 600 13px var(--font-ui); padding: 8px 16px; border-radius: 9px; border: none; background: var(--azul-belar); color: white; cursor: pointer; }
+
+.liq-bar { display: flex; align-items: center; gap: 16px; padding: 10px 16px; margin-bottom: 12px; font-size: 13px; }
+.liq-bar label { display: flex; align-items: center; gap: 6px; color: var(--texto-sec); }
+.liq-bar input { width: 90px; font: inherit; text-align: right; padding: 5px 7px; border-radius: 7px; border: 1px solid var(--borde); }
+.liq-total { margin-left: auto; color: var(--texto-sec); }
+
+.pos-tabla.modo-cierre input { width: 92px; font: inherit; text-align: right; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--azul-belar); background: #F7FAFF; }
+.pos-tabla.modo-cierre tbody tr { cursor: default; }
+.btn-borrar { border: none; background: none; color: var(--baja); cursor: pointer; font-size: 13px; padding: 2px 6px; }
+.btn-borrar:hover { background: #FDEFF0; border-radius: 6px; }
+
+.badge { font: 700 9px var(--font-ui); margin-left: 6px; vertical-align: 2px; }
+.badge.new { color: var(--azul-belar); border: 1px solid var(--azul-belar); border-radius: 4px; padding: 1px 4px; }
+.badge.upd { color: var(--azul-belar); font-size: 18px; line-height: 0; }
+
+.attr-selects { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 10px 0 16px; }
+.attr-selects label { display: grid; gap: 4px; font-size: 11px; color: var(--texto-neutro); }
+.attr-selects select { font: 500 12.5px var(--font-ui); padding: 6px; border-radius: 7px; border: 1px solid var(--borde); background: var(--superficie); }
+
+.pos-panel h3 { margin: 6px 0; font-size: 14px; }
+.nota-form { display: flex; gap: 6px; }
+.nota-form input { flex: 1; font: inherit; font-size: 13px; padding: 7px 9px; border-radius: 7px; border: 1px solid var(--borde); }
+.nota-form button { width: 34px; border-radius: 7px; border: none; background: var(--azul-belar); color: white; font-size: 16px; cursor: pointer; }
+.notas { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; font-size: 13px; max-height: 180px; overflow: auto; }
+.notas li { border-left: 2px solid var(--borde); padding-left: 9px; line-height: 1.4; }
+.nota-fecha { display: block; color: var(--texto-neutro); font-size: 11px; }
+.sin-notas { color: var(--texto-neutro); border: none !important; }
+.btn-cerrar-pos { margin-top: 14px; width: 100%; font: 600 12.5px var(--font-ui); padding: 9px; border-radius: 8px; cursor: pointer; border: 1px solid var(--baja); color: var(--baja); background: transparent; }
+.btn-cerrar-pos:hover { background: #FDEFF0; }
+
+.modal-fondo { position: fixed; inset: 0; background: rgba(13,20,32,.5); display: grid; place-items: center; z-index: 50; }
+.modal { width: min(520px, 92vw); }
+.modal h2 { margin-top: 0; }
+.alta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.alta-grid label { display: grid; gap: 4px; font-size: 11px; color: var(--texto-neutro); font-family: var(--font-ui); }
+.alta-grid input, .alta-grid select { font: inherit; font-size: 13px; padding: 7px 8px; border-radius: 7px; border: 1px solid var(--borde); width: 100%; box-sizing: border-box; }
+.modal-botones { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
