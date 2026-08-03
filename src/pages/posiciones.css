@@ -171,3 +171,6 @@
 .nota-x { opacity: 0; transition: opacity .15s; flex: none; }
 .notas li:hover .nota-x { opacity: .55; }
 .notas li .nota-x:hover { opacity: 1; }
+/* Evento estimado: punto hueco, nunca se lee como una fecha en firme */
+.ev-dot.estimado { color: var(--aviso); font-weight: 700; }
+.pos-leyenda .ev-dot.estimado { color: var(--aviso); }

@@ -151,3 +151,9 @@
 .hito-etq i { display: block; font-style: normal; color: #AEB9C9; font-family: var(--font-datos); font-size: 10.5px; margin-top: 2px; }
 .hitos-tabla { margin-top: 14px; max-height: 220px; overflow-y: auto; border-top: 1px solid var(--borde); padding-top: 8px; }
 .hitos-tabla table { font-size: 12px; }
+
+/* ─── Calendario: confirmado vs estimado ─── */
+.cal-conf { font: 600 9.5px var(--font-ui); letter-spacing: .04em; border-radius: 8px; padding: 1px 8px; cursor: help; white-space: nowrap; }
+.cal-conf.confirmado { background: #F0FAF3; color: #16A34A; border: 1px solid #C6EBD3; }
+.cal-conf.estimado   { background: #FEF7EA; color: #B26B00; border: 1px solid #F3DFB8; }
+.cal-conf.na         { background: var(--papel); color: var(--texto-neutro); border: 1px solid var(--borde); }

@@ -11,7 +11,7 @@ const DIAS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 export default function Calendario() {
   const [rows, setRows] = useState(null)
   const hoy = new Date().toISOString().slice(0, 10)
-  const [nuevo, setNuevo] = useState({ event_date: hoy, ticker: '', event_type: 'otro', titulo: '' })
+  const [nuevo, setNuevo] = useState({ event_date: hoy, ticker: '', event_type: 'otro', titulo: '', confirmacion: 'confirmado' })
 
   async function cargar() {
     const lim = new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10)
@@ -30,8 +30,9 @@ export default function Calendario() {
     await supabase.from('calendar_events').insert({
       event_date: nuevo.event_date, ticker: nuevo.ticker.trim().toUpperCase() || null,
       event_type: nuevo.event_type, titulo: nuevo.titulo.trim(), source: 'manual',
+      confirmacion: nuevo.confirmacion, fuente: 'josé',
     })
-    setNuevo({ event_date: hoy, ticker: '', event_type: 'otro', titulo: '' }); cargar()
+    setNuevo({ event_date: hoy, ticker: '', event_type: 'otro', titulo: '', confirmacion: nuevo.confirmacion }); cargar()
   }
   async function borrar(r) {
     if (!confirm(`¿Borrar "${r.titulo}"?`)) return
@@ -48,7 +49,9 @@ export default function Calendario() {
 
   return (
     <div>
-      <h1>Calendario <span className="hist-n num">próximos 60 días</span></h1>
+      <h1>Calendario <span className="hist-n num">
+        próximos 60 días · {rows.filter(r => r.confirmacion === 'confirmado').length} confirmados ·{' '}
+        {rows.filter(r => r.confirmacion === 'estimado').length} estimados</span></h1>
 
       <div className="card" style={{ maxWidth: 860 }}>
         <form className="repo-alta num" onSubmit={alta}>
@@ -60,6 +63,11 @@ export default function Calendario() {
           </select>
           <input placeholder="título del evento" value={nuevo.titulo} style={{ flex: 1 }}
                  onChange={e => setNuevo({ ...nuevo, titulo: e.target.value })} />
+          <select value={nuevo.confirmacion} onChange={e => setNuevo({ ...nuevo, confirmacion: e.target.value })}
+                  title="¿La fecha está convocada oficialmente o es una estimación?">
+            <option value="confirmado">confirmado</option>
+            <option value="estimado">estimado</option>
+          </select>
           <button className="btn-sec">+ Evento</button>
         </form>
 
@@ -78,6 +86,14 @@ export default function Calendario() {
                       <span className="cal-tipo">{TIPO[r.event_type] || '·'}</span>
                       {r.ticker && <b className="num">{r.ticker}</b>}
                       <span>{r.titulo}</span>
+                      <span className={'cal-conf ' + r.confirmacion}
+                            title={r.confirmacion === 'confirmado'
+                              ? `Fecha convocada por la propia compañía u organismo${r.fuente ? ' · ' + r.fuente : ''}`
+                              : r.confirmacion === 'estimado'
+                                ? `Fecha ESTIMADA, sin convocatoria oficial: puede desviarse${r.fuente ? ' · ' + r.fuente : ''}. Se re-verifica cada 24 h.`
+                                : 'Sin noción de confirmación'}>
+                        {r.confirmacion === 'confirmado' ? '✓ confirmado' : r.confirmacion === 'estimado' ? '~ estimado' : '·'}
+                      </span>
                       <span className={'cal-src num ' + r.source}>{r.source === 'ia' ? 'IA' : r.source}</span>
                       <a className="borrar-x" onClick={() => borrar(r)}>✕</a>
                     </div>
@@ -88,7 +104,11 @@ export default function Calendario() {
           })}
           {!rows.length && <p className="placeholder">Sin eventos próximos. La IA los repone cada 24 h desde Posiciones.</p>}
         </div>
-        <p className="comp-nota">Los eventos IA se regeneran automáticamente cada 24 h al abrir BTP (solo futuros; los manuales no se tocan). Pasada la fecha, desaparecen de esta vista.</p>
+        <p className="comp-nota">
+          <b>✓ confirmado</b> = fecha convocada por la propia compañía (Investor Relations, nota de prensa, 8-K) o calendario oficial FED/BCE.
+          <b> ~ estimado</b> = fecha de agregador o proyección por patrón histórico: puede desviarse, no operes contra ella.
+          La regeneración de cada 24 h persigue los estimados hasta confirmarlos o corregirlos. Los eventos manuales no se tocan.
+        </p>
       </div>
     </div>
   )

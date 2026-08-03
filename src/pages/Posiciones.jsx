@@ -116,6 +116,8 @@ export default function Posiciones() {
       const diasEarn = evEarn ? Math.ceil((new Date(evEarn.event_date) - Date.now()) / 86400000) : null
       return {
         evs, evUrgente: diasEarn != null && diasEarn <= 3,
+        // Punto sólido solo si TODOS los eventos están confirmados; hueco si hay estimados
+        evConfirmado: evs.length > 0 && evs.every(e => e.confirmacion !== 'estimado'),
         ...p, valor: val,
         gp: val - inv,
         gpPct: inv ? (val - inv) / inv * 100 : null,
@@ -341,8 +343,12 @@ export default function Posiciones() {
                     {p.ingest_badge === 'NEW' && <span className="badge new">NEW</span>}
                     {p.ingest_badge === 'UPD' && <span className="badge upd">·</span>}
                     {p.evs.length > 0 && (
-                      <span className={'ev-dot' + (p.evUrgente ? ' urgente' : '')}
-                            title={p.evs.map(e => `${e.event_date.slice(2).split('-').reverse().join('/')} · ${e.titulo}`).join('\n')}>●</span>
+                      <span className={'ev-dot' + (p.evUrgente ? ' urgente' : '') + (p.evConfirmado ? '' : ' estimado')}
+                            title={p.evs.map(e => `${e.event_date.slice(2).split('-').reverse().join('/')} · ${e.titulo}`
+                              + (e.confirmacion === 'confirmado' ? ' [CONFIRMADO]' : e.confirmacion === 'estimado' ? ' [ESTIMADO — puede desviarse]' : '')
+                              + (e.fuente ? ' · ' + e.fuente : '')).join('\n')}>
+                        {p.evConfirmado ? '●' : '○'}
+                      </span>
                     )}
                   </td>
                   <td className="tl broker">{p.broker}</td>
@@ -382,7 +388,7 @@ export default function Posiciones() {
         </p>
         {!cierre && (
           <div className="pos-leyenda num">
-            <span><i className="ev-dot">●</i> evento en calendario (rojo &lt;3 días — el detalle, al pasar el ratón)</span>
+            <span><i className="ev-dot">●</i> evento confirmado · <i className="ev-dot estimado">○</i> fecha estimada, puede desviarse (rojo si faltan &lt;3 días)</span>
             <span><i className="badge new">NEW</i> alta por captura IA</span>
             <span><i className="discrepancia">⚑</i> el análisis IA discrepa de tu ESTADO</span>
             <span><b>FTE</b> fuente de la idea: en blanco YO · B Belar · P prensa · R redes</span>
