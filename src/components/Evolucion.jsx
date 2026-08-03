@@ -213,7 +213,7 @@ function TipEvo({ active, payload, label, divisa, neto }) {
 // Gestor de hitos: alta + listado con borrado (lo único útil que hacían los chips)
 function GestorHitos({ hitos, onClose, onSave, onRecargar }) {
   const hoy = new Date().toISOString().slice(0, 10)
-  const [f, setF] = useState({ etiqueta: '', fecha_ini: hoy, fecha_fin: '', tipo: 'mercado' })
+  const [f, setF] = useState({ etiqueta: '', fecha_ini: hoy, fecha_fin: '' })
   return (
     <div className="modal-fondo" onClick={onClose}>
       <form className="card modal num" onClick={e => e.stopPropagation()}
@@ -221,7 +221,7 @@ function GestorHitos({ hitos, onClose, onSave, onRecargar }) {
               e.preventDefault()
               if (!f.etiqueta.trim()) return
               onSave({ ...f, fecha_fin: f.fecha_fin || null, autor: 'jose' })
-              setF({ etiqueta: '', fecha_ini: hoy, fecha_fin: '', tipo: 'mercado' })
+              setF({ etiqueta: '', fecha_ini: hoy, fecha_fin: '' })
             }}>
         <h2>Hitos</h2>
         <div className="alta-grid">
@@ -230,8 +230,6 @@ function GestorHitos({ hitos, onClose, onSave, onRecargar }) {
                    placeholder="p.ej. Caída general de los mercados" /></label>
           <label>Inicio<input type="date" value={f.fecha_ini} onChange={e => setF({ ...f, fecha_ini: e.target.value })} /></label>
           <label>Fin (opcional)<input type="date" value={f.fecha_fin} onChange={e => setF({ ...f, fecha_fin: e.target.value })} /></label>
-          <label>Tipo<select value={f.tipo} onChange={e => setF({ ...f, tipo: e.target.value })}>
-            {['mercado', 'macro', 'cripto', 'personal'].map(t => <option key={t}>{t}</option>)}</select></label>
         </div>
         <div className="modal-botones">
           <button type="button" className="btn-sec" onClick={onClose}>Cerrar</button>
@@ -241,13 +239,12 @@ function GestorHitos({ hitos, onClose, onSave, onRecargar }) {
         {hitos.length > 0 && (
           <div className="hitos-tabla">
             <table className="tabla-hist">
-              <thead><tr><th className="tl">HITO</th><th>FECHAS</th><th>TIPO</th><th /></tr></thead>
+              <thead><tr><th className="tl">HITO</th><th>FECHAS</th><th /></tr></thead>
               <tbody>
                 {hitos.map(h => (
                   <tr key={h.id}>
                     <td className="tl">{h.etiqueta}</td>
                     <td>{fFecha(h.fecha_ini)}{h.fecha_fin ? '–' + fFecha(h.fecha_fin) : ''}</td>
-                    <td style={{ color: 'var(--texto-neutro)', fontSize: 11 }}>{h.tipo}</td>
                     <td><a className="borrar-x" onClick={async () => {
                       if (!confirm(`¿Borrar el hito «${h.etiqueta}»?`)) return
                       await supabase.from('hitos').delete().eq('id', h.id); onRecargar()
