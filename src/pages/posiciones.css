@@ -166,3 +166,8 @@
 .pos-tabla tbody tr.fondo-XSALIR td.col-clave,
 .pos-tabla tbody tr.sel td.col-clave { background: transparent; }
 @media (max-width: 900px) { .pos-tabla td.col-clave { font-size: 12px; } }
+.notas li { display: flex; align-items: baseline; gap: 8px; }
+.nota-txt { flex: 1; }
+.nota-x { opacity: 0; transition: opacity .15s; flex: none; }
+.notas li:hover .nota-x { opacity: .55; }
+.notas li .nota-x:hover { opacity: 1; }

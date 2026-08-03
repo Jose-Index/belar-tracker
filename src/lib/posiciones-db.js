@@ -112,3 +112,7 @@ export function fetchNotas(positionId) {
 export function addNota(positionId, texto) {
   return supabase.from('position_notes').insert({ position_id: positionId, texto })
 }
+
+export function borrarNotaDB(id) {
+  return supabase.from('position_notes').delete().eq('id', id)
+}

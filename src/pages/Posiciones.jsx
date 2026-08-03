@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   fetchPosiciones, updatePosicion, altaPosicion, cerrarPosicion,
-  guardarLiquidez, guardarBtcWallet, cerrarSemana, fetchNotas, addNota, fetchSeriePosicion,
+  guardarLiquidez, guardarBtcWallet, cerrarSemana, fetchNotas, addNota, borrarNotaDB, fetchSeriePosicion,
 } from '../lib/posiciones-db'
 import { exportBackup } from '../lib/backup'
 import { AreaChart, Area, YAxis, XAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
@@ -428,6 +428,11 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
     await updatePosicion(p.id, { [campo]: valor })
     onChange()
   }
+  async function borrarNota(n) {
+    if (!confirm(`¿Borrar la nota «${n.texto.slice(0, 60)}${n.texto.length > 60 ? '…' : ''}»?`)) return
+    await borrarNotaDB(n.id)
+    fetchNotas(p.id).then(({ data }) => setNotas(data || []))
+  }
   async function guardarNota(e) {
     e.preventDefault()
     if (!nueva.trim()) return
@@ -523,7 +528,8 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
         {notas.map(n => (
           <li key={n.id}>
             <span className="num nota-fecha">{n.created_at.slice(2, 10).split('-').reverse().join('/')}</span>
-            {n.texto}
+            <span className="nota-txt">{n.texto}</span>
+            <a className="borrar-x nota-x" title="Borrar nota" onClick={() => borrarNota(n)}>✕</a>
           </li>
         ))}
         {!notas.length && <li className="sin-notas">Sin notas.</li>}
