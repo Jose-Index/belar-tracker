@@ -101,7 +101,7 @@ a:hover { color: var(--azul-hover); }
   .menu .brand { padding: 4px 6px; flex: none; }
   .menu .brand span { display: none; }
   .content { padding: 12px; overflow-x: hidden; }
-  .footer-frase { grid-column: 1; position: static; height: auto; padding: 14px 18px; font-size: 13px; line-height: 1.5; gap: 8px; }
+  .footer-frase { grid-column: 1; position: static; height: auto; padding: 22px 20px; font-size: 15px; line-height: 1.55; gap: 8px; }
 
   h1 { font-size: 20px; }
   h2 { font-size: 15.5px; }
