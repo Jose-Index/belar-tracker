@@ -1,18 +1,7 @@
-# BELAR Tracker v9
+# BTP · Belar Tracker Pro
 
-Portfolio tracker personal — Capa JOSE · Ecosistema IA Personal
+Portal de seguimiento de inversiones. Reconstrucción 2026 (rama `btp`): React + Vite + Supabase + Vercel.
 
-## Stack
-- Next.js 14
-- Supabase (PostgreSQL)
-- Recharts
-- Tailwind CSS
-- Vercel
-
-## Setup
-1. `npm install`
-2. Copy `.env.local.example` to `.env.local` and fill in Supabase credentials
-3. `npm run dev`
-
-## Deploy
-Connected to Vercel via GitHub. Push to `main` triggers auto-deploy.
+- Specs funcionales: proyecto Belar2027 (docs `btp-spec-*`).
+- Variables de entorno: `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` (la clave secreta jamás en el navegador).
+- Regla de oro: commits SIEMPRE con el email permanecer_debuts_5l@icloud.com.

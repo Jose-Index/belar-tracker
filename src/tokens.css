@@ -1,0 +1,54 @@
+/* BTP · Identidad v1 — tokens (fuente de verdad de color y tipografía)
+   Regla dura: verde/rojo/ámbar SOLO con significado de mercado. La marca es azul. */
+:root {
+  /* Marca */
+  --azul-belar: #2E6BF6;
+  --azul-hover: #1F56D6;
+  --cian-apoyo: #3BC9F5;
+
+  /* Superficies (modo claro) */
+  --tinta: #0D1420;
+  --tinta-2: #141D2E;
+  --papel: #F6F8FB;
+  --superficie: #FFFFFF;
+  --borde: #E3E8F0;
+
+  /* Texto */
+  --texto: #17202E;
+  --texto-sec: #5B6472;
+  --texto-neutro: #8A93A6;
+
+  /* Semánticos de mercado — uso EXCLUSIVO */
+  --alza: #16A34A;
+  --baja: #E5484D;
+  --aviso: #F0A020;
+
+  /* Tipografía */
+  --font-marca: 'Space Grotesk', system-ui, sans-serif;
+  --font-ui: 'Inter', system-ui, sans-serif;
+  --font-datos: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* Densidades */
+  --fs-datos: 13px;        /* modo Compacta (por defecto en escritorio) */
+  --fs-ui: 14px;
+  --radius: 10px;
+}
+
+[data-density="comoda"] {
+  --fs-datos: 14px;
+  --fs-ui: 15px;
+}
+
+[data-theme="dark"] {
+  --papel: #0D1420;
+  --superficie: #141D2E;
+  --borde: #26314A;
+  --texto: #E8EDF5;
+  --texto-sec: #9AA6BC;
+  --texto-neutro: #6B7690;
+}
+
+.num { font-family: var(--font-datos); font-variant-numeric: tabular-nums; }
+.up   { color: var(--alza); }
+.down { color: var(--baja); }
+.warn { color: var(--aviso); }

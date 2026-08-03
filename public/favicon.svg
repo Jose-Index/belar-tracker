@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- BTP · Monograma v1: B geométrica de dos cuencos cerrados sobre tile tinta,
+       barra central en Azul Belar (gesto de marca). -->
+  <rect width="64" height="64" rx="14" fill="#0D1420"/>
+  <path d="M22 13h11a10 10 0 0 1 0 20H22z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M22 31h14a10 10 0 0 1 0 20H22z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"/>
+  <rect x="19" y="29" width="17" height="6" rx="3" fill="#2E6BF6"/>
+</svg>
