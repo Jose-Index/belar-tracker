@@ -58,18 +58,28 @@ a:hover { color: var(--azul-hover); }
   padding: 22px 26px;
 }
 
-/* ---- Footer fijo de frases ---- */
+/* ---- Footer de frases: la única voz de la casa en pantalla ----
+   Cuerpo grande y mucho aire alrededor. Sin nowrap: las frases largas
+   se leen en dos líneas en lugar de cortarse con puntos suspensivos. */
 .footer-frase {
   grid-column: 2;
-  display: flex; align-items: center; justify-content: center; gap: 8px;
+  display: flex; align-items: baseline; justify-content: center;
+  gap: 14px; flex-wrap: wrap;
   border-top: 1px solid var(--borde);
   background: var(--superficie);
-  color: var(--texto-sec);
-  font-size: 12.5px;
-  padding: 0 16px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: var(--texto);
+  font-family: var(--font-marca);
+  font-size: 17px; font-weight: 500; font-style: italic;
+  letter-spacing: -0.005em; line-height: 1.55;
+  padding: 30px 40px;
+  text-align: center;
 }
-.footer-frase .autor { color: var(--texto-neutro); }
+.footer-frase > span:first-child { max-width: 80ch; }
+.footer-frase .autor {
+  color: var(--texto-neutro); font-family: var(--font-ui);
+  font-size: 12px; font-style: normal; font-weight: 600;
+  letter-spacing: .06em; text-transform: uppercase; white-space: nowrap;
+}
 
 /* ---- Utilidades ---- */
 .card {
