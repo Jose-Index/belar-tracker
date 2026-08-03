@@ -29,3 +29,25 @@ export function serieTWR(weeks, contribs) {
   }
   return out
 }
+
+// TWR por broker (eToro, XTB, IBKR, monedero BTC), cada uno con SUS flujos
+// (contributions.broker). Cada serie arranca en base 100 cuando el broker nace.
+export function serieTWRDesglose(weeks, contribs) {
+  const KEY = { etoro: 'etoro', xtb: 'xtb', ibkr: 'ibkr', btc: 'btc_usd' }
+  const mapa = new Map()
+  for (const b of Object.keys(KEY)) {
+    const ws = weeks
+      .map(w => {
+        const d = w.desglose || w.legacy?.data || {}
+        return { week_end: w.week_end, total_value: d[KEY[b]] }
+      })
+      .filter(w => w.total_value != null)
+    const serie = serieTWR(ws, (contribs || []).filter(c => c.broker === b))
+    for (const p of serie) {
+      const row = mapa.get(p.fecha) || { fecha: p.fecha }
+      row[b] = p.idx
+      mapa.set(p.fecha, row)
+    }
+  }
+  return [...mapa.values()].sort((a, b) => (a.fecha < b.fecha ? -1 : 1))
+}
