@@ -1,0 +1,23 @@
+.mercados { margin-bottom: 4px; }
+.chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; align-items: center; }
+.chip-m {
+  display: flex; align-items: baseline; gap: 8px; white-space: nowrap;
+  font-size: 12.5px; padding: 7px 12px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--borde); background: var(--superficie);
+}
+.chip-m.on { border-color: var(--azul-belar); box-shadow: 0 0 0 1px var(--azul-belar); }
+.chip-m .t { font-weight: 600; }
+.chip-m .p { color: var(--texto-sec); }
+.chip-m .acciones a { margin-left: 5px; color: var(--texto-neutro); cursor: pointer; }
+.chip-m .acciones .x { color: var(--baja); }
+.chip-add input { font: 500 12px var(--font-datos); width: 110px; padding: 7px 9px; border-radius: 10px; border: 1px dashed var(--borde); }
+.edit-toggle { font-size: 11.5px; color: var(--texto-neutro); cursor: pointer; white-space: nowrap; }
+
+.grafica-simbolo { margin-top: 10px; }
+.gs-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+.gs-head h3 { margin: 0; font-size: 15px; }
+.gs-precio { font-weight: 400; color: var(--texto-sec); }
+.gs-fresco { font-size: 10px; color: var(--aviso); letter-spacing: .04em; }
+.periodos { display: flex; gap: 2px; border: 1px solid var(--borde); border-radius: 8px; overflow: hidden; }
+.periodos button { font: 600 11px var(--font-datos); padding: 5px 9px; border: none; background: var(--superficie); color: var(--texto-sec); cursor: pointer; }
+.periodos button.on { background: var(--azul-belar); color: white; }

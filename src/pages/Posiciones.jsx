@@ -3,6 +3,7 @@ import {
   fetchPosiciones, updatePosicion, altaPosicion, cerrarPosicion,
   guardarLiquidez, cerrarSemana, fetchNotas, addNota,
 } from '../lib/posiciones-db'
+import { getSimbolos, yahooDe, fetchQuotes, pctDia, frescura } from '../lib/quotes'
 import './posiciones.css'
 
 // ─── Constantes de la spec ───────────────────────────────────────────────
@@ -41,6 +42,8 @@ export default function Posiciones() {
   const [alta, setAlta] = useState(false)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
+  const [quotes, setQuotes] = useState({})     // yahoo_symbol -> quote
+  const [simbolos, setSimbolos] = useState([])
   const tablaRef = useRef(null)
 
   useEffect(() => { localStorage.setItem('btp-orden', orden) }, [orden])
@@ -55,6 +58,11 @@ export default function Posiciones() {
       } catch { /* sin fixture */ }
     }
     setRaw(data)
+    // %/día: precios de los activos vía Yahoo (bajo demanda, con frescura)
+    const sims = await getSimbolos()
+    setSimbolos(sims)
+    const ys = data.positions.map(p => yahooDe(p.ticker, sims)).filter(Boolean)
+    setQuotes(await fetchQuotes(ys))
   }
   useEffect(() => { recargar() }, [])
 
@@ -70,16 +78,18 @@ export default function Posiciones() {
       const val = Number(p.current_value ?? p.invested)
       const inv = Number(p.invested)
       const v0 = snap(p.ticker, p.broker, w0), v1 = snap(p.ticker, p.broker, w1)
+      const q = quotes[yahooDe(p.ticker, simbolos)]
       return {
         ...p, valor: val,
         gp: val - inv,
         gpPct: inv ? (val - inv) / inv * 100 : null,
-        dia: null,
+        dia: pctDia(q),
+        diaFresco: q ? frescura(q) : null,
         sem: (v0 != null && v1 != null && Number(v1) !== 0) ? (v0 - v1) / v1 * 100 : null,
         peso: total ? val / total * 100 : null,
       }
     })
-  }, [raw])
+  }, [raw, quotes, simbolos])
 
   const sorted = useMemo(() => {
     if (!rows) return null
@@ -230,7 +240,7 @@ export default function Posiciones() {
                     : fmt$(p.valor)}</td>
                   <td className={pctClass(p.gp)}>{fmt$(p.gp)}</td>
                   <td className={pctClass(p.gpPct)}>{fmtPct(p.gpPct)}</td>
-                  <td className={pctClass(p.dia)}>{fmtPct(p.dia)}</td>
+                  <td className={pctClass(p.dia)} title={p.diaFresco || ''}>{fmtPct(p.dia)}</td>
                   <td className={pctClass(p.sem)}>{fmtPct(p.sem)}</td>
                   <td><span className={'chip chip-' + p.estado}>{ESTADOS[p.estado]?.label || p.estado}</span></td>
                   <td className="tl clase">{CLASES[p.clase] || p.clase}</td>
@@ -247,7 +257,7 @@ export default function Posiciones() {
         <p className="pos-fuente">
           {cierre
             ? 'Modo cierre: edita VALOR/INVERTIDO (Enter salta a la siguiente fila), ✕ cierra posición, y CERRAR SEMANA sella todo.'
-            : '%/día llegará con el módulo de precios · %/semana = cierre vs cierre anterior'}
+            : '%/día = Yahoo Finance con etiqueta de frescura al pasar el ratón · %/semana = cierre vs cierre anterior'}
         </p>
       </div>
 
