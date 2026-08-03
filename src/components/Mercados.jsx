@@ -5,6 +5,7 @@ import {
 } from 'recharts'
 import { supabase } from '../lib/supabase'
 import { fetchQuotes, fetchHistory, frescura } from '../lib/quotes'
+import { serieTWR } from '../lib/twr'
 import './mercados.css'
 
 const PERIODOS = [['1d', '1D'], ['5d', '1S'], ['1mo', '1M'], ['6mo', '6M'], ['ytd', 'YTD'], ['1y', '1A'], ['5y', '5A'], ['max', 'MAX']]
@@ -164,12 +165,15 @@ function Comparativa({ s, pts, range, onCerrar }) {
   useEffect(() => {
     let vivo = true
     async function montar() {
-      const { data: weeks } = await supabase.from('weekly_snapshots')
-        .select('week_end,total_value').order('week_end')
+      const [{ data: weeks }, { data: contribs }] = await Promise.all([
+        supabase.from('weekly_snapshots').select('week_end,total_value').order('week_end'),
+        supabase.from('contributions').select('fecha,importe_eur,importe_usd'),
+      ])
       if (!vivo || !weeks?.length || pts.length < 2) { setDatos({ vacio: true }); return }
       const desde = pts[0].t
-      const cartera = weeks
-        .map(w => ({ t: new Date(w.week_end + 'T00:00:00').getTime(), v: Number(w.total_value) }))
+      // Cartera en TWR: comparar en bruto sería tramposo (las aportaciones inflarían la línea)
+      const cartera = serieTWR(weeks, contribs)
+        .map(p => ({ t: p.t, v: p.idx }))
         .filter(p => p.t >= desde - 4 * 86400000)
       if (cartera.length < 2) { setDatos({ vacio: true }); return }
       // Rebase a 0%: ambas series parten del mismo punto y se mide el desvío
@@ -215,7 +219,7 @@ function Comparativa({ s, pts, range, onCerrar }) {
           <Line type="monotone" dataKey="car" stroke="#2E6BF6" strokeWidth={2} dot={false} connectNulls />
         </LineChart>
       </ResponsiveContainer>
-      <p className="comp-nota">Ambas series parten de 0% al inicio del periodo ({fFecha(datos.serie[0].t)}): lo que ves es desempeño relativo. La cartera tiene resolución semanal (cierres).</p>
+      <p className="comp-nota">Ambas series parten de 0% al inicio del periodo ({fFecha(datos.serie[0].t)}): desempeño relativo. La cartera va en NETO (TWR, sin efecto de aportaciones) y con resolución semanal.</p>
     </div>
   )
 }

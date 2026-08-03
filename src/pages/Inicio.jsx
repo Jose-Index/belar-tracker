@@ -4,6 +4,7 @@ import {
   ReferenceLine, ReferenceArea, CartesianGrid,
 } from 'recharts'
 import { supabase } from '../lib/supabase'
+import { serieTWR } from '../lib/twr'
 import Mercados from '../components/Mercados.jsx'
 import './inicio.css'
 
@@ -20,6 +21,7 @@ export default function Inicio() {
   const [contribs, setContribs] = useState([])
   const [liquidez, setLiquidez] = useState({})
   const [divisa, setDivisa] = useState('$')
+  const [neto, setNeto] = useState(false)   // TWR: desempeño sin aportaciones
   const [altaHito, setAltaHito] = useState(false)
 
   async function cargar() {
@@ -27,7 +29,7 @@ export default function Inicio() {
       supabase.from('weekly_snapshots').select('week_end,total_value,eurusd').order('week_end'),
       supabase.from('hitos').select('*').order('fecha_ini'),
       supabase.from('positions').select('invested,current_value'),
-      supabase.from('contributions').select('fecha,importe_eur'),
+      supabase.from('contributions').select('fecha,importe_eur,importe_usd'),
       supabase.from('app_state').select('key,value').eq('key', 'liquidez'),
     ])
     setWeeks(w.data || []); setHitos(h.data || []); setPositions(p.data || [])
@@ -46,7 +48,15 @@ export default function Inicio() {
     })
   }, [weeks])
 
-  const km = divisa === '$' ? 'usd' : 'eur'
+  const km = neto ? 'idx' : divisa === '$' ? 'usd' : 'eur'
+
+  // Serie neta (TWR base 100): las aportaciones no son rendimiento
+  const serieNeta = useMemo(() => {
+    if (!weeks || !neto) return []
+    return serieTWR(weeks, contribs)
+  }, [weeks, contribs, neto])
+
+  const serieActiva = neto ? serieNeta.map(p => ({ fecha: p.fecha, idx: p.idx })) : serie
 
   // Boxes
   const totalPos = positions.reduce((a, p) => a + Number(p.current_value ?? p.invested), 0)
@@ -107,6 +117,10 @@ export default function Inicio() {
           <div className="evo-controles">
             <button className="btn-sec" onClick={() => setAltaHito(true)}>+ Hito</button>
             <div className="divisa-toggle num">
+              <button className={neto ? 'on' : ''} onClick={() => setNeto(!neto)}
+                      title="TWR base 100: desempeño real descontando aportaciones de capital">Neto</button>
+            </div>
+            <div className="divisa-toggle num" style={neto ? { opacity: .4, pointerEvents: 'none' } : null}>
               {['$', '€'].map(d => (
                 <button key={d} className={divisa === d ? 'on' : ''} onClick={() => setDivisa(d)}>{d}</button>
               ))}
@@ -114,7 +128,7 @@ export default function Inicio() {
           </div>
         </div>
         <ResponsiveContainer width="100%" height={340}>
-          <AreaChart data={serie} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
+          <AreaChart data={serieActiva} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="gAzul" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#2E6BF6" stopOpacity={0.25} />
@@ -124,7 +138,7 @@ export default function Inicio() {
             <CartesianGrid stroke="#E3E8F0" vertical={false} />
             <XAxis dataKey="fecha" tickFormatter={fFecha} tick={{ fontSize: 11, fontFamily: 'JetBrains Mono' }} minTickGap={60} />
             <YAxis tickFormatter={fmtK} tick={{ fontSize: 11, fontFamily: 'JetBrains Mono' }} width={46} domain={['auto', 'auto']} />
-            <Tooltip content={<TipEvo divisa={divisa} hitos={hitos} />} />
+            <Tooltip content={<TipEvo divisa={divisa} neto={neto} hitos={hitos} />} />
             {hitos.map(h => h.fecha_fin
               ? <ReferenceArea key={h.id} x1={h.fecha_ini} x2={h.fecha_fin} fill="#F0A020" fillOpacity={0.10} />
               : <ReferenceLine key={h.id} x={h.fecha_ini} stroke="#8A93A6" strokeDasharray="4 3" />)}
@@ -171,12 +185,15 @@ export default function Inicio() {
   )
 }
 
-function TipEvo({ active, payload, label, divisa }) {
+function TipEvo({ active, payload, label, divisa, neto }) {
   if (!active || !payload?.length) return null
+  const v = payload[0].value
   return (
     <div className="tip-evo num">
       <div>{fFecha(label)}</div>
-      <b>{divisa === '$' ? '$' : '€'}{fmt$(payload[0].value)}</b>
+      <b>{neto
+        ? `${v.toFixed(1)} (${fmtPct(v - 100)} desde origen)`
+        : (divisa === '$' ? '$' : '€') + fmt$(v)}</b>
     </div>
   )
 }
