@@ -1,12 +1,23 @@
 import { supabase } from './supabase'
 
 // ─── Ingesta de capturas ───
+// Reescala en el navegador (máx 1800px) y comprime a JPEG: evita el límite de
+// 4.5MB por petición de Vercel y estandariza lo que ve el extractor.
 export function leerImagen(file) {
   return new Promise((ok, ko) => {
-    const r = new FileReader()
-    r.onload = () => ok({ data: String(r.result).split(',')[1], media_type: file.type || 'image/png' })
-    r.onerror = ko
-    r.readAsDataURL(file)
+    const img = new Image()
+    img.onload = () => {
+      const MAX = 1800
+      const esc = Math.min(1, MAX / img.width)
+      const c = document.createElement('canvas')
+      c.width = Math.round(img.width * esc)
+      c.height = Math.round(img.height * esc)
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height)
+      ok({ data: c.toDataURL('image/jpeg', 0.85).split(',')[1], media_type: 'image/jpeg' })
+      URL.revokeObjectURL(img.src)
+    }
+    img.onerror = ko
+    img.src = URL.createObjectURL(file)
   })
 }
 

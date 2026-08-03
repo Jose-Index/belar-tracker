@@ -6,7 +6,7 @@ const fmt$ = v => v == null ? '—' : Number(v).toLocaleString('es-ES', { minimu
 
 // Zona de arrastre + pantalla de revisión (diff). NUNCA auto-commit:
 // José revisa y acepta; lo aceptado vuelve a Posiciones como borrador/acciones.
-export default function IngestaIA({ positions, onAplicar }) {
+export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
   const [estado, setEstado] = useState('idle')  // idle | procesando | diff | error
   const [err, setErr] = useState(null)
   const [diff, setDiff] = useState(null)
@@ -23,6 +23,14 @@ export default function IngestaIA({ positions, onAplicar }) {
     }
   }
 
+  // El nombre de pantalla se resuelve al símbolo canónico vía tabla symbols (aliases)
+  function canonico(t) {
+    const T = t.toUpperCase()
+    const s = simbolos.find(x => x.ticker.toUpperCase() === T ||
+      (x.aliases || []).some(a => String(a).toUpperCase() === T))
+    return s ? s.ticker.toUpperCase() : T
+  }
+
   function construirDiff(extracciones, positions) {
     const updates = [], nuevas = [], liq = {}
     const vistos = new Set()
@@ -30,7 +38,7 @@ export default function IngestaIA({ positions, onAplicar }) {
     for (const ex of extracciones) {
       if (ex.liquidez != null) liq[ex.broker] = ex.liquidez
       for (const r of ex.posiciones || []) {
-        const t = (r.ticker || r.nombre || '').toUpperCase()
+        const t = canonico(r.ticker || r.nombre || '')
         const pos = positions.find(p => p.broker === ex.broker && (
           p.ticker.toUpperCase() === t ||
           (r.nombre && r.nombre.toUpperCase().includes(p.ticker.toUpperCase())) ||

@@ -18,7 +18,8 @@ Reglas:
 - ticker: el símbolo si aparece; si solo hay nombre comercial, tu mejor conversión a ticker (p.ej. "NVIDIA Corp"→"NVDA"). CopyTraders de eToro: usa el nombre del trader tal cual.
 - apalancamiento: x1 si no se indica.
 - liquidez: el saldo disponible/cash SI aparece en la captura; si no, null.
-- Si una cifra no se lee con certeza, pon null antes que inventarla.`
+- Si una cifra no se lee con certeza, pon null antes que inventarla.
+- CRÍTICO: transcribe cada importe dígito a dígito y reléelo antes de escribirlo (confundir un 5 con un 6, o perder los decimales, corrompe la cartera). Ante ambigüedad visual, null.`
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST' }); return }

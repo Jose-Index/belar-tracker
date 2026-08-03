@@ -268,7 +268,7 @@ export default function Posiciones() {
 
         {msg && <p className="pos-msg num">{msg}</p>}
 
-        {cierre && <IngestaIA positions={raw.positions} onAplicar={aplicarDiff} />}
+        {cierre && <IngestaIA positions={raw.positions} simbolos={simbolos} onAplicar={aplicarDiff} />}
 
         {cierre && (
           <div className="card liq-bar num">
