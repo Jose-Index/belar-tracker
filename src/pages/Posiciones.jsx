@@ -22,8 +22,17 @@ const CLASES = {
   NUCLEO_ANCLA: 'NÚCLEO·A', NUCLEO_ESTRUCTURAL: 'NÚCLEO·E', NUCLEO_GESTION: 'NÚCLEO·G',
   MOMENTUM: 'MOMENTUM', TACTICA: 'TÁCTICA', DISRUPTIVA: 'DISRUPT.',
 }
+const CLASE_AYUDA = {
+  NUCLEO_ANCLA: 'NÚCLEO ANCLA — defensivo. Sostiene la cartera cuando todo cae (oro, refugio). SL amplio (−15/−20%) o sin SL: solo sale por invalidación estructural, no por ruido.',
+  NUCLEO_ESTRUCTURAL: 'NÚCLEO ESTRUCTURAL — crecimiento a largo plazo, tesis de años. Revisión semestral, SL amplio (−10/−15%) sobre MA200 o soporte estructural.',
+  NUCLEO_GESTION: 'NÚCLEO GESTIÓN PROFESIONAL — capital delegado en un CopyTrader verificado. No lo gestionas tú: no lleva SL propio, se vigila con alarma de precio.',
+  MOMENTUM: 'MOMENTUM — crecimiento sostenido (beta >1.3, volatilidad >3%, breakout con volumen). Trailing SL activo (−7/−10%, mínimo 2×ATR).',
+  TACTICA: 'TÁCTICA — oportunidad de corto/medio plazo. SL técnico activo (−5/−8%, mínimo 2×ATR) sobre soporte claro.',
+  DISRUPTIVA: 'DISRUPTIVA — smallcap especulativa. Sizing pequeño, SL muy amplio o sin SL: la invalidación es la tesis, no el precio.',
+}
 const FUENTES = ['YO', 'BELAR', 'PRENSA', 'REDES']
 const BROKERS = ['etoro', 'xtb', 'ibkr']
+const ORDEN_BROKER = { etoro: 0, xtb: 1, ibkr: 2 }   // orden de la casa, no alfabético
 const ORDENES = [
   { id: 'broker', label: 'Broker A-Z' }, { id: 'entrada', label: 'Entrada' },
   { id: 'clase', label: 'Clase' }, { id: 'estado', label: 'Estado' },
@@ -38,6 +47,7 @@ const pctClass = v => v == null ? '' : v > 0 ? 'up' : v < 0 ? 'down' : ''
 export default function Posiciones() {
   const [raw, setRaw] = useState(null)          // {positions, snapshots, liquidez, lastClose}
   const [orden, setOrden] = useState(() => localStorage.getItem('btp-orden') || 'broker')
+  const [desc, setDesc] = useState(() => localStorage.getItem('btp-orden-desc') === '1')
   const [selId, setSelId] = useState(null)
   const [cierre, setCierre] = useState(false)   // MODO CIERRE SEMANA
   const [draft, setDraft] = useState({})        // {id: {invested?, current_value?}} en modo cierre
@@ -55,6 +65,7 @@ export default function Posiciones() {
   const tablaRef = useRef(null)
 
   useEffect(() => { localStorage.setItem('btp-orden', orden) }, [orden])
+  useEffect(() => { localStorage.setItem('btp-orden-desc', desc ? '1' : '0') }, [desc])
 
   async function recargar() {
     const data = await fetchPosiciones()
@@ -121,8 +132,10 @@ export default function Posiciones() {
 
   const sorted = useMemo(() => {
     if (!rows) return null
+    // Orden natural de cada criterio (asc = el que tiene sentido leer primero).
+    // Broker: eToro → XTB → IBKR, no alfabético (decisión José).
     const by = {
-      broker: (a, b) => a.broker.localeCompare(b.broker) || a.ticker.localeCompare(b.ticker),
+      broker: (a, b) => (ORDEN_BROKER[a.broker] ?? 9) - (ORDEN_BROKER[b.broker] ?? 9) || a.ticker.localeCompare(b.ticker),
       entrada: (a, b) => (b.entry_date || '').localeCompare(a.entry_date || ''),
       clase: (a, b) => (a.clase || '').localeCompare(b.clase || ''),
       estado: (a, b) => (ESTADOS[a.estado]?.urg ?? 9) - (ESTADOS[b.estado]?.urg ?? 9),
@@ -131,8 +144,9 @@ export default function Posiciones() {
       peso: (a, b) => (b.peso ?? 0) - (a.peso ?? 0),
       gp: (a, b) => (b.gpPct ?? -999) - (a.gpPct ?? -999),
     }
-    return [...rows].sort(by[orden] || by.broker)
-  }, [rows, orden])
+    const cmp = by[orden] || by.broker
+    return [...rows].sort(desc ? (a, b) => -cmp(a, b) : cmp)
+  }, [rows, orden, desc])
 
   const sel = sorted?.find(p => p.id === selId) || null
 
@@ -253,6 +267,10 @@ export default function Posiciones() {
               <select value={orden} onChange={e => setOrden(e.target.value)} disabled={cierre}>
                 {ORDENES.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
               </select>
+              <button className="btn-dir" disabled={cierre} onClick={() => setDesc(!desc)}
+                      title={desc ? 'Descendente — clic para ascendente' : 'Ascendente — clic para descendente'}>
+                {desc ? '↓' : '↑'}
+              </button>
             </label>
             <button className="btn-sec" onClick={() => setAlta(true)}>+ Posición</button>
             {!cierre && (
@@ -320,7 +338,7 @@ export default function Posiciones() {
             <tbody>
               {sorted.map(p => (
                 <tr key={p.id} onClick={() => !cierre && setSelId(p.id)}
-                    className={selId === p.id && !cierre ? 'sel' : ''}>
+                    className={(selId === p.id && !cierre ? 'sel ' : '') + 'fondo-' + p.estado}>
                   <td className="tl ticker">
                     {p.ticker}
                     {p.ingest_badge === 'NEW' && <span className="badge new">NEW</span>}
@@ -349,7 +367,7 @@ export default function Posiciones() {
                     {p.veredicto_ia && p.veredicto_ia !== p.estado &&
                       <span className="discrepancia" title={`Veredicto IA: ${ESTADOS[p.veredicto_ia]?.label || p.veredicto_ia}`}>⚑</span>}
                   </td>
-                  <td className="tl clase">{CLASES[p.clase] || p.clase}</td>
+                  <td className="tl clase" title={CLASE_AYUDA[p.clase] || ''}>{CLASES[p.clase] || p.clase}</td>
                   <td>{p.apalancamiento > 1 ? 'x' + Number(p.apalancamiento) : ''}</td>
                   <td>{p.peso == null ? '—' : p.peso.toFixed(1) + '%'}</td>
                   <td className="fuente" title={'Fuente: ' + (p.fuente || 'YO')}>{p.fuente === 'YO' ? '' : (p.fuente || '').slice(0, 1)}</td>
@@ -371,6 +389,8 @@ export default function Posiciones() {
             <span><i className="badge new">NEW</i> alta por captura IA</span>
             <span><i className="discrepancia">⚑</i> el análisis IA discrepa de tu ESTADO</span>
             <span><b>FTE</b> fuente de la idea: en blanco YO · B Belar · P prensa · R redes</span>
+            <span>fondo <i className="lg-ojo">ámbar OJO</i> · <i className="lg-duda">azul ¿?</i> · <i className="lg-xsalir">rojo xSALIR</i></span>
+            <span><b>CLASE</b> el detalle de cada una, al pasar el ratón</span>
           </div>
         )}
       </div>
@@ -460,9 +480,9 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
             {Object.entries(ESTADOS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
           </select>
         </label>
-        <label>Clase
+        <label title={CLASE_AYUDA[p.clase] || ''}>Clase
           <select value={p.clase} onChange={e => setAttr('clase', e.target.value)}>
-            {Object.entries(CLASES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            {Object.entries(CLASES).map(([k, v]) => <option key={k} value={k} title={CLASE_AYUDA[k]}>{v}</option>)}
           </select>
         </label>
         <label>Fuente

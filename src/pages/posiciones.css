@@ -117,3 +117,24 @@
 
 /* ─── Gráfica del detalle de posición ─── */
 .pos-grafica { margin: 4px 0 12px; width: 100%; min-width: 0; display: block; }
+
+/* ─── Fondo suave por estado: solo los que piden atención ─── */
+.pos-tabla tbody tr.fondo-OJO    { background: #FEF9F0; }
+.pos-tabla tbody tr.fondo-DUDA   { background: #F2F6FE; }
+.pos-tabla tbody tr.fondo-XSALIR { background: #FDF4F5; }
+.pos-tabla tbody tr.fondo-OJO:hover    { background: #FDF3E2; }
+.pos-tabla tbody tr.fondo-DUDA:hover   { background: #E8EFFD; }
+.pos-tabla tbody tr.fondo-XSALIR:hover { background: #FBE9EB; }
+.pos-tabla tbody tr.sel { background: #EAF0FE; }
+
+/* Dirección de orden */
+.btn-dir {
+  font: 600 12px var(--font-datos); margin-left: 5px; width: 24px; height: 24px;
+  border: 1px solid var(--borde); background: transparent; color: var(--texto-sec);
+  border-radius: 6px; cursor: pointer; vertical-align: middle;
+}
+.btn-dir:hover:not(:disabled) { border-color: var(--azul-belar); color: var(--azul-belar); }
+.btn-dir:disabled { opacity: .4; cursor: default; }
+.pos-leyenda .lg-ojo    { background: #FEF9F0; padding: 1px 6px; border-radius: 4px; }
+.pos-leyenda .lg-duda   { background: #F2F6FE; padding: 1px 6px; border-radius: 4px; }
+.pos-leyenda .lg-xsalir { background: #FDF4F5; padding: 1px 6px; border-radius: 4px; }
