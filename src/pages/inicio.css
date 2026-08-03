@@ -121,9 +121,16 @@
   .cal-fecha { width: auto; }
 }
 
-/* ─── Marca de hito: discreta, la etiqueta llega al pasar el ratón ─── */
-.hito-marca path { fill: #B8C2D2; transition: fill .15s, transform .15s; transform-origin: center; }
-.hito-marca:hover path { fill: var(--azul-belar); transform: scale(1.5); }
-.hito-marca { cursor: help; }
+/* ─── Marca de hito: capa sobre la gráfica, discreta; etiqueta al pasar el ratón ─── */
+.evo-chart { position: relative; }
+.hito-grupo > i { position: absolute; pointer-events: none; }
+.hito-banda { top: 12px; bottom: 30px; background: #F0A020; opacity: .07; }
+.hito-linea { top: 12px; bottom: 30px; border-left: 1px dashed #D3DBE6; }
+.hito-marca {
+  top: 3px; width: 9px; height: 9px; margin-left: -4.5px;
+  background: #AEB9C9; transform: rotate(45deg); border-radius: 1.5px;
+  pointer-events: auto; cursor: help; transition: background .15s, transform .15s;
+}
+.hito-marca:hover { background: var(--azul-belar); transform: rotate(45deg) scale(1.45); }
 .hitos-tabla { margin-top: 14px; max-height: 220px; overflow-y: auto; border-top: 1px solid var(--borde); padding-top: 8px; }
 .hitos-tabla table { font-size: 12px; }

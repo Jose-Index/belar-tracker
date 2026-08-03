@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   AreaChart, Area, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  ReferenceLine, ReferenceArea, CartesianGrid,
+  ReferenceLine, CartesianGrid,
 } from 'recharts'
 import { supabase } from '../lib/supabase'
 import { serieTWR, serieTWRDesglose } from '../lib/twr'
@@ -16,6 +16,9 @@ const fmtK = v => v >= 1000 ? (v / 1000).toFixed(1) + 'k' : String(Math.round(v)
 const fmtPct = v => v == null ? '—' : (v > 0 ? '+' : '') + v.toFixed(2) + '%'
 const fFecha = d => d ? d.slice(2).split('-').reverse().join('/') : '—'
 
+// Geometría del área de trazado: eje Y 46px a la izquierda, margen derecho 8px
+const PLOT_L = 46, PLOT_R = 8
+
 export default function Evolucion() {
   const [weeks, setWeeks] = useState(null)
   const [hitos, setHitos] = useState([])
@@ -23,7 +26,7 @@ export default function Evolucion() {
   const [divisa, setDivisa] = useState('$')
   const [neto, setNeto] = useState(false)
   const [desglose, setDesglose] = useState(false)
-  const [altaHito, setAltaHito] = useState(false)
+  const [gestor, setGestor] = useState(false)
 
   async function cargar() {
     const [w, h, c] = await Promise.all([
@@ -70,28 +73,29 @@ export default function Evolucion() {
 
   async function guardarHito(h) {
     await supabase.from('hitos').insert(h)
-    setAltaHito(false); cargar()
+    cargar()
   }
 
-  // Hitos: SOLO una marca discreta en la gráfica. La etiqueta aparece al pasar
-  // el ratón por encima (decisión José: no deben leerse a simple vista).
-  const marcasHito = () => hitos.flatMap(h => {
-    const etq = `${h.etiqueta} · ${fFecha(h.fecha_ini)}${h.fecha_fin ? '–' + fFecha(h.fecha_fin) : ''}`
-    const rombo = ({ viewBox }) => (
-      <g className="hito-marca" transform={`translate(${viewBox.x}, 6)`}>
-        <title>{etq}</title>
-        <rect x={-14} y={-6} width={28} height={22} fill="transparent" />
-        <path d="M0,-4 L4,0 L0,4 L-4,0 Z" />
-      </g>
-    )
-    const linea = (
-      <ReferenceLine key={'l' + h.id} x={h.fecha_ini} stroke="#C9D2E0" strokeDasharray="3 4"
-                     label={rombo} isFront />
-    )
-    return h.fecha_fin
-      ? [<ReferenceArea key={'a' + h.id} x1={h.fecha_ini} x2={h.fecha_fin} fill="#F0A020" fillOpacity={0.055} />, linea]
-      : [linea]
-  })
+  // Hitos: marca discreta en una capa propia sobre la gráfica (recharts 3 no admite
+  // label como función). La etiqueta solo aparece al pasar el ratón por encima.
+  const fechasEje = (desglose ? serieDesglose : serieActiva).map(p => p.fecha)
+  const marcas = hitos.map(h => {
+    const n = fechasEje.length - 1
+    if (n < 1) return null
+    let i = fechasEje.findIndex(f => f >= h.fecha_ini)
+    if (i < 0) i = n
+    let j = -1
+    if (h.fecha_fin) {
+      j = fechasEje.findIndex(f => f >= h.fecha_fin)
+      if (j < 0) j = n
+    }
+    return {
+      id: h.id, frac: i / n, fracFin: j >= 0 ? j / n : null,
+      etq: `${h.etiqueta} · ${fFecha(h.fecha_ini)}${h.fecha_fin ? '–' + fFecha(h.fecha_fin) : ''}`,
+    }
+  }).filter(Boolean)
+  const izq = frac => `calc(${PLOT_L}px + (100% - ${PLOT_L + PLOT_R}px) * ${frac})`
+  const ancho = d => `calc((100% - ${PLOT_L + PLOT_R}px) * ${d})`
 
   if (!weeks) return <p className="placeholder">Cargando…</p>
 
@@ -100,7 +104,7 @@ export default function Evolucion() {
       <div className="evo-head">
         <h2>Evolución del Portfolio</h2>
         <div className="evo-controles">
-          <button className="btn-sec" onClick={() => setAltaHito(true)} title="Añadir o borrar hitos">Hitos</button>
+          <button className="btn-sec" onClick={() => setGestor(true)} title="Añadir o borrar hitos">Hitos</button>
           <div className="divisa-toggle num">
             <button className={desglose ? 'on' : ''} onClick={() => setDesglose(!desglose)}
                     title="Líneas por broker (eToro, XTB, IBKR) y monedero BTC personal. Combinable con Rentabilidad: TWR base 100 por broker, cada uno con sus aportaciones">Desglose</button>
@@ -114,37 +118,48 @@ export default function Evolucion() {
           </div>
         </div>
       </div>
-      <ResponsiveContainer width="100%" height={340}>
-        {desglose ? (
-          <LineChart data={serieDesglose} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid stroke="#E3E8F0" vertical={false} />
-            <XAxis dataKey="fecha" tickFormatter={fFecha} tick={{ fontSize: 11, fontFamily: 'JetBrains Mono' }} minTickGap={60} />
-            <YAxis tickFormatter={neto ? (v => v.toFixed(0)) : fmtK} tick={{ fontSize: 11, fontFamily: 'JetBrains Mono' }} width={46} domain={['auto', 'auto']} />
-            <Tooltip content={<TipDesglose neto={neto} />} />
-            {neto && <ReferenceLine y={100} stroke="#8A93A6" strokeDasharray="4 3" />}
-            {marcasHito()}
-            {Object.keys(BROKER_COLS).map(k => (
-              <Line key={k} type="monotone" dataKey={k} stroke={BROKER_COLS[k]}
-                    strokeWidth={k === 'btc' ? 1.4 : 1.8} dot={false} connectNulls />
-            ))}
-          </LineChart>
-        ) : (
-        <AreaChart data={serieActiva} margin={{ top: 12, right: 8, left: 0, bottom: 0 }}>
-          <defs>
-            <linearGradient id="gAzul" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#2E6BF6" stopOpacity={0.25} />
-              <stop offset="100%" stopColor="#2E6BF6" stopOpacity={0.02} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid stroke="#E3E8F0" vertical={false} />
-          <XAxis dataKey="fecha" tickFormatter={fFecha} tick={{ fontSize: 11, fontFamily: 'JetBrains Mono' }} minTickGap={60} />
-          <YAxis tickFormatter={fmtK} tick={{ fontSize: 11, fontFamily: 'JetBrains Mono' }} width={46} domain={['auto', 'auto']} />
-          <Tooltip content={<TipEvo divisa={divisa} neto={neto} />} />
-          {marcasHito()}
-          <Area type="monotone" dataKey={km} stroke="#2E6BF6" strokeWidth={2} fill="url(#gAzul)" connectNulls />
-        </AreaChart>
-        )}
-      </ResponsiveContainer>
+
+      <div className="evo-chart">
+        <ResponsiveContainer width="100%" height={340}>
+          {desglose ? (
+            <LineChart data={serieDesglose} margin={{ top: 12, right: PLOT_R, left: 0, bottom: 0 }}>
+              <CartesianGrid stroke="#E3E8F0" vertical={false} />
+              <XAxis dataKey="fecha" tickFormatter={fFecha} tick={{ fontSize: 11, fontFamily: 'JetBrains Mono' }} minTickGap={60} />
+              <YAxis tickFormatter={neto ? (v => v.toFixed(0)) : fmtK} tick={{ fontSize: 11, fontFamily: 'JetBrains Mono' }} width={PLOT_L} domain={['auto', 'auto']} />
+              <Tooltip content={<TipDesglose neto={neto} />} />
+              {neto && <ReferenceLine y={100} stroke="#8A93A6" strokeDasharray="4 3" />}
+              {Object.keys(BROKER_COLS).map(k => (
+                <Line key={k} type="monotone" dataKey={k} stroke={BROKER_COLS[k]}
+                      strokeWidth={k === 'btc' ? 1.4 : 1.8} dot={false} connectNulls />
+              ))}
+            </LineChart>
+          ) : (
+            <AreaChart data={serieActiva} margin={{ top: 12, right: PLOT_R, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="gAzul" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#2E6BF6" stopOpacity={0.25} />
+                  <stop offset="100%" stopColor="#2E6BF6" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke="#E3E8F0" vertical={false} />
+              <XAxis dataKey="fecha" tickFormatter={fFecha} tick={{ fontSize: 11, fontFamily: 'JetBrains Mono' }} minTickGap={60} />
+              <YAxis tickFormatter={fmtK} tick={{ fontSize: 11, fontFamily: 'JetBrains Mono' }} width={PLOT_L} domain={['auto', 'auto']} />
+              <Tooltip content={<TipEvo divisa={divisa} neto={neto} />} />
+              <Area type="monotone" dataKey={km} stroke="#2E6BF6" strokeWidth={2} fill="url(#gAzul)" connectNulls />
+            </AreaChart>
+          )}
+        </ResponsiveContainer>
+
+        {marcas.map(m => (
+          <span key={m.id} className="hito-grupo">
+            {m.fracFin != null && m.fracFin > m.frac &&
+              <i className="hito-banda" style={{ left: izq(m.frac), width: ancho(m.fracFin - m.frac) }} />}
+            <i className="hito-linea" style={{ left: izq(m.frac) }} />
+            <i className="hito-marca" style={{ left: izq(m.frac) }} title={m.etq} />
+          </span>
+        ))}
+      </div>
+
       {desglose && (
         <div className="hitos-leyenda">
           {Object.keys(BROKER_COLS).map(k => (
@@ -156,7 +171,8 @@ export default function Evolucion() {
           ))}
         </div>
       )}
-      {altaHito && <GestorHitos hitos={hitos} onClose={() => setAltaHito(false)} onSave={guardarHito} onRecargar={cargar} />}
+
+      {gestor && <GestorHitos hitos={hitos} onClose={() => setGestor(false)} onSave={guardarHito} onRecargar={cargar} />}
     </div>
   )
 }
@@ -189,13 +205,19 @@ function TipEvo({ active, payload, label, divisa, neto }) {
   )
 }
 
+// Gestor de hitos: alta + listado con borrado (lo único útil que hacían los chips)
 function GestorHitos({ hitos, onClose, onSave, onRecargar }) {
   const hoy = new Date().toISOString().slice(0, 10)
   const [f, setF] = useState({ etiqueta: '', fecha_ini: hoy, fecha_fin: '', tipo: 'mercado' })
   return (
     <div className="modal-fondo" onClick={onClose}>
       <form className="card modal num" onClick={e => e.stopPropagation()}
-            onSubmit={e => { e.preventDefault(); if (f.etiqueta.trim()) onSave({ ...f, fecha_fin: f.fecha_fin || null, autor: 'jose' }) }}>
+            onSubmit={e => {
+              e.preventDefault()
+              if (!f.etiqueta.trim()) return
+              onSave({ ...f, fecha_fin: f.fecha_fin || null, autor: 'jose' })
+              setF({ etiqueta: '', fecha_ini: hoy, fecha_fin: '', tipo: 'mercado' })
+            }}>
         <h2>Hitos</h2>
         <div className="alta-grid">
           <label style={{ gridColumn: '1 / -1' }}>Etiqueta
