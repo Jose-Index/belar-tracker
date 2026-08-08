@@ -187,14 +187,18 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
               <span className="t">{(n.ticker || n.nombre || '?').toUpperCase()} <i>{n.broker}</i></span>
             </label>
             <span>invertido {fmt$(n.invertido)} · valor {fmt$(n.valor)}</span>
-            <label className="diff-pick" title="Si en realidad ya la tienes en BTP con otro nombre, mapéala aquí: se actualiza en vez de duplicarse y BTP aprende el nombre del broker.">
-              es
-              <select className="diff-sel" value={n.mapear}
-                onChange={e => setCampo('nuevas', i, 'mapear', e.target.value)}>
-                <option value="">nueva</option>
-                {candidatas(n.broker).map(p => <option key={p.id} value={p.id}>= {p.ticker}</option>)}
-              </select>
-            </label>
+            {/* Solo en caso de duda: si de ese broker no falta ninguna posición por
+                aparecer, el alta no puede ser otra cosa y el selector sobra. */}
+            {candidatas(n.broker).length > 0 && (
+              <label className="diff-pick" title="Si en realidad ya la tienes en BTP con otro nombre, dilo aquí: se actualiza en vez de duplicarse y BTP aprende cómo la llama este broker.">
+                ¿ya la tienes?
+                <select className="diff-sel" value={n.mapear}
+                  onChange={e => setCampo('nuevas', i, 'mapear', e.target.value)}>
+                  <option value="">no, es nueva</option>
+                  {candidatas(n.broker).map(p => <option key={p.id} value={p.id}>sí → {p.ticker}</option>)}
+                </select>
+              </label>
+            )}
             {!n.mapear && <>
               <label className={'diff-pick' + (n.sel && !n.entry_date ? ' falta' : '')}
                 title="Fecha de apertura de la posición. Si la captura no la trae, hay que ponerla a mano.">
