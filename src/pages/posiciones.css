@@ -174,3 +174,16 @@
 /* Evento estimado: punto hueco, nunca se lee como una fecha en firme */
 .ev-dot.estimado { color: var(--aviso); font-weight: 700; }
 .pos-leyenda .ev-dot.estimado { color: var(--aviso); }
+
+/* Borrador de cierre: altas y cierres pendientes de sellar */
+.pendientes { display: flex; flex-direction: column; gap: .35rem; }
+.pendientes .pend-nota { font-size: .8rem; opacity: .7; }
+.pend-row { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+.pend-row .t i { opacity: .6; font-style: normal; font-size: .8rem; margin-left: .3rem; }
+.pend-row select { font: inherit; font-size: .82rem; margin-left: .3rem; }
+.badge-new, .badge-close {
+  font-size: .68rem; font-weight: 700; letter-spacing: .04em;
+  padding: .08rem .35rem; border-radius: 3px; color: #fff;
+}
+.badge-new { background: var(--belar-azul, #2f6fed); }
+.badge-close { background: #b3402f; }

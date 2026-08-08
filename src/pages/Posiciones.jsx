@@ -47,7 +47,9 @@ export default function Posiciones() {
   const [desc, setDesc] = useState(() => localStorage.getItem('btp-orden-desc') === '1')
   const [selId, setSelId] = useState(null)
   const [cierre, setCierre] = useState(false)   // MODO CIERRE SEMANA
-  const [draft, setDraft] = useState({})        // {id: {invested?, current_value?}} en modo cierre
+  const [draft, setDraft] = useState({})        // {id: {invested?, current_value?, ingest_*}} en modo cierre
+  const [pendCierres, setPendCierres] = useState([])  // [{pos, motivo}] pendientes de sellar
+  const [pendAltas, setPendAltas] = useState([])      // [{ticker, broker, ...}] pendientes de sellar
   const [liqDraft, setLiqDraft] = useState(null)
   const [liqTocada, setLiqTocada] = useState(false)
   const [btcDraft, setBtcDraft] = useState(null)
@@ -155,7 +157,7 @@ export default function Posiciones() {
     setBtcDraft(raw.btcQty); setMsg(null)
   }
   function salirSinCerrar() {
-    setCierre(false); setDraft({}); setLiqDraft(null)
+    setCierre(false); setDraft({}); setLiqDraft(null); setPendCierres([]); setPendAltas([])
   }
 
   // Edición fluida: Enter/Tab salta a la misma columna de la fila siguiente
@@ -172,6 +174,11 @@ export default function Posiciones() {
     if (!liqTocada && !window.confirm('¿Seguro? No se ha editado la liquidez.')) return
     if (cambiosInv.length && !window.confirm(
       `Vas a modificar INVERTIDO en ${cambiosInv.length} posición(es). ¿Confirmas?`)) return
+    // Los cierres son el único paso irreversible: confirmación explícita con nombres.
+    if (pendCierres.length && !window.confirm(
+      `Se van a CERRAR ${pendCierres.length} posición(es) y registrar en el histórico:\n\n` +
+      pendCierres.map(c => `· ${c.pos.ticker} (${c.pos.broker}) — motivo ${c.motivo}`).join('\n') +
+      '\n\n¿Confirmas?')) return
 
     setBusy(true)
     // 1. aplicar borradores
@@ -179,8 +186,23 @@ export default function Posiciones() {
       const patch = {}
       if (d.invested != null) patch.invested = d.invested
       if (d.current_value != null) patch.current_value = d.current_value
+      if (d.ingest_badge) patch.ingest_badge = d.ingest_badge
+      if (d.ingest_source) patch.ingest_source = d.ingest_source
       if (Object.keys(patch).length) await updatePosicion(Number(id), patch)
     }
+    // 1b. altas y cierres pendientes de la ingesta de capturas (antes del snapshot,
+    // para que la foto semanal refleje la cartera real de la semana que se cierra)
+    for (const n of pendAltas) {
+      await altaPosicion({
+        ticker: n.ticker, broker: n.broker,
+        entry_date: new Date().toISOString().slice(0, 10),
+        invested: n.invested, current_value: n.current_value,
+        apalancamiento: n.apalancamiento || 1,
+        clase: n.clase, fuente: n.fuente,
+        ingest_badge: 'NEW', ingest_source: `captura ${n.broker} ${n.stamp}`,
+      })
+    }
+    for (const c of pendCierres) await cerrarPosicion(c.pos, c.motivo)
     await guardarLiquidez(liqDraft)
     await guardarBtcWallet(Number(btcDraft) || 0)
     // 2. recargar y commit
@@ -188,7 +210,7 @@ export default function Posiciones() {
     const res = await cerrarSemana(fresh.positions, liqDraft, Number(btcDraft) || 0)
     setBusy(false)
     if (res.error) { setMsg('Error al cerrar semana: ' + res.error.message); return }
-    setCierre(false); setDraft({}); setLiqDraft(null)
+    setCierre(false); setDraft({}); setLiqDraft(null); setPendCierres([]); setPendAltas([])
     // Backup automático versionado, SOLO tras commit exitoso (regla aprobada con "OJO")
     let bk = ''
     try { const n = await exportBackup('btp-backup-cierre'); bk = ` · backup descargado (${n} filas)` } catch { bk = ' · ⚠ backup automático falló' }
@@ -204,10 +226,10 @@ export default function Posiciones() {
     setBusy(false); setSelId(null); recargar()
   }
 
-  // Aplicar lo aceptado en la revisión de capturas: valores a borrador (los sella
-  // CERRAR SEMANA), cierres y altas al momento, badges de trazabilidad.
+  // Aplicar lo aceptado en la revisión de capturas: TODO va al borrador (valores,
+  // altas y cierres). Nada toca la base de datos hasta CERRAR SEMANA. Las capturas
+  // se pueden acumular en varias pasadas (un broker por pasada) sin riesgo.
   async function aplicarDiff(d) {
-    setBusy(true)
     const stamp = new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
     const nuevoDraft = { ...draft }
     for (const u of d.updates) {
@@ -216,27 +238,39 @@ export default function Posiciones() {
         ...nuevoDraft[u.pos.id],
         ...(u.valor != null ? { current_value: u.valor } : {}),
         ...(u.invertido != null && Math.abs(u.invertido - u.pos.invested) > 0.01 ? { invested: u.invertido } : {}),
+        ingest_badge: 'UPD', ingest_source: `captura ${u.pos.broker} ${stamp}`,
       }
-      await updatePosicion(u.pos.id, { ingest_badge: 'UPD', ingest_source: `captura ${u.pos.broker} ${stamp}` })
     }
     setDraft(nuevoDraft)
-    for (const f of d.faltantes) if (f.sel) await cerrarPosicion(f.pos, 'xSL')
-    for (const n of d.nuevas) {
-      if (!n.sel) continue
-      const inv = n.invertido ?? n.valor
-      if (!inv) continue
-      await altaPosicion({
-        ticker: (n.ticker || n.nombre || '?').toUpperCase(), broker: n.broker,
-        entry_date: new Date().toISOString().slice(0, 10),
-        invested: inv, current_value: n.valor ?? inv,
-        apalancamiento: n.apalancamiento || 1,
-        ingest_badge: 'NEW', ingest_source: `captura ${n.broker} ${stamp}`,
-      })
-    }
+
+    // Cierres pendientes: posición + motivo elegido. Se ejecutan en el commit.
+    setPendCierres(prev => {
+      const map = new Map(prev.map(x => [x.pos.id, x]))
+      for (const f of d.faltantes) if (f.sel) map.set(f.pos.id, { pos: f.pos, motivo: f.motivo || 'xSL' })
+      return [...map.values()]
+    })
+
+    // Altas pendientes: se dan de alta en el commit, con clase y fuente elegidas.
+    setPendAltas(prev => {
+      const clave = n => `${n.broker}|${(n.ticker || n.nombre || '?').toUpperCase()}`
+      const map = new Map(prev.map(x => [clave(x), x]))
+      for (const n of d.nuevas) {
+        if (!n.sel) continue
+        const inv = n.invertido ?? n.valor
+        if (!inv) continue
+        map.set(clave(n), {
+          ticker: (n.ticker || n.nombre || '?').toUpperCase(), broker: n.broker,
+          invested: inv, current_value: n.valor ?? inv,
+          apalancamiento: n.apalancamiento || 1,
+          clase: n.clase || 'TACTICA', fuente: n.fuente || 'YO',
+          stamp,
+        })
+      }
+      return [...map.values()]
+    })
+
     if (Object.keys(d.liq).length) { setLiqDraft(l => ({ ...l, ...d.liq })); setLiqTocada(true) }
-    setBusy(false)
-    setMsg('Capturas aplicadas al borrador — revisa y pulsa CERRAR SEMANA para sellar.')
-    recargar()
+    setMsg('Capturas aplicadas al borrador — nada escrito aún. Revisa y pulsa CERRAR SEMANA para sellar.')
   }
 
   async function cerrarManual(p) {
@@ -295,6 +329,36 @@ export default function Posiciones() {
         {msg && <p className="pos-msg num">{msg}</p>}
 
         {cierre && <IngestaIA positions={raw.positions} simbolos={simbolos} onAplicar={aplicarDiff} />}
+
+        {cierre && (pendAltas.length > 0 || pendCierres.length > 0) && (
+          <div className="card pendientes num">
+            <b>Pendiente de sellar</b>
+            <span className="pend-nota">se ejecuta al pulsar CERRAR SEMANA · quita lo que no quieras con ✕</span>
+            {pendAltas.map((n, i) => (
+              <div key={`a${i}`} className="pend-row">
+                <span className="badge-new">NEW</span>
+                <span className="t">{n.ticker} <i>{n.broker}</i></span>
+                <span>invertido ${fmt$(n.invested)} · {CLASES[n.clase] || n.clase} · fuente {n.fuente}</span>
+                <button className="btn-escape" title="Quitar del borrador"
+                  onClick={() => setPendAltas(p => p.filter((_, j) => j !== i))}>✕</button>
+              </div>
+            ))}
+            {pendCierres.map((c, i) => (
+              <div key={`c${i}`} className="pend-row">
+                <span className="badge-close">CIERRE</span>
+                <span className="t">{c.pos.ticker} <i>{c.pos.broker}</i></span>
+                <label>motivo
+                  <select value={c.motivo}
+                    onChange={e => setPendCierres(p => p.map((x, j) => j === i ? { ...x, motivo: e.target.value } : x))}>
+                    {['xSL', 'manual', 'escalonada'].map(m => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </label>
+                <button className="btn-escape" title="Quitar del borrador"
+                  onClick={() => setPendCierres(p => p.filter((_, j) => j !== i))}>✕</button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {cierre && (
           <div className="card liq-bar num">
