@@ -170,7 +170,8 @@ export default function Posiciones() {
   }
 
   async function commitCierre() {
-    const cambiosInv = Object.entries(draft).filter(([, d]) => d.invested != null)
+    const vale = v => v != null && v !== '' && !Number.isNaN(Number(v))
+    const cambiosInv = Object.entries(draft).filter(([, d]) => vale(d.invested))
     if (!liqTocada && !window.confirm('¿Seguro? No se ha editado la liquidez.')) return
     if (cambiosInv.length && !window.confirm(
       `Vas a modificar INVERTIDO en ${cambiosInv.length} posición(es). ¿Confirmas?`)) return
@@ -184,8 +185,8 @@ export default function Posiciones() {
     // 1. aplicar borradores
     for (const [id, d] of Object.entries(draft)) {
       const patch = {}
-      if (d.invested != null) patch.invested = d.invested
-      if (d.current_value != null) patch.current_value = d.current_value
+      if (vale(d.invested)) patch.invested = Number(d.invested)
+      if (vale(d.current_value)) patch.current_value = Number(d.current_value)
       if (d.ingest_badge) patch.ingest_badge = d.ingest_badge
       if (d.ingest_source) patch.ingest_source = d.ingest_source
       if (Object.keys(patch).length) await updatePosicion(Number(id), patch)
@@ -420,12 +421,12 @@ export default function Posiciones() {
                   <td className="tl broker">{p.broker}</td>
                   <td>{p.entry_date ? p.entry_date.slice(2).split('-').reverse().join('/') : '—'}</td>
                   <td>{cierre
-                    ? <input data-col="inv" defaultValue={p.invested} onKeyDown={keyNav}
-                        onChange={e => setDraft(d => ({ ...d, [p.id]: { ...d[p.id], invested: Number(e.target.value) } }))} />
+                    ? <input data-col="inv" value={draft[p.id]?.invested ?? p.invested} onKeyDown={keyNav}
+                        onChange={e => setDraft(d => ({ ...d, [p.id]: { ...d[p.id], invested: e.target.value === '' ? '' : Number(e.target.value) } }))} />
                     : fmt$(p.invested)}</td>
                   <td className="col-clave col-ini">{cierre
-                    ? <input data-col="val" defaultValue={p.valor} onKeyDown={keyNav}
-                        onChange={e => setDraft(d => ({ ...d, [p.id]: { ...d[p.id], current_value: Number(e.target.value) } }))} />
+                    ? <input data-col="val" value={draft[p.id]?.current_value ?? p.valor} onKeyDown={keyNav}
+                        onChange={e => setDraft(d => ({ ...d, [p.id]: { ...d[p.id], current_value: e.target.value === '' ? '' : Number(e.target.value) } }))} />
                     : fmt$(p.valor)}</td>
                   <td className={'col-clave ' + pctClass(p.gp)}>{fmt$(p.gp)}</td>
                   <td className={'col-clave col-fin ' + pctClass(p.gpPct)}>{fmtPct(p.gpPct)}</td>
