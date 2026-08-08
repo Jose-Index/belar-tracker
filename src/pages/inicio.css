@@ -157,3 +157,16 @@
 .cal-conf.confirmado { background: #F0FAF3; color: #16A34A; border: 1px solid #C6EBD3; }
 .cal-conf.estimado   { background: #FEF7EA; color: #B26B00; border: 1px solid #F3DFB8; }
 .cal-conf.na         { background: var(--papel); color: var(--texto-neutro); border: 1px solid var(--borde); }
+
+
+/* ——— Edición inline de aportaciones (Patrimonio) ——— */
+.ed-acc { white-space: nowrap; display: flex; gap: 10px; justify-content: flex-end; align-items: center; }
+.editar-l { color: var(--texto-sec); cursor: pointer; opacity: .55; }
+.editar-l:hover { opacity: 1; }
+.borrar-x:hover { opacity: 1; }
+.fila-edit td { background: rgba(127, 127, 127, .06); }
+.ed-inp { font: 500 12.5px var(--font-datos); padding: 4px 6px; border: 1px solid var(--borde); border-radius: 6px; width: 100%; max-width: 130px; background: transparent; color: inherit; }
+.ed-num { text-align: right; }
+.ed-ok { color: var(--azul-belar); cursor: pointer; font-weight: 700; }
+.ed-no { color: var(--baja); cursor: pointer; opacity: .6; }
+.ed-no:hover { opacity: 1; }
