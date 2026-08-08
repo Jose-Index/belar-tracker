@@ -23,7 +23,7 @@ Reglas:
   · XTB: invertido = "Valor de apertura"; valor = "Valor".
   · eToro: invertido = "Invertido"; valor = "Valor".
   Comprobación obligatoria antes de responder: invertido + gp = valor. Si te sale al revés, es que los has puesto cambiados; corrígelo.
-- gp = la columna G/P $ / Beneficio neto / PyG no realizadas SI está visible (con su signo); si no, null. Sirve de verificación aritmética: invertido + gp = valor.
+- gp = la columna G/P $ / Beneficio neto / PyG no realizadas SI está visible, CON SU SIGNO (negativo si la posición pierde); si no, null. Debe cumplirse invertido + gp = valor. Si no te cuadra, revisa qué columna es cada cosa antes de responder; nunca devuelvas gp con el signo cambiado.
 - ticker: el símbolo si aparece; si solo hay nombre comercial, tu mejor conversión a ticker (p.ej. "NVIDIA Corp"→"NVDA"). CopyTraders de eToro: usa el nombre del trader tal cual.
 - apalancamiento: x1 si no se indica.
 - fecha_apertura: fecha de apertura SI aparece en la captura, en formato YYYY-MM-DD. En XTB es la columna "Hora de apertura" (formato dd.mm.aaaa, conviértela). Si no aparece, null: NO la deduzcas ni pongas la de hoy.
