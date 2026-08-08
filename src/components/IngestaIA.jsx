@@ -9,6 +9,7 @@ const fmt$ = v => v == null ? '—' : Number(v).toLocaleString('es-ES', { minimu
 const CLASES_ALTA = { NUCLEO: 'NÚCLEO', MOMENTUM: 'MOMENTUM', TACTICA: 'TÁCTICA', DISRUPTIVA: 'DISRUPT.' }
 const FUENTES_ALTA = ['YO', 'BELAR', 'PRENSA', 'REDES']
 const MOTIVOS_CIERRE = ['xSL', 'manual', 'escalonada']
+const BROKERS_UI = [{ id: 'etoro', label: 'eToro' }, { id: 'xtb', label: 'XTB' }, { id: 'ibkr', label: 'IBKR' }]
 const HOY = () => new Date().toISOString().slice(0, 10)
 
 // Zona de arrastre + pantalla de revisión (diff). NUNCA auto-commit:
@@ -18,24 +19,33 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
   const [err, setErr] = useState(null)
   const [diff, setDiff] = useState(null)
   const [aviso, setAviso] = useState(null)
+  const [crudo, setCrudo] = useState(null)      // extracciones tal cual las devolvió la IA
+  const [brokerSel, setBrokerSel] = useState('')  // '' = el que dedujo la IA
 
   async function procesar(files) {
     if (!files?.length) return
     setEstado('procesando'); setErr(null); setAviso(null)
     try {
       const ex = await extraerCapturas(files)
-      setDiff(construirDiff(ex, positions))
+      setCrudo(ex); setBrokerSel('')
+      setDiff(construirDiff(ex, positions, ''))
       setEstado('diff')
     } catch (e) {
       setErr(String(e.message || e)); setEstado('error')
     }
   }
 
-  function construirDiff(extracciones, positions) {
+  // `override`: broker forzado por José. La deducción de la IA falla (xStation con tema
+  // claro se confunde con IBKR) y un broker mal puesto no casa ninguna posición: propone
+  // altas de todo y cierres de todo lo del otro broker. Por eso es corregible aquí mismo,
+  // sin volver a pasar las capturas por la IA.
+  function construirDiff(extracciones, positions, override) {
     const updates = [], nuevas = [], liq = {}
     const vistos = new Set()
-    const brokersEnCaptura = new Set(extracciones.map(x => x.broker))
-    for (const ex of extracciones) {
+    const brokerDe = x => override || x.broker
+    const brokersEnCaptura = new Set(extracciones.map(brokerDe))
+    for (const ex0 of extracciones) {
+      const ex = { ...ex0, broker: brokerDe(ex0) }
       if (ex.liquidez != null) liq[ex.broker] = ex.liquidez
       for (const r of ex.posiciones || []) {
         const textos = [r.ticker, r.nombre].filter(Boolean)
@@ -160,6 +170,14 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
     <div className="ingesta card num">
       <div className="diff-head">
         <b>Revisión de capturas</b>
+        <label className="diff-pick" title="Si la IA se ha equivocado de broker, corrígelo aquí: se recalcula todo al instante, sin volver a leer las capturas.">
+          capturas de
+          <select className="diff-sel" value={brokerSel}
+            onChange={e => { setBrokerSel(e.target.value); setDiff(construirDiff(crudo, positions, e.target.value)); setAviso(null) }}>
+            <option value="">detectado: {[...new Set((crudo || []).map(x => x.broker))].join(' + ') || '—'}</option>
+            {BROKERS_UI.map(b => <option key={b.id} value={b.id}>{b.label}</option>)}
+          </select>
+        </label>
         <button className="btn-escape" onClick={() => { setEstado('idle'); setAviso(null) }}>descartar</button>
       </div>
 
