@@ -28,7 +28,7 @@ Reglas:
 - apalancamiento: x1 si no se indica.
 - fecha_apertura: fecha de apertura SI aparece en la captura, en formato YYYY-MM-DD. En XTB es la columna "Hora de apertura" (formato dd.mm.aaaa, conviértela). Si no aparece, null: NO la deduzcas ni pongas la de hoy.
 - AGREGACIÓN: si un instrumento aparece con varias sublíneas/lotes (XTB despliega cada orden), devuelve UNA sola posición por instrumento: usa los importes de la fila resumen del instrumento y, como fecha_apertura, la MÁS ANTIGUA de sus lotes. No devuelvas una posición por lote.
-- liquidez: el saldo disponible/cash SI aparece en la captura; si no, null.
+- liquidez: el saldo disponible/cash SI aparece en la captura; si no, null. PUEDE SER NEGATIVA (saldo deudor por margen): respeta el signo, un "-0,31" se devuelve como -0.31, nunca como 0.31 ni como otra cifra de la pantalla. Por broker: eToro "Disponible"; XTB "Capital disponible"; IBKR "Cash"/"Available Funds". Si no distingues con certeza cuál es el saldo, devuelve null antes que una cifra de otro campo.
 - Si una cifra no se lee con certeza, pon null antes que inventarla.
 - CRÍTICO: transcribe cada importe dígito a dígito y reléelo antes de escribirlo (confundir un 5 con un 6, o perder los decimales, corrompe la cartera). Ante ambigüedad visual, null.`
 
