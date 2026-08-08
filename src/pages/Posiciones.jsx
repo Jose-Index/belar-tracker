@@ -195,7 +195,7 @@ export default function Posiciones() {
     for (const n of pendAltas) {
       await altaPosicion({
         ticker: n.ticker, broker: n.broker,
-        entry_date: new Date().toISOString().slice(0, 10),
+        entry_date: n.entry_date || new Date().toISOString().slice(0, 10),
         invested: n.invested, current_value: n.current_value,
         apalancamiento: n.apalancamiento || 1,
         clase: n.clase, fuente: n.fuente,
@@ -260,6 +260,7 @@ export default function Posiciones() {
         if (!inv) continue
         map.set(clave(n), {
           ticker: (n.ticker || n.nombre || '?').toUpperCase(), broker: n.broker,
+          entry_date: n.entry_date || null,
           invested: inv, current_value: n.valor ?? inv,
           apalancamiento: n.apalancamiento || 1,
           clase: n.clase || 'TACTICA', fuente: n.fuente || 'YO',
@@ -270,7 +271,8 @@ export default function Posiciones() {
     })
 
     if (Object.keys(d.liq).length) { setLiqDraft(l => ({ ...l, ...d.liq })); setLiqTocada(true) }
-    setMsg('Capturas aplicadas al borrador — nada escrito aún. Revisa y pulsa CERRAR SEMANA para sellar.')
+    setMsg('Capturas aplicadas al borrador — nada escrito aún. Revisa y pulsa CERRAR SEMANA para sellar.'
+      + (d.aprendidos ? ` · ${d.aprendidos} nombre(s) de broker aprendidos` : ''))
   }
 
   async function cerrarManual(p) {
@@ -338,7 +340,7 @@ export default function Posiciones() {
               <div key={`a${i}`} className="pend-row">
                 <span className="badge-new">NEW</span>
                 <span className="t">{n.ticker} <i>{n.broker}</i></span>
-                <span>invertido ${fmt$(n.invested)} · {CLASES[n.clase] || n.clase} · fuente {n.fuente}</span>
+                <span>invertido ${fmt$(n.invested)} · abierta {n.entry_date ? n.entry_date.slice(2).split('-').reverse().join('/') : '—'} · {CLASES[n.clase] || n.clase} · fuente {n.fuente}</span>
                 <button className="btn-escape" title="Quitar del borrador"
                   onClick={() => setPendAltas(p => p.filter((_, j) => j !== i))}>✕</button>
               </div>
