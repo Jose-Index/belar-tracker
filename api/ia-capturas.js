@@ -18,7 +18,11 @@ Reglas:
   · eToro si ves "Invertido", "Beneficio", avatares de CopyTrader o nombres de personas como instrumento.
   · IBKR si ves "Position", "Mkt Value", "Avg Price", "Unrealized P&L" o la interfaz de Client Portal.
   Si no puedes decidirlo con esos rótulos, pon el que más se parezca; José lo corrige en pantalla.
-- invertido = importe invertido/amount/base de coste/valor de apertura; valor = valor actual/neto/de mercado. En USD (moneda operativa). Usa punto decimal.
+- invertido = lo que costó abrir la posición; valor = lo que vale AHORA. En USD (moneda operativa). Usa punto decimal. NO los intercambies: por broker,
+  · IBKR: invertido = "Cost Basis" / "Coste base"; valor = "Mkt Value" / "Market Value" / "Valor de mercado". "Avg Price" es precio por acción, NO es el invertido.
+  · XTB: invertido = "Valor de apertura"; valor = "Valor".
+  · eToro: invertido = "Invertido"; valor = "Valor".
+  Comprobación obligatoria antes de responder: invertido + gp = valor. Si te sale al revés, es que los has puesto cambiados; corrígelo.
 - gp = la columna G/P $ / Beneficio neto / PyG no realizadas SI está visible (con su signo); si no, null. Sirve de verificación aritmética: invertido + gp = valor.
 - ticker: el símbolo si aparece; si solo hay nombre comercial, tu mejor conversión a ticker (p.ej. "NVIDIA Corp"→"NVDA"). CopyTraders de eToro: usa el nombre del trader tal cual.
 - apalancamiento: x1 si no se indica.
