@@ -77,6 +77,15 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
 
         if (pos) {
           vistos.add(pos.id)
+          const invBD0 = Number(pos.invested)
+          // 1b. Sin G/P la aritmética no puede decidir (IBKR no siempre lo muestra), pero
+          //     hay otra señal inequívoca: que el "valor" leído coincida al céntimo con el
+          //     invertido que ya tenemos y el "invertido" leído sea otro. El invertido no
+          //     cambia solo; esa coincidencia exacta solo se da si vienen permutados.
+          if (!esCopy && !permutado && invertido != null && valor != null &&
+              Math.abs(valor - invBD0) < 0.01 && Math.abs(invertido - invBD0) >= 0.01) {
+            const tmp = invertido; invertido = valor; valor = tmp; permutado = true
+          }
           // 2. Política prudente: LA CAPTURA MANDA. Solo se corrige INVERTIDO cuando la BD
           //    lo confirma (valor−gp = invertido actual). Lo que no cuadre se marca para
           //    revisión, nunca se "corrige" por deducción.
@@ -169,6 +178,9 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
   // ── Pantalla de revisión ──
   const d = diff
   const toggle = (arr, i) => setDiff({ ...d, [arr]: d[arr].map((x, j) => j === i ? { ...x, sel: !x.sel } : x) })
+  // Intercambio manual: la última palabra sobre qué es invertido y qué es valor la tienes tú
+  const permutar = (arr, i) => setDiff({ ...d, [arr]: d[arr].map((x, j) =>
+    j === i ? { ...x, invertido: x.valor, valor: x.invertido, permutado: !x.permutado, dudosa: false } : x) })
   const setCampo = (arr, i, campo, val) =>
     setDiff({ ...d, [arr]: d[arr].map((x, j) => j === i ? { ...x, [campo]: val } : x) })
   // Candidatas a mapeo: posiciones del mismo broker que no aparecen ya como actualizadas
@@ -200,7 +212,9 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
             {u.invertido != null && Math.abs(u.invertido - u.pos.invested) > 0.01 &&
               <span className="warn">invertido {fmt$(u.pos.invested)} → <b>{fmt$(u.invertido)}</b></span>}
             {u.curado && <span className="warn" title="Lectura corregida por verificación aritmética (invertido + G/P = valor)">✓aritm.</span>}
-            {u.permutado && <span className="warn" title="La captura traía invertido y valor intercambiados; la aritmética con el G/P lo confirma y se han puesto en su sitio">⇄ corregido</span>}
+            {u.permutado && <span className="warn" title="La captura traía invertido y valor intercambiados y se han puesto en su sitio">⇄ corregido</span>}
+            <a className="btn-permutar" title="Intercambiar invertido y valor en esta fila"
+               onClick={e => { e.preventDefault(); permutar('updates', i) }}>⇄</a>
             {u.dudosa && <span className="down" title="Los importes no cuadran con G/P y no se pudo corregir: revisa a mano">⚠ revisar</span>}
           </label>
         ))}
@@ -215,7 +229,9 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
               <span className="t">{(n.ticker || n.nombre || '?').toUpperCase()} <i>{n.broker}</i></span>
             </label>
             <span>invertido {fmt$(n.invertido)} · valor {fmt$(n.valor)}</span>
-            {n.permutado && <span className="warn" title="La captura traía invertido y valor intercambiados; corregido por aritmética con el G/P">⇄</span>}
+            {n.permutado && <span className="warn" title="La captura traía invertido y valor intercambiados y se han puesto en su sitio">⇄</span>}
+            <a className="btn-permutar" title="Intercambiar invertido y valor en esta fila"
+               onClick={e => { e.preventDefault(); permutar('nuevas', i) }}>⇄</a>
             {/* Solo en caso de duda: si de ese broker no falta ninguna posición por
                 aparecer, el alta no puede ser otra cosa y el selector sobra. */}
             {candidatas(n.broker).length > 0 && (

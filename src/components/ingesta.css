@@ -32,3 +32,7 @@
 .ingesta .diff-pick.falta { color: var(--baja); font-weight: 600; }
 .ingesta .diff-pick.falta input { border-color: var(--baja); background: #FDEFF0; }
 .ingesta .ok-cap { font-size: .78rem; color: var(--alza); }
+
+/* Intercambio manual de invertido/valor */
+.ingesta .btn-permutar { cursor: pointer; opacity: .35; padding: 0 .25rem; user-select: none; }
+.ingesta .btn-permutar:hover { opacity: 1; color: var(--azul-belar); }
