@@ -4,6 +4,11 @@ import './ingesta.css'
 
 const fmt$ = v => v == null ? '—' : Number(v).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
+// Elegibles en la propia pantalla de revisión (spec §8 + motivos de cierre del histórico)
+const CLASES_ALTA = { NUCLEO: 'NÚCLEO', MOMENTUM: 'MOMENTUM', TACTICA: 'TÁCTICA', DISRUPTIVA: 'DISRUPT.' }
+const FUENTES_ALTA = ['YO', 'BELAR', 'PRENSA', 'REDES']
+const MOTIVOS_CIERRE = ['xSL', 'manual', 'escalonada']
+
 // Zona de arrastre + pantalla de revisión (diff). NUNCA auto-commit:
 // José revisa y acepta; lo aceptado vuelve a Posiciones como borrador/acciones.
 export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
@@ -65,13 +70,15 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
           }
           updates.push({ pos, invertido, valor, sel: true, curado, dudosa })
         } else {
-          nuevas.push({ ...r, broker: ex.broker, sel: true })
+          // clase y fuente elegibles en la propia revisión (defecto prudente: TÁCTICA / YO)
+          nuevas.push({ ...r, broker: ex.broker, sel: true, clase: 'TACTICA', fuente: 'YO' })
         }
       }
     }
     const faltantes = positions
       .filter(p => brokersEnCaptura.has(p.broker) && !vistos.has(p.id))
-      .map(p => ({ pos: p, sel: false }))   // cerrar es serio: desmarcado por defecto
+      // cerrar es serio: desmarcado por defecto. Motivo elegible aquí mismo (defecto xSL).
+      .map(p => ({ pos: p, sel: false, motivo: 'xSL' }))
     return { updates, nuevas, faltantes, liq }
   }
 
@@ -98,6 +105,8 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
   // ── Pantalla de revisión ──
   const d = diff
   const toggle = (arr, i) => setDiff({ ...d, [arr]: d[arr].map((x, j) => j === i ? { ...x, sel: !x.sel } : x) })
+  const setCampo = (arr, i, campo, val) =>
+    setDiff({ ...d, [arr]: d[arr].map((x, j) => j === i ? { ...x, [campo]: val } : x) })
 
   return (
     <div className="ingesta card num">
@@ -124,31 +133,50 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
       {d.nuevas.length > 0 && <>
         <h4>Altas propuestas ({d.nuevas.length})</h4>
         {d.nuevas.map((n, i) => (
-          <label key={i} className="diff-row">
-            <input type="checkbox" checked={n.sel} onChange={() => toggle('nuevas', i)} />
-            <span className="t">{(n.ticker || n.nombre || '?').toUpperCase()} <i>{n.broker}</i></span>
+          <div key={i} className="diff-row">
+            <label className="diff-pick">
+              <input type="checkbox" checked={n.sel} onChange={() => toggle('nuevas', i)} />
+              <span className="t">{(n.ticker || n.nombre || '?').toUpperCase()} <i>{n.broker}</i></span>
+            </label>
             <span>invertido {fmt$(n.invertido)} · valor {fmt$(n.valor)}</span>
-          </label>
+            <select className="diff-sel" value={n.clase} title="Clasificación de la nueva posición"
+              onChange={e => setCampo('nuevas', i, 'clase', e.target.value)}>
+              {Object.entries(CLASES_ALTA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+            <select className="diff-sel" value={n.fuente} title="Origen de la idea"
+              onChange={e => setCampo('nuevas', i, 'fuente', e.target.value)}>
+              {FUENTES_ALTA.map(f => <option key={f} value={f}>{f}</option>)}
+            </select>
+          </div>
         ))}
       </>}
 
       {d.faltantes.length > 0 && <>
         <h4>No aparecen en la captura — ¿cerradas? ({d.faltantes.length})</h4>
         {d.faltantes.map((f, i) => (
-          <label key={i} className="diff-row">
-            <input type="checkbox" checked={f.sel} onChange={() => toggle('faltantes', i)} />
-            <span className="t">{f.pos.ticker} <i>{f.pos.broker}</i></span>
-            <span className="down">cerrar (motivo xSL)</span>
-          </label>
+          <div key={i} className="diff-row">
+            <label className="diff-pick">
+              <input type="checkbox" checked={f.sel} onChange={() => toggle('faltantes', i)} />
+              <span className="t">{f.pos.ticker} <i>{f.pos.broker}</i></span>
+            </label>
+            <span className="down">cerrar · motivo</span>
+            <select className="diff-sel" value={f.motivo} title="Motivo del cierre (viaja al histórico)"
+              onChange={e => setCampo('faltantes', i, 'motivo', e.target.value)}>
+              {MOTIVOS_CIERRE.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
         ))}
       </>}
 
       {Object.keys(d.liq).length > 0 &&
         <p className="diff-liq">Liquidez detectada: {Object.entries(d.liq).map(([b, v]) => `${b} $${fmt$(v)}`).join(' · ')}</p>}
 
+      <p className="diff-nota">Nada se escribe en la base de datos hasta que pulses CERRAR SEMANA:
+        actualizaciones, altas y cierres quedan en el borrador y se pueden deshacer.</p>
+
       <div className="modal-botones">
         <button className="btn-primario" onClick={() => { onAplicar(d); setEstado('idle') }}>
-          Aplicar lo marcado
+          Aplicar al borrador
         </button>
       </div>
     </div>

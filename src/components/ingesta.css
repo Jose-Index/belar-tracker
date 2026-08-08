@@ -18,3 +18,11 @@
 .diff-row .t { font-weight: 600; min-width: 130px; }
 .diff-row i { font-style: normal; color: var(--texto-neutro); font-size: 11.5px; }
 .diff-liq { font-size: 12.5px; color: var(--texto-sec); margin: 10px 0 0; }
+
+/* Selectores dentro de la revisión (motivo de cierre, clase y fuente de altas) */
+.ingesta .diff-pick { display: flex; align-items: center; gap: .4rem; }
+.ingesta .diff-sel {
+  font: inherit; font-size: .82rem; padding: .1rem .3rem;
+  border: 1px solid var(--linea, #d8d8d8); border-radius: 4px; background: transparent;
+}
+.ingesta .diff-nota { font-size: .8rem; opacity: .7; margin: .6rem 0 0; }
