@@ -62,41 +62,31 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
             (r.nombre && r.nombre.toUpperCase().includes(p.ticker.toUpperCase())) ||
             p.ticker.toUpperCase().includes(t)
           ))
-        // ─── Verificación aritmética con G/P: invertido + gp = valor ───
-        // CopyTraders exentos (su G/P de eToro es otra métrica y no cuadra por diseño).
+        // ─── Verificación de importes ───────────────────────────────────────
+        // El G/P de los brokers NO es fiable para decidir qué es invertido y qué es
+        // valor: IBKR lo devuelve con el signo cambiado, y con el signo al revés una
+        // lectura correcta es idéntica a una permutada (incidente 08/08: se permutaron
+        // tres posiciones que estaban bien). Así que el G/P ya no decide nada: solo
+        // avisa. Quien manda es el invertido que ya está en BD.
         let { invertido, valor, gp } = r
         let curado = false, permutado = false, dudosa = false
         const esCopy = simbolos.find(x => x.ticker.toUpperCase() === t)?.asset_type === 'copy'
-        const cuadra = (inv, val) => inv != null && val != null && gp != null && Math.abs(inv + gp - val) <= 0.05
-        // 1. Importes permutados (visto en capturas de IBKR: coste de base y valor de
-        //    mercado intercambiados). La aritmética lo delata sin ambigüedad y se corrige.
-        if (!esCopy && gp != null && invertido != null && valor != null &&
-            !cuadra(invertido, valor) && cuadra(valor, invertido)) {
-          const tmp = invertido; invertido = valor; valor = tmp; permutado = true
-        }
+        // Reconciliación tolerante al signo del G/P: solo sirve para marcar dudas.
+        const reconcilia = gp == null || invertido == null || valor == null ||
+          Math.abs(invertido + gp - valor) <= 0.05 || Math.abs(invertido - gp - valor) <= 0.05
 
         if (pos) {
           vistos.add(pos.id)
-          const invBD0 = Number(pos.invested)
-          // 1b. Sin G/P la aritmética no puede decidir (IBKR no siempre lo muestra), pero
-          //     hay otra señal inequívoca: que el "valor" leído coincida al céntimo con el
-          //     invertido que ya tenemos y el "invertido" leído sea otro. El invertido no
-          //     cambia solo; esa coincidencia exacta solo se da si vienen permutados.
-          if (!esCopy && !permutado && invertido != null && valor != null &&
-              Math.abs(valor - invBD0) < 0.01 && Math.abs(invertido - invBD0) >= 0.01) {
+          const invBD = Number(pos.invested)
+          const leidoInv = invertido != null && Math.abs(invertido - invBD) < 0.01
+          const leidoVal = valor != null && Math.abs(valor - invBD) < 0.01
+          if (!esCopy && !leidoInv && leidoVal) {
+            // El "valor" leído coincide al céntimo con el invertido que ya tenemos y el
+            // "invertido" leído es otro: vienen permutados. El invertido no cambia solo.
             const tmp = invertido; invertido = valor; valor = tmp; permutado = true
-          }
-          // 2. Política prudente: LA CAPTURA MANDA. Solo se corrige INVERTIDO cuando la BD
-          //    lo confirma (valor−gp = invertido actual). Lo que no cuadre se marca para
-          //    revisión, nunca se "corrige" por deducción.
-          if (!esCopy && !permutado && gp != null && invertido != null && valor != null &&
-              !cuadra(invertido, valor)) {
-            const invBD = Number(pos.invested)
-            if (Math.abs((valor - gp) - invBD) < 0.05 && Math.abs(invertido - invBD) >= 0.05) {
-              invertido = invBD; curado = true
-            } else {
-              dudosa = true
-            }
+          } else if (!esCopy && !leidoInv && !reconcilia) {
+            // Ni cuadra con el invertido de BD ni con el G/P: se marca, no se toca.
+            dudosa = true
           }
           updates.push({ pos, invertido, valor, sel: true, curado, permutado, dudosa, textos, canon: !!canon })
         } else {
