@@ -14,6 +14,9 @@ export default function Patrimonio() {
   const hoy = new Date().toISOString().slice(0, 10)
   const [f, setF] = useState({ fecha: hoy, broker: 'etoro', importe_eur: '', importe_usd: '' })
   const [msg, setMsg] = useState('')
+  const [ed, setEd] = useState(null)      // { id, fecha, broker, importe_eur, importe_usd }
+  const [edMsg, setEdMsg] = useState('')
+  const [guardando, setGuardando] = useState(false)
 
   async function cargar() {
     const { data } = await supabase.from('contributions').select('*').order('fecha', { ascending: false })
@@ -33,9 +36,32 @@ export default function Patrimonio() {
     setMsg(''); cargar()
   }
 
+  function editar(r) {
+    setEdMsg('')
+    setEd({
+      id: r.id, fecha: r.fecha || hoy, broker: r.broker || 'etoro',
+      importe_eur: r.importe_eur ?? '', importe_usd: r.importe_usd ?? '',
+    })
+  }
+
+  function cancelar() { setEd(null); setEdMsg('') }
+
+  async function guardar() {
+    const eur = Number(ed.importe_eur), usd = Number(ed.importe_usd)
+    if (!ed.fecha || !eur) { setEdMsg('Fecha e importe € son obligatorios'); return }
+    setGuardando(true)
+    const { error } = await supabase.from('contributions').update({
+      fecha: ed.fecha, broker: ed.broker, importe_eur: eur, importe_usd: usd || null,
+    }).eq('id', ed.id)
+    setGuardando(false)
+    if (error) { setEdMsg(error.message); return }
+    setEd(null); setEdMsg(''); cargar()
+  }
+
   async function borrar(r) {
     if (!confirm(`¿Borrar aportación de ${fmt$(r.importe_eur)}€ (${BROKER_LBL[r.broker] || r.broker}, ${fFecha(r.fecha)})?`)) return
     await supabase.from('contributions').delete().eq('id', r.id)
+    if (ed?.id === r.id) setEd(null)
     cargar()
   }
 
@@ -95,18 +121,39 @@ export default function Patrimonio() {
         <table className="tabla-hist num">
           <thead><tr><th>FECHA</th><th>CUENTA</th><th>€</th><th>$</th><th>EURUSD impl.</th><th /></tr></thead>
           <tbody>
-            {rows.map(r => (
+            {rows.map(r => ed?.id === r.id ? (
+              <tr key={r.id} className="fila-edit">
+                <td><input className="ed-inp" type="date" value={ed.fecha}
+                  onChange={e => setEd({ ...ed, fecha: e.target.value })} /></td>
+                <td><select className="ed-inp" value={ed.broker} onChange={e => setEd({ ...ed, broker: e.target.value })}>
+                  {BROKERS.map(b => <option key={b} value={b}>{BROKER_LBL[b] || b}</option>)}</select></td>
+                <td><input className="ed-inp ed-num" type="number" step="0.01" inputMode="decimal" value={ed.importe_eur}
+                  onChange={e => setEd({ ...ed, importe_eur: e.target.value })} /></td>
+                <td><input className="ed-inp ed-num" type="number" step="0.01" inputMode="decimal" value={ed.importe_usd}
+                  onChange={e => setEd({ ...ed, importe_usd: e.target.value })} placeholder="—" /></td>
+                <td>{Number(ed.importe_usd) && Number(ed.importe_eur)
+                  ? (Number(ed.importe_usd) / Number(ed.importe_eur)).toFixed(4) : '—'}</td>
+                <td className="ed-acc">
+                  <a className="ed-ok" onClick={guardando ? undefined : guardar}>{guardando ? '…' : '✓'}</a>
+                  <a className="ed-no" onClick={cancelar}>✕</a>
+                </td>
+              </tr>
+            ) : (
               <tr key={r.id}>
                 <td>{fFecha(r.fecha)}</td>
                 <td><span style={{ color: BROKER_COLS[r.broker] || 'inherit', fontWeight: 600 }}>{BROKER_LBL[r.broker] || r.broker}</span></td>
                 <td>{fmt$(r.importe_eur)}</td>
                 <td>{r.importe_usd ? fmt$(r.importe_usd) : '—'}</td>
                 <td>{r.importe_usd ? (Number(r.importe_usd) / Number(r.importe_eur)).toFixed(4) : '—'}</td>
-                <td><a className="borrar-x" onClick={() => borrar(r)}>✕</a></td>
+                <td className="ed-acc">
+                  <a className="editar-l" onClick={() => editar(r)}>✎</a>
+                  <a className="borrar-x" onClick={() => borrar(r)}>✕</a>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
+        {edMsg && <p className="aporte-msg">{edMsg}</p>}
       </div>
     </div>
   )
