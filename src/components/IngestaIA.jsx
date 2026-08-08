@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { extraerCapturas } from '../lib/ia'
+import { resolverSimbolo, aprenderAlias, variantes } from '../lib/quotes'
 import './ingesta.css'
 
 const fmt$ = v => v == null ? '—' : Number(v).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -8,6 +9,7 @@ const fmt$ = v => v == null ? '—' : Number(v).toLocaleString('es-ES', { minimu
 const CLASES_ALTA = { NUCLEO: 'NÚCLEO', MOMENTUM: 'MOMENTUM', TACTICA: 'TÁCTICA', DISRUPTIVA: 'DISRUPT.' }
 const FUENTES_ALTA = ['YO', 'BELAR', 'PRENSA', 'REDES']
 const MOTIVOS_CIERRE = ['xSL', 'manual', 'escalonada']
+const HOY = () => new Date().toISOString().slice(0, 10)
 
 // Zona de arrastre + pantalla de revisión (diff). NUNCA auto-commit:
 // José revisa y acepta; lo aceptado vuelve a Posiciones como borrador/acciones.
@@ -15,10 +17,11 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
   const [estado, setEstado] = useState('idle')  // idle | procesando | diff | error
   const [err, setErr] = useState(null)
   const [diff, setDiff] = useState(null)
+  const [aviso, setAviso] = useState(null)
 
   async function procesar(files) {
     if (!files?.length) return
-    setEstado('procesando'); setErr(null)
+    setEstado('procesando'); setErr(null); setAviso(null)
     try {
       const ex = await extraerCapturas(files)
       setDiff(construirDiff(ex, positions))
@@ -28,14 +31,6 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
     }
   }
 
-  // El nombre de pantalla se resuelve al símbolo canónico vía tabla symbols (aliases)
-  function canonico(t) {
-    const T = t.toUpperCase()
-    const s = simbolos.find(x => x.ticker.toUpperCase() === T ||
-      (x.aliases || []).some(a => String(a).toUpperCase() === T))
-    return s ? s.ticker.toUpperCase() : T
-  }
-
   function construirDiff(extracciones, positions) {
     const updates = [], nuevas = [], liq = {}
     const vistos = new Set()
@@ -43,12 +38,20 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
     for (const ex of extracciones) {
       if (ex.liquidez != null) liq[ex.broker] = ex.liquidez
       for (const r of ex.posiciones || []) {
-        const t = canonico(r.ticker || r.nombre || '')
-        const pos = positions.find(p => p.broker === ex.broker && (
-          p.ticker.toUpperCase() === t ||
-          (r.nombre && r.nombre.toUpperCase().includes(p.ticker.toUpperCase())) ||
-          p.ticker.toUpperCase().includes(t)
-        ))
+        const textos = [r.ticker, r.nombre].filter(Boolean)
+        // El nombre de pantalla se resuelve al símbolo canónico por ticker,
+        // aliases y display_name (XTB escribe "Micron" o "MU.US" donde BTP tiene "MU").
+        const canon = resolverSimbolo(textos, simbolos)
+        const t = canon || (r.ticker || r.nombre || '').toUpperCase()
+        // Sin fila en symbols no hay alias que valga: se compara el ticker de la
+        // posición con las variantes del texto (quita el sufijo de mercado: MU.US → MU).
+        const vars = new Set(textos.flatMap(variantes))
+        const pos = positions.find(p => p.broker === ex.broker && p.ticker.toUpperCase() === t)
+          || positions.find(p => p.broker === ex.broker && !canon && vars.has(p.ticker.toUpperCase()))
+          || positions.find(p => p.broker === ex.broker && !canon && (
+            (r.nombre && r.nombre.toUpperCase().includes(p.ticker.toUpperCase())) ||
+            p.ticker.toUpperCase().includes(t)
+          ))
         if (pos) {
           vistos.add(pos.id)
           // Verificación aritmética con G/P (invertido + gp = valor).
@@ -68,10 +71,17 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
               dudosa = true
             }
           }
-          updates.push({ pos, invertido, valor, sel: true, curado, dudosa })
+          updates.push({ pos, invertido, valor, sel: true, curado, dudosa, textos, canon: !!canon })
         } else {
-          // clase y fuente elegibles en la propia revisión (defecto prudente: TÁCTICA / YO)
-          nuevas.push({ ...r, broker: ex.broker, sel: true, clase: 'TACTICA', fuente: 'YO' })
+          // clase y fuente elegibles en la propia revisión (defecto prudente: TÁCTICA / YO).
+          // entry_date: de la captura si la trae; si no, hay que ponerla a mano.
+          nuevas.push({
+            ...r, ticker: canon || r.ticker || r.nombre, broker: ex.broker,
+            sel: true, clase: 'TACTICA', fuente: 'YO',
+            entry_date: /^\d{4}-\d{2}-\d{2}$/.test(r.fecha_apertura || '') ? r.fecha_apertura : '',
+            deCaptura: /^\d{4}-\d{2}-\d{2}$/.test(r.fecha_apertura || ''),
+            mapear: '', textos,
+          })
         }
       }
     }
@@ -80,6 +90,41 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
       // cerrar es serio: desmarcado por defecto. Motivo elegible aquí mismo (defecto xSL).
       .map(p => ({ pos: p, sel: false, motivo: 'xSL' }))
     return { updates, nuevas, faltantes, liq }
+  }
+
+  // Antes de mandar al borrador: resolver los mapeos manuales (una "alta" que en
+  // realidad era una posición existente con otro nombre) y exigir fecha de apertura.
+  async function aplicar() {
+    const d = diff
+    const altas = d.nuevas.filter(n => n.sel && !n.mapear)
+    const sinFecha = altas.filter(n => !n.entry_date)
+    if (sinFecha.length) {
+      setAviso(`Falta la fecha de apertura de: ${sinFecha.map(n => (n.ticker || n.nombre || '?').toUpperCase()).join(', ')}. La captura no la trae, ponla a mano.`)
+      return
+    }
+    const updates = [...d.updates]
+    const cerrados = new Set()
+    let aprendidos = 0
+    for (const n of d.nuevas) {
+      if (!n.sel || !n.mapear) continue
+      const pos = positions.find(p => String(p.id) === String(n.mapear))
+      if (!pos) continue
+      updates.push({
+        pos, invertido: n.invertido, valor: n.valor, sel: true,
+        curado: false, dudosa: false, textos: n.textos, canon: true,
+      })
+      cerrados.add(pos.id)
+      // Aprender el nombre del broker para que la próxima captura lo reconozca sola
+      aprendidos += await aprenderAlias(pos.ticker, n.textos) || 0
+    }
+    // También se aprenden los nombres de lo que se resolvió solo (p.ej. "Micron" → MU).
+    // Nunca de las coincidencias laxas: un alias mal aprendido se arrastra para siempre.
+    for (const u of updates) {
+      if (u.sel && u.canon && !cerrados.has(u.pos.id)) aprendidos += await aprenderAlias(u.pos.ticker, u.textos) || 0
+    }
+    const faltantes = d.faltantes.filter(f => !cerrados.has(f.pos.id))
+    onAplicar({ ...d, updates, nuevas: d.nuevas.filter(n => !n.mapear), faltantes, aprendidos })
+    setEstado('idle'); setAviso(null)
   }
 
   if (estado === 'idle' || estado === 'error') {
@@ -107,12 +152,15 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
   const toggle = (arr, i) => setDiff({ ...d, [arr]: d[arr].map((x, j) => j === i ? { ...x, sel: !x.sel } : x) })
   const setCampo = (arr, i, campo, val) =>
     setDiff({ ...d, [arr]: d[arr].map((x, j) => j === i ? { ...x, [campo]: val } : x) })
+  // Candidatas a mapeo: posiciones del mismo broker que no aparecen ya como actualizadas
+  const yaVistas = new Set(d.updates.map(u => u.pos.id))
+  const candidatas = broker => positions.filter(p => p.broker === broker && !yaVistas.has(p.id))
 
   return (
     <div className="ingesta card num">
       <div className="diff-head">
         <b>Revisión de capturas</b>
-        <button className="btn-escape" onClick={() => setEstado('idle')}>descartar</button>
+        <button className="btn-escape" onClick={() => { setEstado('idle'); setAviso(null) }}>descartar</button>
       </div>
 
       {d.updates.length > 0 && <>
@@ -133,20 +181,37 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
       {d.nuevas.length > 0 && <>
         <h4>Altas propuestas ({d.nuevas.length})</h4>
         {d.nuevas.map((n, i) => (
-          <div key={i} className="diff-row">
+          <div key={i} className="diff-row diff-alta">
             <label className="diff-pick">
               <input type="checkbox" checked={n.sel} onChange={() => toggle('nuevas', i)} />
               <span className="t">{(n.ticker || n.nombre || '?').toUpperCase()} <i>{n.broker}</i></span>
             </label>
             <span>invertido {fmt$(n.invertido)} · valor {fmt$(n.valor)}</span>
-            <select className="diff-sel" value={n.clase} title="Clasificación de la nueva posición"
-              onChange={e => setCampo('nuevas', i, 'clase', e.target.value)}>
-              {Object.entries(CLASES_ALTA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-            </select>
-            <select className="diff-sel" value={n.fuente} title="Origen de la idea"
-              onChange={e => setCampo('nuevas', i, 'fuente', e.target.value)}>
-              {FUENTES_ALTA.map(f => <option key={f} value={f}>{f}</option>)}
-            </select>
+            <label className="diff-pick" title="Si en realidad ya la tienes en BTP con otro nombre, mapéala aquí: se actualiza en vez de duplicarse y BTP aprende el nombre del broker.">
+              es
+              <select className="diff-sel" value={n.mapear}
+                onChange={e => setCampo('nuevas', i, 'mapear', e.target.value)}>
+                <option value="">nueva</option>
+                {candidatas(n.broker).map(p => <option key={p.id} value={p.id}>= {p.ticker}</option>)}
+              </select>
+            </label>
+            {!n.mapear && <>
+              <label className={'diff-pick' + (n.sel && !n.entry_date ? ' falta' : '')}
+                title="Fecha de apertura de la posición. Si la captura no la trae, hay que ponerla a mano.">
+                abierta
+                <input type="date" className="diff-sel" max={HOY()} value={n.entry_date}
+                  onChange={e => setCampo('nuevas', i, 'entry_date', e.target.value)} />
+              </label>
+              {n.deCaptura && <span className="ok-cap" title="Fecha leída de la captura">✓cap.</span>}
+              <select className="diff-sel" value={n.clase} title="Clasificación de la nueva posición"
+                onChange={e => setCampo('nuevas', i, 'clase', e.target.value)}>
+                {Object.entries(CLASES_ALTA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+              <select className="diff-sel" value={n.fuente} title="Origen de la idea"
+                onChange={e => setCampo('nuevas', i, 'fuente', e.target.value)}>
+                {FUENTES_ALTA.map(f => <option key={f} value={f}>{f}</option>)}
+              </select>
+            </>}
           </div>
         ))}
       </>}
@@ -171,11 +236,14 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
       {Object.keys(d.liq).length > 0 &&
         <p className="diff-liq">Liquidez detectada: {Object.entries(d.liq).map(([b, v]) => `${b} $${fmt$(v)}`).join(' · ')}</p>}
 
+      {aviso && <p className="auth-err">{aviso}</p>}
+
       <p className="diff-nota">Nada se escribe en la base de datos hasta que pulses CERRAR SEMANA:
-        actualizaciones, altas y cierres quedan en el borrador y se pueden deshacer.</p>
+        actualizaciones, altas y cierres quedan en el borrador y se pueden deshacer.
+        Lo único que se guarda al aplicar son los nombres aprendidos de cada broker.</p>
 
       <div className="modal-botones">
-        <button className="btn-primario" onClick={() => { onAplicar(d); setEstado('idle') }}>
+        <button className="btn-primario" onClick={aplicar}>
           Aplicar al borrador
         </button>
       </div>

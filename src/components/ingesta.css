@@ -26,3 +26,9 @@
   border: 1px solid var(--linea, #d8d8d8); border-radius: 4px; background: transparent;
 }
 .ingesta .diff-nota { font-size: .8rem; opacity: .7; margin: .6rem 0 0; }
+
+/* Altas: mapeo a posición existente + fecha de apertura obligatoria */
+.ingesta .diff-alta { flex-wrap: wrap; row-gap: .35rem; }
+.ingesta .diff-pick.falta { color: var(--baja); font-weight: 600; }
+.ingesta .diff-pick.falta input { border-color: var(--baja); background: #FDEFF0; }
+.ingesta .ok-cap { font-size: .78rem; color: var(--alza); }
