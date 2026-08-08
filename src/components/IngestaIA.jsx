@@ -62,18 +62,26 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
             (r.nombre && r.nombre.toUpperCase().includes(p.ticker.toUpperCase())) ||
             p.ticker.toUpperCase().includes(t)
           ))
+        // ─── Verificación aritmética con G/P: invertido + gp = valor ───
+        // CopyTraders exentos (su G/P de eToro es otra métrica y no cuadra por diseño).
+        let { invertido, valor, gp } = r
+        let curado = false, permutado = false, dudosa = false
+        const esCopy = simbolos.find(x => x.ticker.toUpperCase() === t)?.asset_type === 'copy'
+        const cuadra = (inv, val) => inv != null && val != null && gp != null && Math.abs(inv + gp - val) <= 0.05
+        // 1. Importes permutados (visto en capturas de IBKR: coste de base y valor de
+        //    mercado intercambiados). La aritmética lo delata sin ambigüedad y se corrige.
+        if (!esCopy && gp != null && invertido != null && valor != null &&
+            !cuadra(invertido, valor) && cuadra(valor, invertido)) {
+          const tmp = invertido; invertido = valor; valor = tmp; permutado = true
+        }
+
         if (pos) {
           vistos.add(pos.id)
-          // Verificación aritmética con G/P (invertido + gp = valor).
-          // Política prudente: LA CAPTURA MANDA. Solo se corrige INVERTIDO cuando la BD
-          // lo confirma (valor−gp = invertido actual). Todo lo demás que no cuadre se
-          // marca para revisión, nunca se "corrige" por deducción. CopyTraders exentos
-          // (su G/P de eToro es otra métrica y no cuadra por diseño).
-          let { invertido, valor, gp } = r
-          let curado = false, dudosa = false
-          const esCopy = simbolos.find(x => x.ticker.toUpperCase() === t)?.asset_type === 'copy'
-          if (!esCopy && gp != null && invertido != null && valor != null &&
-              Math.abs(invertido + gp - valor) > 0.05) {
+          // 2. Política prudente: LA CAPTURA MANDA. Solo se corrige INVERTIDO cuando la BD
+          //    lo confirma (valor−gp = invertido actual). Lo que no cuadre se marca para
+          //    revisión, nunca se "corrige" por deducción.
+          if (!esCopy && !permutado && gp != null && invertido != null && valor != null &&
+              !cuadra(invertido, valor)) {
             const invBD = Number(pos.invested)
             if (Math.abs((valor - gp) - invBD) < 0.05 && Math.abs(invertido - invBD) >= 0.05) {
               invertido = invBD; curado = true
@@ -81,12 +89,13 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
               dudosa = true
             }
           }
-          updates.push({ pos, invertido, valor, sel: true, curado, dudosa, textos, canon: !!canon })
+          updates.push({ pos, invertido, valor, sel: true, curado, permutado, dudosa, textos, canon: !!canon })
         } else {
           // clase y fuente elegibles en la propia revisión (defecto prudente: TÁCTICA / YO).
           // entry_date: de la captura si la trae; si no, hay que ponerla a mano.
           nuevas.push({
             ...r, ticker: canon || r.ticker || r.nombre, broker: ex.broker,
+            invertido, valor, permutado,
             sel: true, clase: 'TACTICA', fuente: 'YO',
             entry_date: /^\d{4}-\d{2}-\d{2}$/.test(r.fecha_apertura || '') ? r.fecha_apertura : '',
             deCaptura: /^\d{4}-\d{2}-\d{2}$/.test(r.fecha_apertura || ''),
@@ -191,6 +200,7 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
             {u.invertido != null && Math.abs(u.invertido - u.pos.invested) > 0.01 &&
               <span className="warn">invertido {fmt$(u.pos.invested)} → <b>{fmt$(u.invertido)}</b></span>}
             {u.curado && <span className="warn" title="Lectura corregida por verificación aritmética (invertido + G/P = valor)">✓aritm.</span>}
+            {u.permutado && <span className="warn" title="La captura traía invertido y valor intercambiados; la aritmética con el G/P lo confirma y se han puesto en su sitio">⇄ corregido</span>}
             {u.dudosa && <span className="down" title="Los importes no cuadran con G/P y no se pudo corregir: revisa a mano">⚠ revisar</span>}
           </label>
         ))}
@@ -205,6 +215,7 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
               <span className="t">{(n.ticker || n.nombre || '?').toUpperCase()} <i>{n.broker}</i></span>
             </label>
             <span>invertido {fmt$(n.invertido)} · valor {fmt$(n.valor)}</span>
+            {n.permutado && <span className="warn" title="La captura traía invertido y valor intercambiados; corregido por aritmética con el G/P">⇄</span>}
             {/* Solo en caso de duda: si de ese broker no falta ninguna posición por
                 aparecer, el alta no puede ser otra cosa y el selector sobra. */}
             {candidatas(n.broker).length > 0 && (
