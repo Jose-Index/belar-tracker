@@ -6,7 +6,7 @@ import {
 import { exportBackup } from '../lib/backup'
 import { AreaChart, Area, YAxis, XAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import { getSimbolos, yahooDe, fetchQuotes, pctDia, frescura } from '../lib/quotes'
-import { asegurarCalendario, eventosProximos, estadoCalendario, analizarPosicion, guardarVeredicto, ultimoVeredicto, limpiarCitas } from '../lib/ia'
+import { asegurarCalendario, eventosProximos, estadoCalendario, analizarPosicion, guardarVeredicto, ultimoVeredicto, veredictosDe, ultimosVeredictos, limpiarCitas } from '../lib/ia'
 import IngestaIA from '../components/IngestaIA.jsx'
 import './posiciones.css'
 
@@ -61,6 +61,7 @@ export default function Posiciones() {
   const [eventos, setEventos] = useState([])
   const [calAt, setCalAt] = useState(null)
   const [analizando, setAnalizando] = useState(null)  // texto de progreso
+  const [conclusiones, setConclusiones] = useState(null)  // últimas conclusiones de la IA, cartera entera
   const tablaRef = useRef(null)
 
   useEffect(() => { localStorage.setItem('btp-orden', orden) }, [orden])
@@ -150,6 +151,19 @@ export default function Posiciones() {
   }, [rows, orden, desc])
 
   const sel = sorted?.find(p => p.id === selId) || null
+
+  // Todas las conclusiones de la última pasada, ordenadas por urgencia del veredicto:
+  // lo que pide atención primero. Sin esto había que abrir 28 posiciones una a una.
+  async function verConclusiones() {
+    const vs = await ultimosVeredictos()
+    const abiertas = new Map((rows || []).map(p => [`${p.ticker}|${p.broker}`, p]))
+    const lista = vs
+      .filter(v => abiertas.has(`${v.ticker}|${v.broker}`))
+      .map(v => ({ ...v, pos: abiertas.get(`${v.ticker}|${v.broker}`) }))
+      .sort((a, b) => (ESTADOS[a.veredicto]?.urg ?? 9) - (ESTADOS[b.veredicto]?.urg ?? 9)
+        || a.ticker.localeCompare(b.ticker))
+    setConclusiones(lista)
+  }
 
   // ── Modo cierre: entrada/salida/commit ──
   function entrarCierre() {
@@ -317,9 +331,11 @@ export default function Posiciones() {
                   setAnalizando(`Analizando ${p.ticker} (${i + 1}/${sorted.length})…`)
                   try { await guardarVeredicto(p, await analizarPosicion(p)) } catch (e) { console.warn(p.ticker, e) }
                 }
-                setAnalizando(null); setMsg('Análisis IA completado.'); recargar()
+                setAnalizando(null); setMsg('Análisis IA completado.'); recargar(); verConclusiones()
               }}>{analizando || 'ANÁLISIS IA'}</button>
             )}
+            {!cierre && <button className="btn-sec" onClick={() => conclusiones ? setConclusiones(null) : verConclusiones()}>
+              {conclusiones ? 'ocultar conclusiones' : 'CONCLUSIONES'}</button>}
             {!cierre
               ? <button className="btn-cierre" onClick={entrarCierre}>MODO CIERRE SEMANA</button>
               : <button className="btn-cierre on" onClick={commitCierre} disabled={busy}>
@@ -332,6 +348,32 @@ export default function Posiciones() {
         {msg && <p className="pos-msg num">{msg}</p>}
 
         {cierre && <IngestaIA positions={raw.positions} simbolos={simbolos} onAplicar={aplicarDiff} />}
+
+        {!cierre && conclusiones && (
+          <div className="card conclusiones">
+            <div className="ia-head">
+              <h2>Conclusiones del análisis IA <span className="hist-n num">{conclusiones.length}</span></h2>
+              <button className="btn-escape" onClick={() => setConclusiones(null)}>cerrar</button>
+            </div>
+            {!conclusiones.length && <p className="placeholder">Todavía no hay análisis guardados. Lanza ANÁLISIS IA.</p>}
+            {conclusiones.map(v => (
+              <div key={v.id} className={'concl-fila' + (v.veredicto !== v.pos.estado ? ' discrepa' : '')}>
+                <div className="concl-cab">
+                  <span className={'chip chip-' + v.veredicto}>{ESTADOS[v.veredicto]?.label || v.veredicto}</span>
+                  <b className="ticker">{v.ticker}</b>
+                  <i className="broker">{v.broker}</i>
+                  <span className={'num ' + pctClass(v.pos.gpPct)}>{fmtPct(v.pos.gpPct)}</span>
+                  {v.veredicto !== v.pos.estado &&
+                    <span className="discrepancia" title={`Tu ESTADO es ${ESTADOS[v.pos.estado]?.label || v.pos.estado}`}>⚑ discrepa de tu {ESTADOS[v.pos.estado]?.label || v.pos.estado}</span>}
+                  <span className="num concl-fecha">{v.created_at?.slice(2, 10).split('-').reverse().join('/')}</span>
+                </div>
+                <p>{limpiarCitas(v.justificacion)}</p>
+                {v.dimension && <p className="ia-meta"><b>Dimensión:</b> {v.dimension}</p>}
+                {v.invalidacion && <p className="ia-meta"><b>Invalidación:</b> {limpiarCitas(v.invalidacion)}</p>}
+              </div>
+            ))}
+          </div>
+        )}
 
         {cierre && (pendAltas.length > 0 || pendCierres.length > 0) && (
           <div className="card pendientes num">
@@ -479,12 +521,15 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
   const [nueva, setNueva] = useState('')
   const [ia, setIa] = useState(null)        // resultado recién generado
   const [iaPrev, setIaPrev] = useState(null)  // último veredicto guardado (verdict_history)
+  const [iaHist, setIaHist] = useState([])   // veredictos anteriores
+  const [verHist, setVerHist] = useState(false)
   const [iaBusy, setIaBusy] = useState(false)
   const [serie, setSerie] = useState([])
 
   useEffect(() => {
     fetchNotas(p.id).then(({ data }) => setNotas(data || [])); setIa(null)
-    setIaPrev(null); ultimoVeredicto(p.ticker, p.broker).then(setIaPrev)
+    setIaPrev(null); setIaHist([]); setVerHist(false)
+    veredictosDe(p.ticker, p.broker).then(vs => { setIaPrev(vs[0] || null); setIaHist(vs.slice(1)) })
     fetchSeriePosicion(p.ticker, p.broker).then(({ data }) =>
       setSerie((data || []).map(s => ({ fecha: s.week_end, v: Number(s.value) }))))
   }, [p.id])
@@ -599,6 +644,22 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
             Último veredicto: <span className={'chip chip-' + p.veredicto_ia}>{ESTADOS[p.veredicto_ia]?.label || p.veredicto_ia}</span>
             {p.veredicto_ia_at && <span className="num"> · {p.veredicto_ia_at.slice(2, 10).split('-').reverse().join('/')}</span>}
           </p>
+        )}
+        {iaHist.length > 0 && (
+          <div className="ia-hist">
+            <button className="btn-escape" onClick={() => setVerHist(!verHist)}>
+              {verHist ? 'ocultar anteriores' : `veredictos anteriores (${iaHist.length})`}
+            </button>
+            {verHist && iaHist.map(v => (
+              <div key={v.id} className="ia-hist-fila">
+                <div>
+                  <span className={'chip chip-' + v.veredicto}>{ESTADOS[v.veredicto]?.label || v.veredicto}</span>
+                  <span className="num ia-fecha">{v.created_at?.slice(2, 10).split('-').reverse().join('/')}</span>
+                </div>
+                <p>{limpiarCitas(v.justificacion)}</p>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 

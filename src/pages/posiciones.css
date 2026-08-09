@@ -189,3 +189,20 @@
 .badge-close { background: #b3402f; }
 .ia-fecha { color: var(--texto-neutro); font-size: 11.5px; margin-left: 6px; }
 .ia-res p { white-space: pre-wrap; }
+
+/* ─── Conclusiones del análisis IA: cartera entera de un vistazo ─── */
+.conclusiones .ia-head { margin-bottom: 6px; }
+.conclusiones h2 { margin: 0; }
+.concl-fila { border-top: 1px solid var(--borde); padding: 10px 0; }
+.concl-fila.discrepa { border-left: 2px solid var(--aviso); padding-left: 10px; }
+.concl-cab { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.concl-cab .ticker { font-family: var(--font-datos); font-size: 14px; }
+.concl-cab .broker { font-style: normal; color: var(--texto-neutro); font-size: 12px; }
+.concl-fecha { margin-left: auto; color: var(--texto-neutro); font-size: 11.5px; }
+.concl-fila p { font-size: 13px; line-height: 1.45; margin: 6px 0 0; }
+.conclusiones .discrepancia { color: var(--aviso); font-size: 11.5px; cursor: help; }
+
+/* Veredictos anteriores en el panel de la posición */
+.ia-hist { margin-top: 8px; }
+.ia-hist-fila { border-top: 1px solid var(--borde); padding: 8px 0; }
+.ia-hist-fila p { font-size: 12.5px; line-height: 1.4; margin: 5px 0 0; color: var(--texto-sec); }
