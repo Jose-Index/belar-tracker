@@ -206,3 +206,13 @@
 .ia-hist { margin-top: 8px; }
 .ia-hist-fila { border-top: 1px solid var(--borde); padding: 8px 0; }
 .ia-hist-fila p { font-size: 12.5px; line-height: 1.4; margin: 5px 0 0; color: var(--texto-sec); }
+
+/* Conclusión práctica del análisis: qué hacer con la posición */
+.accion {
+  font: 700 10px var(--font-ui); letter-spacing: .06em;
+  padding: 3px 8px; border-radius: 4px; color: #fff; white-space: nowrap;
+}
+.accion-MANTENER { background: var(--texto-neutro); }
+.accion-AMPLIAR  { background: var(--alza); }
+.accion-REDUCIR  { background: var(--aviso); }
+.accion-SALIR    { background: var(--baja); }

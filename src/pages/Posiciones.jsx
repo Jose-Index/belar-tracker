@@ -28,6 +28,11 @@ const CLASE_AYUDA = {
   DISRUPTIVA: 'DISRUPTIVA — smallcap especulativa. Sizing pequeño, SL muy amplio o sin SL: la invalidación es la tesis, no el precio.',
 }
 const FUENTES = ['YO', 'BELAR', 'PRENSA', 'REDES']
+// La conclusión práctica del análisis: qué hacer mañana con la posición.
+const ACCIONES = {
+  MANTENER: 'MANTENER', AMPLIAR: 'AMPLIAR', REDUCIR: 'REDUCIR', SALIR: 'SALIR',
+}
+const Accion = ({ v }) => v ? <span className={'accion accion-' + v}>{ACCIONES[v] || v}</span> : null
 const BROKERS = ['etoro', 'xtb', 'ibkr']
 const ORDEN_BROKER = { etoro: 0, xtb: 1, ibkr: 2 }   // orden de la casa, no alfabético
 const ORDENES = [
@@ -360,6 +365,7 @@ export default function Posiciones() {
               <div key={v.id} className={'concl-fila' + (v.veredicto !== v.pos.estado ? ' discrepa' : '')}>
                 <div className="concl-cab">
                   <span className={'chip chip-' + v.veredicto}>{ESTADOS[v.veredicto]?.label || v.veredicto}</span>
+                  <Accion v={v.accion} />
                   <b className="ticker">{v.ticker}</b>
                   <i className="broker">{v.broker}</i>
                   <span className={'num ' + pctClass(v.pos.gpPct)}>{fmtPct(v.pos.gpPct)}</span>
@@ -626,7 +632,8 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
         {(ia && !ia.error) ? (
           <div className="ia-res">
             <span className={'chip chip-' + ia.veredicto}>{ESTADOS[ia.veredicto]?.label || ia.veredicto}</span>
-            <p>{ia.justificacion}</p>
+            <Accion v={ia.accion} />
+            <p>{limpiarCitas(ia.justificacion)}</p>
             <p className="ia-meta"><b>Dimensión:</b> {ia.dimension}</p>
             <p className="ia-meta"><b>Invalidación:</b> {ia.invalidacion}</p>
             {ia.alerta && <p className="auth-err">⚑ {ia.alerta} (enviado a Alertas)</p>}
@@ -634,6 +641,7 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
         ) : iaPrev ? (
           <div className="ia-res">
             <span className={'chip chip-' + iaPrev.veredicto}>{ESTADOS[iaPrev.veredicto]?.label || iaPrev.veredicto}</span>
+            <Accion v={iaPrev.accion} />
             {iaPrev.created_at && <span className="num ia-fecha"> {iaPrev.created_at.slice(2, 10).split('-').reverse().join('/')}</span>}
             <p>{limpiarCitas(iaPrev.justificacion)}</p>
             {iaPrev.dimension && <p className="ia-meta"><b>Dimensión:</b> {iaPrev.dimension}</p>}
@@ -654,6 +662,7 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
               <div key={v.id} className="ia-hist-fila">
                 <div>
                   <span className={'chip chip-' + v.veredicto}>{ESTADOS[v.veredicto]?.label || v.veredicto}</span>
+                  <Accion v={v.accion} />
                   <span className="num ia-fecha">{v.created_at?.slice(2, 10).split('-').reverse().join('/')}</span>
                 </div>
                 <p>{limpiarCitas(v.justificacion)}</p>
