@@ -140,3 +140,15 @@ export async function guardarVeredicto(p, v) {
     })
   }
 }
+
+// Último veredicto guardado de una posición (la tanda "ANÁLISIS IA" escribe aquí:
+// sin esto, el razonamiento se guardaba y no se veía en ninguna pantalla).
+export async function ultimoVeredicto(ticker, broker) {
+  const { data } = await supabase.from('verdict_history')
+    .select('*').eq('ticker', ticker).eq('broker', broker)
+    .order('created_at', { ascending: false }).limit(1)
+  return data?.[0] || null
+}
+
+// El modelo cita fuentes con etiquetas <cite index="...">; en pantalla estorban.
+export const limpiarCitas = t => String(t || '').replace(/<\/?cite[^>]*>/g, '')
