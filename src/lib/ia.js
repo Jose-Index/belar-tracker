@@ -130,7 +130,7 @@ export async function guardarVeredicto(p, v) {
     veredicto_ia: v.veredicto, veredicto_ia_at: new Date().toISOString(),
   }).eq('id', p.id)
   await supabase.from('verdict_history').insert({
-    ticker: p.ticker, broker: p.broker, veredicto: v.veredicto,
+    ticker: p.ticker, broker: p.broker, veredicto: v.veredicto, accion: v.accion || null,
     justificacion: v.justificacion, dimension: v.dimension, invalidacion: v.invalidacion,
   })
   if (v.alerta) {
