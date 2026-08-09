@@ -100,9 +100,15 @@ export async function cerrarSemana(positions, liquidez, btcQty = 0) {
 }
 
 // Serie semanal de UNA posición para la gráfica del detalle
-export function fetchSeriePosicion(ticker, broker) {
-  return supabase.from('position_snapshots').select('week_end,value,invested')
-    .eq('ticker', ticker).eq('broker', broker).order('week_end')
+// `desde` = fecha de entrada de la posición ACTUAL. Un mismo ticker puede haberse
+// abierto y cerrado varias veces (EWY: una vida 15-20/06 y otra desde el 05/08); sin
+// este filtro la gráfica mezclaba las dos y mostraba un registro semanal de junio en
+// una posición abierta en agosto.
+export function fetchSeriePosicion(ticker, broker, desde) {
+  let q = supabase.from('position_snapshots').select('week_end,value,invested')
+    .eq('ticker', ticker).eq('broker', broker)
+  if (desde) q = q.gte('week_end', desde)
+  return q.order('week_end')
 }
 
 export function fetchNotas(positionId) {
