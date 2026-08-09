@@ -530,7 +530,7 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
     fetchNotas(p.id).then(({ data }) => setNotas(data || [])); setIa(null)
     setIaPrev(null); setIaHist([]); setVerHist(false)
     veredictosDe(p.ticker, p.broker).then(vs => { setIaPrev(vs[0] || null); setIaHist(vs.slice(1)) })
-    fetchSeriePosicion(p.ticker, p.broker).then(({ data }) =>
+    fetchSeriePosicion(p.ticker, p.broker, p.entry_date).then(({ data }) =>
       setSerie((data || []).map(s => ({ fecha: s.week_end, v: Number(s.value) }))))
   }, [p.id])
 
