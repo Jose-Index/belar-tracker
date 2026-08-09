@@ -187,3 +187,5 @@
 }
 .badge-new { background: var(--belar-azul, #2f6fed); }
 .badge-close { background: #b3402f; }
+.ia-fecha { color: var(--texto-neutro); font-size: 11.5px; margin-left: 6px; }
+.ia-res p { white-space: pre-wrap; }

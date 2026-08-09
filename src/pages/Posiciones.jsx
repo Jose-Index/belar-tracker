@@ -6,7 +6,7 @@ import {
 import { exportBackup } from '../lib/backup'
 import { AreaChart, Area, YAxis, XAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import { getSimbolos, yahooDe, fetchQuotes, pctDia, frescura } from '../lib/quotes'
-import { asegurarCalendario, eventosProximos, estadoCalendario, analizarPosicion, guardarVeredicto } from '../lib/ia'
+import { asegurarCalendario, eventosProximos, estadoCalendario, analizarPosicion, guardarVeredicto, ultimoVeredicto, limpiarCitas } from '../lib/ia'
 import IngestaIA from '../components/IngestaIA.jsx'
 import './posiciones.css'
 
@@ -435,7 +435,7 @@ export default function Posiciones() {
                   <td>
                     <span className={'chip chip-' + p.estado}>{ESTADOS[p.estado]?.label || p.estado}</span>
                     {p.veredicto_ia && p.veredicto_ia !== p.estado &&
-                      <span className="discrepancia" title={`Veredicto IA: ${ESTADOS[p.veredicto_ia]?.label || p.veredicto_ia}`}>⚑</span>}
+                      <span className="discrepancia" title={`Veredicto IA: ${ESTADOS[p.veredicto_ia]?.label || p.veredicto_ia} · abre la posición para leer el análisis completo`}>⚑</span>}
                   </td>
                   <td className="tl clase" title={CLASE_AYUDA[p.clase] || ''}>{CLASES[p.clase] || p.clase}</td>
                   <td>{p.apalancamiento > 1 ? 'x' + Number(p.apalancamiento) : ''}</td>
@@ -478,11 +478,13 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
   const [notas, setNotas] = useState([])
   const [nueva, setNueva] = useState('')
   const [ia, setIa] = useState(null)        // resultado recién generado
+  const [iaPrev, setIaPrev] = useState(null)  // último veredicto guardado (verdict_history)
   const [iaBusy, setIaBusy] = useState(false)
   const [serie, setSerie] = useState([])
 
   useEffect(() => {
     fetchNotas(p.id).then(({ data }) => setNotas(data || [])); setIa(null)
+    setIaPrev(null); ultimoVeredicto(p.ticker, p.broker).then(setIaPrev)
     fetchSeriePosicion(p.ticker, p.broker).then(({ data }) =>
       setSerie((data || []).map(s => ({ fecha: s.week_end, v: Number(s.value) }))))
   }, [p.id])
@@ -583,6 +585,14 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
             <p className="ia-meta"><b>Dimensión:</b> {ia.dimension}</p>
             <p className="ia-meta"><b>Invalidación:</b> {ia.invalidacion}</p>
             {ia.alerta && <p className="auth-err">⚑ {ia.alerta} (enviado a Alertas)</p>}
+          </div>
+        ) : iaPrev ? (
+          <div className="ia-res">
+            <span className={'chip chip-' + iaPrev.veredicto}>{ESTADOS[iaPrev.veredicto]?.label || iaPrev.veredicto}</span>
+            {iaPrev.created_at && <span className="num ia-fecha"> {iaPrev.created_at.slice(2, 10).split('-').reverse().join('/')}</span>}
+            <p>{limpiarCitas(iaPrev.justificacion)}</p>
+            {iaPrev.dimension && <p className="ia-meta"><b>Dimensión:</b> {iaPrev.dimension}</p>}
+            {iaPrev.invalidacion && <p className="ia-meta"><b>Invalidación:</b> {limpiarCitas(iaPrev.invalidacion)}</p>}
           </div>
         ) : p.veredicto_ia && (
           <p className="ia-meta">
