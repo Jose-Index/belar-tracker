@@ -150,5 +150,26 @@ export async function ultimoVeredicto(ticker, broker) {
   return data?.[0] || null
 }
 
+// Todos los veredictos de una posición, del más reciente al más antiguo: permite
+// comparar qué decía la IA hace dos semanas con lo que dice hoy.
+export async function veredictosDe(ticker, broker) {
+  const { data } = await supabase.from('verdict_history')
+    .select('*').eq('ticker', ticker).eq('broker', broker)
+    .order('created_at', { ascending: false }).limit(30)
+  return data || []
+}
+
+// El último veredicto de CADA posición, para leer la cartera entera de un tirón.
+export async function ultimosVeredictos() {
+  const { data } = await supabase.from('verdict_history')
+    .select('*').order('created_at', { ascending: false }).limit(600)
+  const vistos = new Map()
+  for (const v of data || []) {
+    const k = `${v.ticker}|${v.broker}`
+    if (!vistos.has(k)) vistos.set(k, v)
+  }
+  return [...vistos.values()]
+}
+
 // El modelo cita fuentes con etiquetas <cite index="...">; en pantalla estorban.
 export const limpiarCitas = t => String(t || '').replace(/<\/?cite[^>]*>/g, '')
