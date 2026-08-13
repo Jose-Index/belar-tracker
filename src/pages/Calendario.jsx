@@ -1,4 +1,4 @@
-// Calendario global: eventos IA (auto cada 24h) + manuales, próximos 60 días.
+// Calendario global: eventos manuales (José/Belar en sesión), próximos 60 días. IA retirada 13/08/2026.
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { tickersVigilados, purgarCalendario } from '../lib/ia'

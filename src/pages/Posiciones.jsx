@@ -6,7 +6,7 @@ import {
 import { exportBackup } from '../lib/backup'
 import { AreaChart, Area, YAxis, XAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import { getSimbolos, yahooDe, fetchQuotes, pctDia, frescura } from '../lib/quotes'
-import { asegurarCalendario, eventosProximos, estadoCalendario, analizarPosicion, guardarVeredicto, ultimoVeredicto, veredictosDe, ultimosVeredictos, limpiarCitas } from '../lib/ia'
+import { eventosProximos, veredictosDe, limpiarCitas } from '../lib/ia'
 import IngestaIA from '../components/IngestaIA.jsx'
 import './posiciones.css'
 
@@ -64,9 +64,6 @@ export default function Posiciones() {
   const [quotes, setQuotes] = useState({})     // yahoo_symbol -> quote
   const [simbolos, setSimbolos] = useState([])
   const [eventos, setEventos] = useState([])
-  const [calAt, setCalAt] = useState(null)
-  const [analizando, setAnalizando] = useState(null)  // texto de progreso
-  const [conclusiones, setConclusiones] = useState(null)  // últimas conclusiones de la IA, cartera entera
   const tablaRef = useRef(null)
 
   useEffect(() => { localStorage.setItem('btp-orden', orden) }, [orden])
@@ -88,23 +85,11 @@ export default function Posiciones() {
     const ys = data.positions.map(p => yahooDe(p.ticker, sims)).filter(Boolean)
     setQuotes(await fetchQuotes(ys))
     setEventos(await eventosProximos())
-    estadoCalendario().then(setCalAt)
   }
   useEffect(() => { recargar() }, [])
 
-  // Calendario automático: si BTP está abierto y han pasado >24h, se refresca solo (silencioso)
-  useEffect(() => {
-    if (!raw?.positions?.length) return
-    let vivo = true
-    async function tick() {
-      const r = await asegurarCalendario(raw.positions.map(p => p.ticker))
-      if (!vivo) return
-      if (!r.fresco && !r.error) { setEventos(await eventosProximos()); setCalAt(r.at) }
-    }
-    tick()
-    const id = setInterval(tick, 3600 * 1000)
-    return () => { vivo = false; clearInterval(id) }
-  }, [raw?.positions?.length])
+  // Calendario: alimentación manual / Belar en sesión. La regeneración IA de 24h
+  // se retiró el 13/08/2026 (consumía créditos de Console sin intervención de José).
 
   // ── Cálculo de derivados ──
   const rows = useMemo(() => {
@@ -156,19 +141,6 @@ export default function Posiciones() {
   }, [rows, orden, desc])
 
   const sel = sorted?.find(p => p.id === selId) || null
-
-  // Todas las conclusiones de la última pasada, ordenadas por urgencia del veredicto:
-  // lo que pide atención primero. Sin esto había que abrir 28 posiciones una a una.
-  async function verConclusiones() {
-    const vs = await ultimosVeredictos()
-    const abiertas = new Map((rows || []).map(p => [`${p.ticker}|${p.broker}`, p]))
-    const lista = vs
-      .filter(v => abiertas.has(`${v.ticker}|${v.broker}`))
-      .map(v => ({ ...v, pos: abiertas.get(`${v.ticker}|${v.broker}`) }))
-      .sort((a, b) => (ESTADOS[a.veredicto]?.urg ?? 9) - (ESTADOS[b.veredicto]?.urg ?? 9)
-        || a.ticker.localeCompare(b.ticker))
-    setConclusiones(lista)
-  }
 
   // ── Modo cierre: entrada/salida/commit ──
   function entrarCierre() {
@@ -315,8 +287,6 @@ export default function Posiciones() {
           <h1>Posiciones <span className="pos-n num">{sorted.length}</span>
             <a href="/sandbox" style={{ fontSize: 11.5, fontWeight: 500, marginLeft: 10, color: 'var(--texto-neutro)', textDecoration: 'none' }}>sandbox ↗</a></h1>
           <div className="pos-controls">
-            {calAt && <span className="sello num" title="Actualización automática cada 24h con BTP abierto">
-              Calendario · hace {Math.max(0, Math.round((Date.now() - new Date(calAt)) / 3600000))}h</span>}
             {raw.lastClose && <span className="sello num">Último cierre: {raw.lastClose.date?.split('-').reverse().join('/')}</span>}
             <label>Orden:{' '}
               <select value={orden} onChange={e => setOrden(e.target.value)} disabled={cierre}>
@@ -328,19 +298,6 @@ export default function Posiciones() {
               </button>
             </label>
             <button className="btn-sec" onClick={() => setAlta(true)}>+ Posición</button>
-            {!cierre && (
-              <button className="btn-sec" disabled={!!analizando} onClick={async () => {
-                if (!window.confirm(`Análisis IA completo de ${sorted.length} posiciones (búsqueda web real, ~2-4 min, coste del orden de 1-3€). ¿Adelante?`)) return
-                for (let i = 0; i < sorted.length; i++) {
-                  const p = sorted[i]
-                  setAnalizando(`Analizando ${p.ticker} (${i + 1}/${sorted.length})…`)
-                  try { await guardarVeredicto(p, await analizarPosicion(p)) } catch (e) { console.warn(p.ticker, e) }
-                }
-                setAnalizando(null); setMsg('Análisis IA completado.'); recargar(); verConclusiones()
-              }}>{analizando || 'ANÁLISIS IA'}</button>
-            )}
-            {!cierre && <button className="btn-sec" onClick={() => conclusiones ? setConclusiones(null) : verConclusiones()}>
-              {conclusiones ? 'ocultar conclusiones' : 'CONCLUSIONES'}</button>}
             {!cierre
               ? <button className="btn-cierre" onClick={entrarCierre}>MODO CIERRE SEMANA</button>
               : <button className="btn-cierre on" onClick={commitCierre} disabled={busy}>
@@ -353,33 +310,6 @@ export default function Posiciones() {
         {msg && <p className="pos-msg num">{msg}</p>}
 
         {cierre && <IngestaIA positions={raw.positions} simbolos={simbolos} onAplicar={aplicarDiff} />}
-
-        {!cierre && conclusiones && (
-          <div className="card conclusiones">
-            <div className="ia-head">
-              <h2>Conclusiones del análisis IA <span className="hist-n num">{conclusiones.length}</span></h2>
-              <button className="btn-escape" onClick={() => setConclusiones(null)}>cerrar</button>
-            </div>
-            {!conclusiones.length && <p className="placeholder">Todavía no hay análisis guardados. Lanza ANÁLISIS IA.</p>}
-            {conclusiones.map(v => (
-              <div key={v.id} className={'concl-fila' + (v.veredicto !== v.pos.estado ? ' discrepa' : '')}>
-                <div className="concl-cab">
-                  <span className={'chip chip-' + v.veredicto}>{ESTADOS[v.veredicto]?.label || v.veredicto}</span>
-                  <Accion v={v.accion} />
-                  <b className="ticker">{v.ticker}</b>
-                  <i className="broker">{v.broker}</i>
-                  <span className={'num ' + pctClass(v.pos.gpPct)}>{fmtPct(v.pos.gpPct)}</span>
-                  {v.veredicto !== v.pos.estado &&
-                    <span className="discrepancia" title={`Tu ESTADO es ${ESTADOS[v.pos.estado]?.label || v.pos.estado}`}>⚑ discrepa de tu {ESTADOS[v.pos.estado]?.label || v.pos.estado}</span>}
-                  <span className="num concl-fecha">{v.created_at?.slice(2, 10).split('-').reverse().join('/')}</span>
-                </div>
-                <p>{limpiarCitas(v.justificacion)}</p>
-                {v.dimension && <p className="ia-meta"><b>Dimensión:</b> {v.dimension}</p>}
-                {v.invalidacion && <p className="ia-meta"><b>Invalidación:</b> {limpiarCitas(v.invalidacion)}</p>}
-              </div>
-            ))}
-          </div>
-        )}
 
         {cierre && (pendAltas.length > 0 || pendCierres.length > 0) && (
           <div className="card pendientes num">
@@ -525,30 +455,18 @@ export default function Posiciones() {
 function PanelDetalle({ p, onClose, onChange, onCerrar }) {
   const [notas, setNotas] = useState([])
   const [nueva, setNueva] = useState('')
-  const [ia, setIa] = useState(null)        // resultado recién generado
-  const [iaPrev, setIaPrev] = useState(null)  // último veredicto guardado (verdict_history)
+  const [iaPrev, setIaPrev] = useState(null)  // último veredicto guardado (verdict_history, solo lectura)
   const [iaHist, setIaHist] = useState([])   // veredictos anteriores
   const [verHist, setVerHist] = useState(false)
-  const [iaBusy, setIaBusy] = useState(false)
   const [serie, setSerie] = useState([])
 
   useEffect(() => {
-    fetchNotas(p.id).then(({ data }) => setNotas(data || [])); setIa(null)
+    fetchNotas(p.id).then(({ data }) => setNotas(data || []))
     setIaPrev(null); setIaHist([]); setVerHist(false)
     veredictosDe(p.ticker, p.broker).then(vs => { setIaPrev(vs[0] || null); setIaHist(vs.slice(1)) })
     fetchSeriePosicion(p.ticker, p.broker, p.entry_date).then(({ data }) =>
       setSerie((data || []).map(s => ({ fecha: s.week_end, v: Number(s.value) }))))
   }, [p.id])
-
-  async function analizar() {
-    setIaBusy(true)
-    try {
-      const v = await analizarPosicion(p)
-      await guardarVeredicto(p, v)
-      setIa(v); onChange()
-    } catch (e) { setIa({ error: String(e.message || e) }) }
-    setIaBusy(false)
-  }
 
   async function setAttr(campo, valor) {
     await updatePosicion(p.id, { [campo]: valor })
@@ -623,22 +541,9 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
 
       <div className="ia-bloque">
         <div className="ia-head">
-          <h3>Análisis IA</h3>
-          <button className="btn-sec" disabled={iaBusy} onClick={analizar}>
-            {iaBusy ? 'Analizando…' : p.veredicto_ia ? 'Re-analizar' : 'Analizar'}
-          </button>
+          <h3>Análisis IA <span className="hist-n">histórico · la revisión vive en la sesión de sábado con Belar</span></h3>
         </div>
-        {ia?.error && <p className="auth-err">{ia.error}</p>}
-        {(ia && !ia.error) ? (
-          <div className="ia-res">
-            <span className={'chip chip-' + ia.veredicto}>{ESTADOS[ia.veredicto]?.label || ia.veredicto}</span>
-            <Accion v={ia.accion} />
-            <p>{limpiarCitas(ia.justificacion)}</p>
-            <p className="ia-meta"><b>Dimensión:</b> {ia.dimension}</p>
-            <p className="ia-meta"><b>Invalidación:</b> {ia.invalidacion}</p>
-            {ia.alerta && <p className="auth-err">⚑ {ia.alerta} (enviado a Alertas)</p>}
-          </div>
-        ) : iaPrev ? (
+        {iaPrev ? (
           <div className="ia-res">
             <span className={'chip chip-' + iaPrev.veredicto}>{ESTADOS[iaPrev.veredicto]?.label || iaPrev.veredicto}</span>
             <Accion v={iaPrev.accion} />
