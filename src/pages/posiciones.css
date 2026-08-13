@@ -216,3 +216,13 @@
 .accion-AMPLIAR  { background: var(--alza); }
 .accion-REDUCIR  { background: var(--aviso); }
 .accion-SALIR    { background: var(--baja); }
+
+/* Estrategia de entrada (13/08/2026) */
+.estrategia-bloque { margin: 10px 0 16px; }
+.estrategia-bloque textarea {
+  width: 100%; min-height: 84px; resize: vertical; box-sizing: border-box;
+  font: 400 12.5px/1.5 var(--font-ui); color: var(--texto);
+  padding: 8px 10px; border-radius: 8px; border: 1px solid var(--borde);
+  background: var(--superficie);
+}
+.estrategia-bloque textarea:focus { outline: none; border-color: var(--azul, #2E6BF6); }

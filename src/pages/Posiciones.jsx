@@ -64,6 +64,7 @@ export default function Posiciones() {
   const [quotes, setQuotes] = useState({})     // yahoo_symbol -> quote
   const [simbolos, setSimbolos] = useState([])
   const [eventos, setEventos] = useState([])
+  const [ingesta, setIngesta] = useState(false)  // ACTUALIZAR POR CAPTURA fuera del cierre
   const tablaRef = useRef(null)
 
   useEffect(() => { localStorage.setItem('btp-orden', orden) }, [orden])
@@ -218,6 +219,46 @@ export default function Posiciones() {
     setBusy(false); setSelId(null); recargar()
   }
 
+  // ACTUALIZAR POR CAPTURA (fuera del cierre, 13/08/2026): aplica lo aceptado en la
+  // revisión DIRECTAMENTE a positions. No sella snapshot, no toca "último cierre",
+  // no pide liquidez: el registro semanal canónico sigue siendo CERRAR SEMANA.
+  async function aplicarDirecto(d) {
+    const stamp = new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+    const cierres = d.faltantes.filter(f => f.sel)
+    if (cierres.length && !window.confirm(
+      `Se van a CERRAR ${cierres.length} posición(es) y registrar en el histórico:\n\n` +
+      cierres.map(c => `· ${c.pos.ticker} (${c.pos.broker}) — motivo ${c.motivo || 'manual'}`).join('\n') +
+      '\n\n¿Confirmas?')) return
+    setBusy(true)
+    let nUpd = 0, nAltas = 0
+    for (const u of d.updates) {
+      if (!u.sel) continue
+      const patch = {}
+      if (u.valor != null) patch.current_value = u.valor
+      if (u.invertido != null && Math.abs(u.invertido - u.pos.invested) > 0.01) patch.invested = u.invertido
+      if (!Object.keys(patch).length) continue
+      patch.ingest_badge = 'UPD'; patch.ingest_source = `captura ${u.pos.broker} ${stamp}`
+      await updatePosicion(u.pos.id, patch); nUpd++
+    }
+    for (const c of cierres) await cerrarPosicion(c.pos, c.motivo || 'manual')
+    for (const n of d.nuevas) {
+      if (!n.sel) continue
+      const inv = n.invertido ?? n.valor
+      if (!inv) continue
+      await altaPosicion({
+        ticker: (n.ticker || n.nombre || '?').toUpperCase(), broker: n.broker,
+        entry_date: n.entry_date || new Date().toISOString().slice(0, 10),
+        invested: inv, current_value: n.valor ?? inv,
+        apalancamiento: n.apalancamiento || 1,
+        clase: n.clase || 'TACTICA', fuente: n.fuente || 'YO',
+        ingest_badge: 'NEW', ingest_source: `captura ${n.broker} ${stamp}`,
+      }); nAltas++
+    }
+    setBusy(false); setIngesta(false)
+    setMsg(`Actualización por captura · ${nUpd} actualizadas · ${nAltas} altas · ${cierres.length} cierres · la semana NO queda sellada`)
+    recargar()
+  }
+
   // Aplicar lo aceptado en la revisión de capturas: TODO va al borrador (valores,
   // altas y cierres). Nada toca la base de datos hasta CERRAR SEMANA. Las capturas
   // se pueden acumular en varias pasadas (un broker por pasada) sin riesgo.
@@ -298,6 +339,8 @@ export default function Posiciones() {
               </button>
             </label>
             <button className="btn-sec" onClick={() => setAlta(true)}>+ Posición</button>
+            {!cierre && <button className="btn-sec" onClick={() => setIngesta(!ingesta)}>
+              {ingesta ? 'cerrar captura' : 'ACTUALIZAR POR CAPTURA'}</button>}
             {!cierre
               ? <button className="btn-cierre" onClick={entrarCierre}>MODO CIERRE SEMANA</button>
               : <button className="btn-cierre on" onClick={commitCierre} disabled={busy}>
@@ -310,6 +353,13 @@ export default function Posiciones() {
         {msg && <p className="pos-msg num">{msg}</p>}
 
         {cierre && <IngestaIA positions={raw.positions} simbolos={simbolos} onAplicar={aplicarDiff} />}
+
+        {!cierre && ingesta && (
+          <>
+            <p className="pos-msg num">Actualización entre semana: se aplica al aceptar la revisión, sin sellar snapshot ni tocar el último cierre.</p>
+            <IngestaIA positions={raw.positions} simbolos={simbolos} onAplicar={aplicarDirecto} />
+          </>
+        )}
 
         {cierre && (pendAltas.length > 0 || pendCierres.length > 0) && (
           <div className="card pendientes num">
@@ -459,9 +509,11 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
   const [iaHist, setIaHist] = useState([])   // veredictos anteriores
   const [verHist, setVerHist] = useState(false)
   const [serie, setSerie] = useState([])
+  const [estr, setEstr] = useState(p.estrategia || '')  // Estrategia de entrada (texto libre)
 
   useEffect(() => {
     fetchNotas(p.id).then(({ data }) => setNotas(data || []))
+    setEstr(p.estrategia || '')
     setIaPrev(null); setIaHist([]); setVerHist(false)
     veredictosDe(p.ticker, p.broker).then(vs => { setIaPrev(vs[0] || null); setIaHist(vs.slice(1)) })
     fetchSeriePosicion(p.ticker, p.broker, p.entry_date).then(({ data }) =>
@@ -537,6 +589,16 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
             {FUENTES.map(f => <option key={f}>{f}</option>)}
           </select>
         </label>
+      </div>
+
+      <div className="estrategia-bloque">
+        <div className="ia-head">
+          <h3>Estrategia de entrada</h3>
+          {estr !== (p.estrategia || '') &&
+            <button className="btn-sec" onClick={() => setAttr('estrategia', estr.trim() || null)}>guardar</button>}
+        </div>
+        <textarea value={estr} onChange={e => setEstr(e.target.value)}
+          placeholder="¿Por qué entraste? Motivación, tesis y expectativa. Material de la revisión de sábado." />
       </div>
 
       <div className="ia-bloque">
