@@ -68,18 +68,15 @@ export default function Mercados() {
     setNuevo(''); setPropuesta(null); cargarLista()
   }
 
-  // Resolver IA: "oro" → GC=F, "eurostoxx" → ^STOXX50E. Símbolo exacto entra directo.
+  // Alta directa por símbolo Yahoo exacto (GC=F, ^STOXX50E, NVDA…).
+  // El resolutor IA ("oro" → GC=F) se retiró el 13/08/2026 con el resto de funciones IA.
   async function añadir(e) {
     e.preventDefault()
-    const q = nuevo.trim()
+    const q = nuevo.trim().toUpperCase()
     if (!q || buscando) return
     setBuscando(true); setPropuesta(null)
-    try {
-      const r = await fetch('/api/ia-ticker?q=' + encodeURIComponent(q)).then(x => x.json())
-      if (r.error) setPropuesta({ error: r.error })
-      else if (r.via === 'exacto') await insertarSimbolo(r.symbol, r.nombre)
-      else setPropuesta(r)   // confirmación: José valida antes de añadir
-    } catch { setPropuesta({ error: 'sin respuesta del resolutor' }) }
+    try { await insertarSimbolo(q, null) }
+    catch { setPropuesta({ error: 'no se pudo añadir el símbolo' }) }
     setBuscando(false)
   }
   // Reordenación por drag & drop: optimista en pantalla, posiciones 1..n en BD
@@ -118,9 +115,9 @@ export default function Mercados() {
         ))}
         {edit && (
           <form className="m-box m-box-add" onSubmit={añadir}>
-            <input placeholder='+ ticker o "oro", "eurostoxx"…' value={nuevo}
+            <input placeholder='+ símbolo Yahoo exacto (NVDA, GC=F, ^STOXX50E)' value={nuevo}
                    onChange={e => { setNuevo(e.target.value); setPropuesta(null) }} disabled={buscando} />
-            {buscando && <span className="m-add-estado">resolviendo…</span>}
+            {buscando && <span className="m-add-estado">añadiendo…</span>}
             {propuesta?.error && <span className="m-add-estado err">{propuesta.error}</span>}
             {propuesta && !propuesta.error && (
               <div className="m-add-propuesta num">
