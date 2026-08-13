@@ -2,6 +2,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import Evolucion from '../components/Evolucion.jsx'
+import IngestaCierres from '../components/IngestaCierres.jsx'
+import { getSimbolos } from '../lib/quotes'
 import './inicio.css'
 
 const fmt$ = v => v == null ? '—' : Number(v).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -11,11 +13,21 @@ const fFecha = d => d ? d.slice(2).split('-').reverse().join('/') : '—'
 
 export default function Historico() {
   const [weeks, setWeeks] = useState(null)
+  const [cierres, setCierres] = useState(false)   // registro de cierres por captura (13/08/2026)
+  const [positions, setPositions] = useState([])
+  const [simbolos, setSimbolos] = useState([])
+  const [msgCierres, setMsgCierres] = useState(null)
 
   useEffect(() => {
     supabase.from('weekly_snapshots').select('*').order('week_end')
       .then(({ data }) => setWeeks(data || []))
   }, [])
+
+  useEffect(() => {
+    if (!cierres) return
+    supabase.from('positions').select('*').then(({ data }) => setPositions(data || []))
+    getSimbolos().then(setSimbolos)
+  }, [cierres])
 
   const filas = useMemo(() => {
     if (!weeks) return []
@@ -35,6 +47,16 @@ export default function Historico() {
   return (
     <div>
       <Evolucion />
+
+      <div className="card historico">
+        <h2>Cierres de posiciones{' '}
+          <button className="btn-sec" onClick={() => { setCierres(!cierres); setMsgCierres(null) }}>
+            {cierres ? 'cerrar' : 'REGISTRAR CIERRES POR CAPTURA'}
+          </button></h2>
+        {msgCierres && <p className="hist-n num">{msgCierres}</p>}
+        {cierres && <IngestaCierres positions={positions} simbolos={simbolos}
+          onDone={n => { setCierres(false); setMsgCierres(`${n} cierre(s) registrados en el histórico con fecha e importe reales.`) }} />}
+      </div>
 
       <div className="card historico">
         <h2>Histórico semanal <span className="hist-n num">{filas.length} semanas</span></h2>
