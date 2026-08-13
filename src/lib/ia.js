@@ -32,6 +32,19 @@ export async function extraerCapturas(files) {
   return j.extracciones || []
 }
 
+// Pantallas de posiciones CERRADAS / historial del broker (13/08/2026):
+// fecha real de cierre e importe real de salida para el histórico.
+export async function extraerCierres(files) {
+  const images = await Promise.all([...files].map(leerImagen))
+  const r = await fetch('/api/ia-capturas', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ images, modo: 'cerradas' }),
+  })
+  const j = await r.json()
+  if (j.error) throw new Error(j.error)
+  return j.extracciones || []
+}
+
 // ─── Calendario: solo lectura/purga. La regeneración IA de 24h y el análisis IA
 // se retiraron el 13/08/2026 (coste de Console); la revisión la hace Belar en sesión.
 // Universo vigilado del calendario: posiciones ABIERTAS + repositorio (ENTRAR YA / RADAR).

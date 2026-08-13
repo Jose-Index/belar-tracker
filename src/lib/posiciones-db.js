@@ -49,6 +49,25 @@ export async function cerrarPosicion(p, motivo) {
   return supabase.from('positions').delete().eq('id', p.id)
 }
 
+// Registro de cierre por captura (13/08/2026): datos REALES de salida (fecha e
+// importe del broker), no el valor de la última semana. Si posId viene, además
+// borra la posición abierta correspondiente.
+export async function registrarCierre(c) {
+  const inv = c.invested, cv = c.closed_value
+  const { error } = await supabase.from('position_history').insert({
+    ticker: c.ticker, broker: c.broker, entry_date: c.entry_date || null,
+    closed_date: c.closed_date || new Date().toISOString().slice(0, 10),
+    invested: inv, closed_value: cv,
+    pl_pct: inv && cv != null ? Math.round((cv - inv) / inv * 10000) / 100 : null,
+    close_reason: c.motivo || 'manual', clase: c.clase || null, fuente: c.fuente || null,
+    apalancamiento: c.apalancamiento || 1,
+  })
+  if (error) return { error }
+  await supabase.from('repositorio').insert({ ticker: c.ticker, estado: 'CERRADA', nota: `${c.motivo || 'manual'} · captura` })
+  if (c.posId) return supabase.from('positions').delete().eq('id', c.posId)
+  return {}
+}
+
 export function guardarLiquidez(liq) {
   return supabase.from('app_state').upsert({ key: 'liquidez', value: liq, updated_at: new Date().toISOString() })
 }
