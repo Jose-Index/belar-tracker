@@ -32,12 +32,8 @@ export async function extraerCapturas(files) {
   return j.extracciones || []
 }
 
-// ─── Calendario automático (regla única: >24h con BTP abierto) ───
-export async function estadoCalendario() {
-  const { data } = await supabase.from('app_state').select('value').eq('key', 'last_calendar_update').maybeSingle()
-  return data?.value?.at || null
-}
-
+// ─── Calendario: solo lectura/purga. La regeneración IA de 24h y el análisis IA
+// se retiraron el 13/08/2026 (coste de Console); la revisión la hace Belar en sesión.
 // Universo vigilado del calendario: posiciones ABIERTAS + repositorio (ENTRAR YA / RADAR).
 // Las cerradas no pintan nada aquí (regla José 03/08).
 export async function tickersVigilados() {
@@ -57,55 +53,6 @@ export async function purgarCalendario(vigilados) {
   return fuera.length
 }
 
-export async function refrescarCalendario(tickers) {
-  const vigilados = await tickersVigilados()
-  const universo = [...new Set([...(tickers || []), ...vigilados])]
-  const hoy = new Date().toISOString().slice(0, 10)
-
-  // Persecución: los estimados vivos se re-verifican en cada pasada hasta que la
-  // compañía convoque (o hasta que la fecha pase). Un estimado nunca se da por bueno.
-  const { data: estimados } = await supabase.from('calendar_events')
-    .select('ticker,event_date,titulo')
-    .eq('confirmacion', 'estimado').not('ticker', 'is', null).gte('event_date', hoy)
-
-  const r = await fetch('/api/ia-calendario', {
-    method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ tickers: universo, perseguir: estimados || [] }),
-  })
-  const j = await r.json()
-  if (j.error) throw new Error(j.error)
-
-  await supabase.from('calendar_events').delete().eq('source', 'ia').gte('event_date', hoy)
-  await purgarCalendario(universo)
-
-  const ahora = new Date().toISOString()
-  const eventos = (j.eventos || []).filter(e => e.event_date >= hoy).map(e => ({
-    ticker: e.ticker || null, event_date: e.event_date,
-    event_type: ['earnings', 'exdiv', 'fed', 'bce', 'cripto'].includes(e.event_type) ? e.event_type : 'otro',
-    titulo: e.titulo, source: 'ia',
-    // Sin clasificación explícita de la IA => estimado. Nunca se asume confirmado.
-    confirmacion: ['confirmado', 'estimado', 'na'].includes(e.confirmacion) ? e.confirmacion : 'estimado',
-    fuente: e.fuente || null,
-    verificado_at: ahora,
-  }))
-  if (eventos.length) await supabase.from('calendar_events').insert(eventos)
-  await supabase.from('app_state').upsert({ key: 'last_calendar_update', value: { at: ahora }, updated_at: ahora })
-
-  const confirmados = eventos.filter(e => e.confirmacion === 'confirmado').length
-  return { n: eventos.length, confirmados, estimados: eventos.length - confirmados }
-}
-
-export async function asegurarCalendario(tickers) {
-  const at = await estadoCalendario()
-  if (at && Date.now() - new Date(at).getTime() < 24 * 3600 * 1000) return { fresco: true, at }
-  try {
-    const r = await refrescarCalendario(tickers)
-    return { fresco: false, ...r, at: new Date().toISOString() }
-  } catch (e) {
-    return { error: String(e.message || e), at }
-  }
-}
-
 export async function eventosProximos() {
   const hoy = new Date().toISOString().slice(0, 10)
   const lim = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10)
@@ -114,42 +61,9 @@ export async function eventosProximos() {
   return data || []
 }
 
-// ─── Análisis IA ───
-export async function analizarPosicion(p) {
-  const r = await fetch('/api/ia-analisis', {
-    method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ position: p }),
-  })
-  const j = await r.json()
-  if (j.error) throw new Error(j.error)
-  return j
-}
-
-export async function guardarVeredicto(p, v) {
-  await supabase.from('positions').update({
-    veredicto_ia: v.veredicto, veredicto_ia_at: new Date().toISOString(),
-  }).eq('id', p.id)
-  await supabase.from('verdict_history').insert({
-    ticker: p.ticker, broker: p.broker, veredicto: v.veredicto, accion: v.accion || null,
-    justificacion: v.justificacion, dimension: v.dimension, invalidacion: v.invalidacion,
-  })
-  if (v.alerta) {
-    await supabase.from('alerts').insert({
-      autor: 'app', severidad: 'alta', ticker: p.ticker,
-      titulo: `[Análisis IA] ${p.ticker}: ${v.alerta}`, detalle: v.justificacion,
-    })
-  }
-}
-
+// ─── Histórico de veredictos (solo lectura) ───
 // Último veredicto guardado de una posición (la tanda "ANÁLISIS IA" escribe aquí:
 // sin esto, el razonamiento se guardaba y no se veía en ninguna pantalla).
-export async function ultimoVeredicto(ticker, broker) {
-  const { data } = await supabase.from('verdict_history')
-    .select('*').eq('ticker', ticker).eq('broker', broker)
-    .order('created_at', { ascending: false }).limit(1)
-  return data?.[0] || null
-}
-
 // Todos los veredictos de una posición, del más reciente al más antiguo: permite
 // comparar qué decía la IA hace dos semanas con lo que dice hoy.
 export async function veredictosDe(ticker, broker) {
@@ -157,18 +71,6 @@ export async function veredictosDe(ticker, broker) {
     .select('*').eq('ticker', ticker).eq('broker', broker)
     .order('created_at', { ascending: false }).limit(30)
   return data || []
-}
-
-// El último veredicto de CADA posición, para leer la cartera entera de un tirón.
-export async function ultimosVeredictos() {
-  const { data } = await supabase.from('verdict_history')
-    .select('*').order('created_at', { ascending: false }).limit(600)
-  const vistos = new Map()
-  for (const v of data || []) {
-    const k = `${v.ticker}|${v.broker}`
-    if (!vistos.has(k)) vistos.set(k, v)
-  }
-  return [...vistos.values()]
 }
 
 // El modelo cita fuentes con etiquetas <cite index="...">; en pantalla estorban.
