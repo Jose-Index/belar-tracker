@@ -1,6 +1,8 @@
 // BTP · /api/ia-capturas — extrae posiciones de capturas de pantalla de brokers.
-// POST { images: [{ data: base64, media_type }] }
-// Respuesta: { extracciones: [{ broker, liquidez|null, posiciones: [{nombre, ticker, invertido, valor, apalancamiento}] }] }
+// POST { images: [{ data: base64, media_type }], modo?: 'cerradas' }
+// modo ausente → posiciones abiertas: { extracciones: [{ broker, liquidez|null, posiciones: [...] }] }
+// modo 'cerradas' (13/08/2026) → pantallas de historial/posiciones cerradas:
+//   { extracciones: [{ broker, cierres: [{nombre, ticker, invertido, valor_cierre, gp, fecha_cierre, fecha_apertura, apalancamiento}] }] }
 
 import { anthropic, jsonDe } from './_anthropic.js'
 
@@ -32,17 +34,40 @@ Reglas:
 - Si una cifra no se lee con certeza, pon null antes que inventarla.
 - CRÍTICO: transcribe cada importe dígito a dígito y reléelo antes de escribirlo (confundir un 5 con un 6, o perder los decimales, corrompe la cartera). Ante ambigüedad visual, null.`
 
+// Modo "cerradas" (13/08/2026): pantallas de historial / posiciones cerradas del broker.
+// Objetivo: fecha REAL de cierre e importe REAL de salida, que el cierre por ausencia
+// en captura no tiene (usa el valor de la última semana).
+const PROMPT_CERRADAS = `Eres el extractor de datos de BTP (Belar Tracker Pro), el tracker de inversiones de José.
+Las capturas adjuntas son pantallas de POSICIONES CERRADAS / HISTORIAL de sus brokers (eToro, XTB y/o IBKR).
+Extrae TODOS los cierres visibles.
+
+Devuelve EXCLUSIVAMENTE un JSON con esta forma, sin texto adicional:
+{"extracciones":[{"broker":"etoro|xtb|ibkr","cierres":[{"nombre":"NVIDIA Corp","ticker":"NVDA","invertido":1717.08,"valor_cierre":1925.54,"gp":208.46,"fecha_cierre":"2026-08-11","fecha_apertura":"2026-04-15","apalancamiento":1}]}]}
+
+Reglas:
+- broker: dedúcelo por los RÓTULOS de las columnas, no por los colores. eToro "Historial"/"Cerradas" muestra "Invertido", "Beneficio", "Cerrada"; XTB (xStation) "Historial de órdenes"/"Posiciones cerradas" con "Valor de apertura", "Beneficio neto", "Hora de cierre"; IBKR muestra "Realized P&L", "Trade History". Si no puedes decidirlo, pon el que más se parezca; José lo corrige en pantalla.
+- invertido = lo que costó abrir; valor_cierre = el importe al cerrar (invertido + beneficio realizado). En USD, punto decimal.
+- gp = beneficio/pérdida REALIZADA con su signo si está visible; si no, null. Debe cumplirse invertido + gp = valor_cierre; si no cuadra, revisa qué columna es cada cosa.
+- Si la pantalla solo da invertido y gp, calcula valor_cierre = invertido + gp. Si solo da valor_cierre y gp, calcula invertido = valor_cierre - gp.
+- fecha_cierre: la fecha REAL de cierre en YYYY-MM-DD (XTB usa dd.mm.aaaa: conviértela). Si no aparece, null: NO pongas la de hoy.
+- fecha_apertura: si aparece, YYYY-MM-DD; si no, null.
+- ticker: el símbolo si aparece; si solo hay nombre comercial, tu mejor conversión ("NVIDIA Corp"→"NVDA"). CopyTraders de eToro: el nombre del trader tal cual.
+- apalancamiento: x1 si no se indica.
+- AGREGACIÓN: varias sublíneas/lotes del mismo instrumento cerrados el mismo día = UN cierre con los importes totales. Cierres del mismo instrumento en fechas distintas = cierres separados.
+- Si una cifra no se lee con certeza, null antes que inventarla.
+- CRÍTICO: transcribe cada importe dígito a dígito y reléelo antes de escribirlo. Ante ambigüedad visual, null.`
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST' }); return }
   try {
-    const { images } = req.body || {}
+    const { images, modo } = req.body || {}
     if (!images?.length) { res.status(400).json({ error: 'images requerido' }); return }
     const content = [
       ...images.slice(0, 8).map(im => ({
         type: 'image',
         source: { type: 'base64', media_type: im.media_type || 'image/png', data: im.data },
       })),
-      { type: 'text', text: PROMPT },
+      { type: 'text', text: modo === 'cerradas' ? PROMPT_CERRADAS : PROMPT },
     ]
     const msg = await anthropic({ messages: [{ role: 'user', content }] })
     res.setHeader('Cache-Control', 'no-store')
