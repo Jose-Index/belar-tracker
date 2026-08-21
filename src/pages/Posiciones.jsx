@@ -591,7 +591,7 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
 
       <div className="estrategia-bloque">
         <div className="ia-head">
-          <h3>Estrategia de entrada <span className="hist-n">{estrPend ? 'guardando…' : 'se guarda sola'}</span></h3>
+          <h3>Estrategia de entrada {estrPend && <span className="hist-n">guardando…</span>}</h3>
         </div>
         <textarea value={estr} onChange={e => cambiaEstr(e.target.value)}
           onBlur={e => estrPend && cambiaEstr(e.target.value, true)}
