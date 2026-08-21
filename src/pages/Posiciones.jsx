@@ -6,7 +6,7 @@ import {
 import { exportBackup } from '../lib/backup'
 import { AreaChart, Area, YAxis, XAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import { getSimbolos, yahooDe, fetchQuotes, pctDia, frescura } from '../lib/quotes'
-import { eventosProximos, veredictosDe, limpiarCitas } from '../lib/ia'
+import { eventosProximos } from '../lib/ia'
 import IngestaIA from '../components/IngestaIA.jsx'
 import './posiciones.css'
 
@@ -28,11 +28,6 @@ const CLASE_AYUDA = {
   DISRUPTIVA: 'DISRUPTIVA — smallcap especulativa. Sizing pequeño, SL muy amplio o sin SL: la invalidación es la tesis, no el precio.',
 }
 const FUENTES = ['YO', 'BELAR', 'PRENSA', 'REDES']
-// La conclusión práctica del análisis: qué hacer mañana con la posición.
-const ACCIONES = {
-  MANTENER: 'MANTENER', AMPLIAR: 'AMPLIAR', REDUCIR: 'REDUCIR', SALIR: 'SALIR',
-}
-const Accion = ({ v }) => v ? <span className={'accion accion-' + v}>{ACCIONES[v] || v}</span> : null
 const BROKERS = ['etoro', 'xtb', 'ibkr']
 const ORDEN_BROKER = { etoro: 0, xtb: 1, ibkr: 2 }   // orden de la casa, no alfabético
 const ORDENES = [
@@ -421,7 +416,7 @@ export default function Posiciones() {
                 <th className="col-clave col-fin" title="Ganancia/pérdida abierta en % sobre invertido">G/P %</th>
                 <th title="Variación de HOY del activo (precio vivo Yahoo vs cierre anterior)">%/día</th>
                 <th title="Variación desde el último cierre de semana">%/sem</th>
-                <th title="Tu valoración de la posición. ⚑ = el análisis IA discrepa (pasa el ratón por la bandera para ver su veredicto).">ESTADO</th>
+                <th title="Tu valoración de la posición.">ESTADO</th>
                 <th className="tl" title="Clasificación: NÚCLEO (Ancla/Estructural/Gestión), MOMENTUM, TÁCTICA, DISRUPTIVA">CLASE</th>
                 <th title="Apalancamiento (x1 = sin apalancar; máximo de la casa x2)">APAL</th>
                 <th title="Peso de la posición sobre el total de posiciones">PESO</th>
@@ -462,8 +457,6 @@ export default function Posiciones() {
                   <td className={pctClass(p.sem)}>{fmtPct(p.sem)}</td>
                   <td>
                     <span className={'chip chip-' + p.estado}>{ESTADOS[p.estado]?.label || p.estado}</span>
-                    {p.veredicto_ia && p.veredicto_ia !== p.estado &&
-                      <span className="discrepancia" title={`Veredicto IA: ${ESTADOS[p.veredicto_ia]?.label || p.veredicto_ia} · abre la posición para leer el análisis completo`}>⚑</span>}
                   </td>
                   <td className="tl clase" title={CLASE_AYUDA[p.clase] || ''}>{CLASES[p.clase] || p.clase}</td>
                   <td>{p.apalancamiento > 1 ? 'x' + Number(p.apalancamiento) : ''}</td>
@@ -485,7 +478,6 @@ export default function Posiciones() {
           <div className="pos-leyenda num">
             <span><i className="ev-dot">●</i> evento confirmado · <i className="ev-dot estimado">○</i> fecha estimada, puede desviarse (rojo si faltan &lt;3 días)</span>
             <span><i className="badge new">NEW</i> alta por captura IA</span>
-            <span><i className="discrepancia">⚑</i> el análisis IA discrepa de tu ESTADO</span>
             <span><b>FTE</b> fuente de la idea: en blanco YO · B Belar · P prensa · R redes</span>
             <span>fondo <i className="lg-ojo">ámbar OJO</i> · <i className="lg-duda">azul ¿?</i> · <i className="lg-xsalir">rojo xSALIR</i></span>
             <span><b>CLASE</b> el detalle de cada una, al pasar el ratón</span>
@@ -505,17 +497,12 @@ export default function Posiciones() {
 function PanelDetalle({ p, onClose, onChange, onCerrar }) {
   const [notas, setNotas] = useState([])
   const [nueva, setNueva] = useState('')
-  const [iaPrev, setIaPrev] = useState(null)  // último veredicto guardado (verdict_history, solo lectura)
-  const [iaHist, setIaHist] = useState([])   // veredictos anteriores
-  const [verHist, setVerHist] = useState(false)
   const [serie, setSerie] = useState([])
   const [estr, setEstr] = useState(p.estrategia || '')  // Estrategia de entrada (texto libre)
 
   useEffect(() => {
     fetchNotas(p.id).then(({ data }) => setNotas(data || []))
     setEstr(p.estrategia || '')
-    setIaPrev(null); setIaHist([]); setVerHist(false)
-    veredictosDe(p.ticker, p.broker).then(vs => { setIaPrev(vs[0] || null); setIaHist(vs.slice(1)) })
     fetchSeriePosicion(p.ticker, p.broker, p.entry_date).then(({ data }) =>
       setSerie((data || []).map(s => ({ fecha: s.week_end, v: Number(s.value) }))))
   }, [p.id])
@@ -599,44 +586,6 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
         </div>
         <textarea value={estr} onChange={e => setEstr(e.target.value)}
           placeholder="¿Por qué entraste? Motivación, tesis y expectativa. Material de la revisión de sábado." />
-      </div>
-
-      <div className="ia-bloque">
-        <div className="ia-head">
-          <h3>Análisis IA <span className="hist-n">histórico · la revisión vive en la sesión de sábado con Belar</span></h3>
-        </div>
-        {iaPrev ? (
-          <div className="ia-res">
-            <span className={'chip chip-' + iaPrev.veredicto}>{ESTADOS[iaPrev.veredicto]?.label || iaPrev.veredicto}</span>
-            <Accion v={iaPrev.accion} />
-            {iaPrev.created_at && <span className="num ia-fecha"> {iaPrev.created_at.slice(2, 10).split('-').reverse().join('/')}</span>}
-            <p>{limpiarCitas(iaPrev.justificacion)}</p>
-            {iaPrev.dimension && <p className="ia-meta"><b>Dimensión:</b> {iaPrev.dimension}</p>}
-            {iaPrev.invalidacion && <p className="ia-meta"><b>Invalidación:</b> {limpiarCitas(iaPrev.invalidacion)}</p>}
-          </div>
-        ) : p.veredicto_ia && (
-          <p className="ia-meta">
-            Último veredicto: <span className={'chip chip-' + p.veredicto_ia}>{ESTADOS[p.veredicto_ia]?.label || p.veredicto_ia}</span>
-            {p.veredicto_ia_at && <span className="num"> · {p.veredicto_ia_at.slice(2, 10).split('-').reverse().join('/')}</span>}
-          </p>
-        )}
-        {iaHist.length > 0 && (
-          <div className="ia-hist">
-            <button className="btn-escape" onClick={() => setVerHist(!verHist)}>
-              {verHist ? 'ocultar anteriores' : `veredictos anteriores (${iaHist.length})`}
-            </button>
-            {verHist && iaHist.map(v => (
-              <div key={v.id} className="ia-hist-fila">
-                <div>
-                  <span className={'chip chip-' + v.veredicto}>{ESTADOS[v.veredicto]?.label || v.veredicto}</span>
-                  <Accion v={v.accion} />
-                  <span className="num ia-fecha">{v.created_at?.slice(2, 10).split('-').reverse().join('/')}</span>
-                </div>
-                <p>{limpiarCitas(v.justificacion)}</p>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       <h3>Notas</h3>
