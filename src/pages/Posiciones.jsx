@@ -499,10 +499,12 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
   const [nueva, setNueva] = useState('')
   const [serie, setSerie] = useState([])
   const [estr, setEstr] = useState(p.estrategia || '')  // Estrategia de entrada (texto libre)
+  const [estrPend, setEstrPend] = useState(false)       // autoguardado en vuelo
+  const estrTimer = useRef(null)
 
   useEffect(() => {
     fetchNotas(p.id).then(({ data }) => setNotas(data || []))
-    setEstr(p.estrategia || '')
+    clearTimeout(estrTimer.current); setEstr(p.estrategia || ''); setEstrPend(false)
     fetchSeriePosicion(p.ticker, p.broker, p.entry_date).then(({ data }) =>
       setSerie((data || []).map(s => ({ fecha: s.week_end, v: Number(s.value) }))))
   }, [p.id])
@@ -511,6 +513,15 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
     await updatePosicion(p.id, { [campo]: valor })
     onChange()
   }
+  // Estrategia: autoguardado silencioso (sin botón, sin recarga). Guarda a los
+  // 800 ms de dejar de teclear y también al salir del campo (blur).
+  function cambiaEstr(v, inmediato = false) {
+    setEstr(v); setEstrPend(true)
+    clearTimeout(estrTimer.current)
+    const salvar = async () => { await updatePosicion(p.id, { estrategia: v.trim() || null }); setEstrPend(false) }
+    if (inmediato) salvar(); else estrTimer.current = setTimeout(salvar, 800)
+  }
+  useEffect(() => () => clearTimeout(estrTimer.current), [])
   async function borrarNota(n) {
     if (!confirm(`¿Borrar la nota «${n.texto.slice(0, 60)}${n.texto.length > 60 ? '…' : ''}»?`)) return
     await borrarNotaDB(n.id)
@@ -580,12 +591,11 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
 
       <div className="estrategia-bloque">
         <div className="ia-head">
-          <h3>Estrategia de entrada</h3>
-          {estr !== (p.estrategia || '') &&
-            <button className="btn-sec" onClick={() => setAttr('estrategia', estr.trim() || null)}>guardar</button>}
+          <h3>Estrategia de entrada <span className="hist-n">{estrPend ? 'guardando…' : 'se guarda sola'}</span></h3>
         </div>
-        <textarea value={estr} onChange={e => setEstr(e.target.value)}
-          placeholder="¿Por qué entraste? Motivación, tesis y expectativa. Material de la revisión de sábado." />
+        <textarea value={estr} onChange={e => cambiaEstr(e.target.value)}
+          onBlur={e => estrPend && cambiaEstr(e.target.value, true)}
+          placeholder="¿Por qué entraste? Motivación, tesis y expectativa. Material de la revisión de sábado. Se guarda automáticamente." />
       </div>
 
       <h3>Notas</h3>
