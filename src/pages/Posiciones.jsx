@@ -501,6 +501,7 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
   const [estr, setEstr] = useState(p.estrategia || '')  // Estrategia de entrada (texto libre)
   const [estrPend, setEstrPend] = useState(false)       // autoguardado en vuelo
   const estrTimer = useRef(null)
+  const estrRef = useRef(null)
 
   useEffect(() => {
     fetchNotas(p.id).then(({ data }) => setNotas(data || []))
@@ -522,6 +523,11 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
     if (inmediato) salvar(); else estrTimer.current = setTimeout(salvar, 800)
   }
   useEffect(() => () => clearTimeout(estrTimer.current), [])
+  // Altura del cajón: crece y encoge con el contenido, sin barras de scroll.
+  useEffect(() => {
+    const el = estrRef.current
+    if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px' }
+  }, [estr, p.id])
   async function borrarNota(n) {
     if (!confirm(`¿Borrar la nota «${n.texto.slice(0, 60)}${n.texto.length > 60 ? '…' : ''}»?`)) return
     await borrarNotaDB(n.id)
@@ -593,7 +599,8 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
         <div className="ia-head">
           <h3>Estrategia de entrada {estrPend && <span className="hist-n">guardando…</span>}</h3>
         </div>
-        <textarea value={estr} onChange={e => cambiaEstr(e.target.value)}
+        <textarea ref={estrRef} value={estr} onChange={e => cambiaEstr(e.target.value)}
+          style={{ resize: 'none', overflow: 'hidden' }}
           onBlur={e => estrPend && cambiaEstr(e.target.value, true)}
           placeholder="¿Por qué entraste? Motivación, tesis y expectativa. Material de la revisión de sábado. Se guarda automáticamente." />
       </div>
