@@ -87,6 +87,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     const loadLive = async () => {
+      // Fix 21/08/2026: no refrescar mientras José escribe — el re-render cada 15s
+      // cortaba la composición de teclas muertas (acentos perdidos al teclear rápido).
+      const ae = document.activeElement
+      if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return
       try {
         const tickerRes = await fetch('/api/tickers')
         const tickers = await tickerRes.json()
