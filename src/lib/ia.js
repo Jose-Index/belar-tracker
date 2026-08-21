@@ -73,18 +73,3 @@ export async function eventosProximos() {
     .gte('event_date', hoy).lte('event_date', lim).order('event_date')
   return data || []
 }
-
-// ─── Histórico de veredictos (solo lectura) ───
-// Último veredicto guardado de una posición (la tanda "ANÁLISIS IA" escribe aquí:
-// sin esto, el razonamiento se guardaba y no se veía en ninguna pantalla).
-// Todos los veredictos de una posición, del más reciente al más antiguo: permite
-// comparar qué decía la IA hace dos semanas con lo que dice hoy.
-export async function veredictosDe(ticker, broker) {
-  const { data } = await supabase.from('verdict_history')
-    .select('*').eq('ticker', ticker).eq('broker', broker)
-    .order('created_at', { ascending: false }).limit(30)
-  return data || []
-}
-
-// El modelo cita fuentes con etiquetas <cite index="...">; en pantalla estorban.
-export const limpiarCitas = t => String(t || '').replace(/<\/?cite[^>]*>/g, '')
