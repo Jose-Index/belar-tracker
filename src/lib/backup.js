@@ -4,7 +4,7 @@ import { supabase } from './supabase'
 
 const TABLAS = ['positions', 'position_history', 'position_snapshots', 'weekly_snapshots', 'contributions',
   'calendar_events', 'alerts', 'repositorio', 'plan_rector', 'hitos', 'frases', 'position_notes',
-  'symbols', 'yearly_results', 'app_state', 'verdict_history', 'positions_sandbox']
+    'symbols', 'yearly_results', 'app_state', 'positions_sandbox']
 
 export async function exportBackup(prefijo = 'btp-backup') {
   const out = { exportado: new Date().toISOString(), tablas: {} }
