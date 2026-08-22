@@ -5,7 +5,7 @@ import {
 } from '../lib/posiciones-db'
 import { exportBackup } from '../lib/backup'
 import { AreaChart, Area, YAxis, XAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
-import { getSimbolos, yahooDe, fetchQuotes, pctDia, frescura } from '../lib/quotes'
+import { getSimbolos, yahooDe, fetchQuotes, pctDia, pctSem, diasAbiertos, frescura } from '../lib/quotes'
 import { eventosProximos } from '../lib/ia'
 import IngestaIA from '../components/IngestaIA.jsx'
 import './posiciones.css'
@@ -33,7 +33,7 @@ const ORDEN_BROKER = { etoro: 0, xtb: 1, ibkr: 2 }   // orden de la casa, no alf
 const ORDENES = [
   { id: 'broker', label: 'Broker' }, { id: 'entrada', label: 'Entrada' },
   { id: 'clase', label: 'Clase' }, { id: 'estado', label: 'Estado' },
-  { id: 'sem', label: '%/semana' }, { id: 'dia', label: '%/día' },
+  { id: 'sem', label: 'vari/sem' }, { id: 'dia', label: '%/día' },
   { id: 'peso', label: 'Peso' }, { id: 'gp', label: 'G/P %' },
 ]
 
@@ -75,7 +75,7 @@ export default function Posiciones() {
       } catch { /* sin fixture */ }
     }
     setRaw(data)
-    // %/día: precios de los activos vía Yahoo (bajo demanda, con frescura)
+    // vari/sem: precios de los activos vía Yahoo (bajo demanda, con frescura)
     const sims = await getSimbolos()
     setSimbolos(sims)
     const ys = data.positions.map(p => yahooDe(p.ticker, sims)).filter(Boolean)
@@ -91,28 +91,26 @@ export default function Posiciones() {
   const rows = useMemo(() => {
     if (!raw) return null
     const { positions, snapshots } = raw
-    const weeks = [...new Set(snapshots.map(s => s.week_end))].sort().reverse()
-    const [w0, w1] = weeks
-    const snap = (t, b, w) => snapshots.find(s => s.ticker === t && s.broker === b && s.week_end === w)?.value
     const total = positions.reduce((a, p) => a + Number(p.current_value ?? p.invested), 0)
     return positions.map(p => {
       const val = Number(p.current_value ?? p.invested)
       const inv = Number(p.invested)
-      const v0 = snap(p.ticker, p.broker, w0), v1 = snap(p.ticker, p.broker, w1)
       const q = quotes[yahooDe(p.ticker, simbolos)]
       const evs = eventos.filter(e => e.ticker === p.ticker)
       const evEarn = evs.find(e => e.event_type === 'earnings')
       const diasEarn = evEarn ? Math.ceil((new Date(evEarn.event_date) - Date.now()) / 86400000) : null
+      const gpPct = inv ? (val - inv) / inv * 100 : null
       return {
         evs, evUrgente: diasEarn != null && diasEarn <= 3,
         // Punto sólido solo si TODOS los eventos están confirmados; hueco si hay estimados
         evConfirmado: evs.length > 0 && evs.every(e => e.confirmacion !== 'estimado'),
         ...p, valor: val,
         gp: val - inv,
-        gpPct: inv ? (val - inv) / inv * 100 : null,
-        dia: pctDia(q),
-        diaFresco: q ? frescura(q) : null,
-        sem: (v0 != null && v1 != null && Number(v1) !== 0) ? (v0 - v1) / v1 * 100 : null,
+        gpPct,
+        dia: pctDia(gpPct, p.entry_date),
+        diasAbiertos: diasAbiertos(p.entry_date),
+        sem: pctSem(q),
+        semFresco: q ? frescura(q) : null,
         peso: total ? val / total * 100 : null,
       }
     })
@@ -414,8 +412,8 @@ export default function Posiciones() {
                 <th className="col-clave col-ini" title="Valor actual (USD). Fuente única: tus capturas del cierre de semana.">VALOR</th>
                 <th className="col-clave" title="Ganancia/pérdida abierta en dólares">G/P $</th>
                 <th className="col-clave col-fin" title="Ganancia/pérdida abierta en % sobre invertido">G/P %</th>
-                <th title="Variación de HOY del activo (precio vivo Yahoo vs cierre anterior)">%/día</th>
-                <th title="Variación desde el último cierre de semana">%/sem</th>
+                <th title="Rendimiento medio diario de la posición: G/P% ÷ días desde la entrada">%/día</th>
+                <th title="Variación del activo respecto al cierre de la semana anterior (precio vivo Yahoo vs viernes previo)">vari/sem</th>
                 <th title="Tu valoración de la posición.">ESTADO</th>
                 <th className="tl" title="Clasificación: NÚCLEO (Ancla/Estructural/Gestión), MOMENTUM, TÁCTICA, DISRUPTIVA">CLASE</th>
                 <th title="Apalancamiento (x1 = sin apalancar; máximo de la casa x2)">APAL</th>
@@ -453,8 +451,8 @@ export default function Posiciones() {
                     : fmt$(p.valor)}</td>
                   <td className={'col-clave ' + pctClass(p.gp)}>{fmt$(p.gp)}</td>
                   <td className={'col-clave col-fin ' + pctClass(p.gpPct)}>{fmtPct(p.gpPct)}</td>
-                  <td className={pctClass(p.dia)} title={p.diaFresco || ''}>{fmtPct(p.dia)}</td>
-                  <td className={pctClass(p.sem)}>{fmtPct(p.sem)}</td>
+                  <td className={pctClass(p.dia)} title={p.diasAbiertos ? `${p.diasAbiertos} días abiertos` : ''}>{fmtPct(p.dia)}</td>
+                  <td className={pctClass(p.sem)} title={p.semFresco || ''}>{fmtPct(p.sem)}</td>
                   <td>
                     <span className={'chip chip-' + p.estado}>{ESTADOS[p.estado]?.label || p.estado}</span>
                   </td>
@@ -472,7 +470,7 @@ export default function Posiciones() {
         <p className="pos-fuente">
           {cierre
             ? 'Modo cierre: edita VALOR/INVERTIDO (Enter salta a la siguiente fila), ✕ cierra posición, y CERRAR SEMANA sella todo.'
-            : '%/día = Yahoo Finance con etiqueta de frescura al pasar el ratón · %/semana = cierre vs cierre anterior'}
+            : '%/día = G/P% ÷ días abiertos · vari/sem = precio vivo Yahoo vs cierre de la semana anterior (frescura al pasar el ratón)'}
         </p>
         {!cierre && (
           <div className="pos-leyenda num">
