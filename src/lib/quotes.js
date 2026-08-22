@@ -40,8 +40,25 @@ export function frescura(q) {
   return 'CIERRE ' + String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0')
 }
 
-export const pctDia = q =>
+// Variación de HOY (precio vivo vs cierre anterior). Ya no es la columna %/día.
+export const pctHoy = q =>
   q && q.prev_close ? (q.price - q.prev_close) / q.prev_close * 100 : null
+
+// vari/sem: precio vivo vs cierre de la semana anterior (viernes previo).
+export const pctSem = q =>
+  q && q.week_close ? (q.price - q.week_close) / q.week_close * 100 : null
+
+// %/día: rendimiento medio diario de la posición = G/P% ÷ días abiertos.
+// Definición José 22/08/2026 (sustituye a la de la spec 03/08).
+export const diasAbiertos = entryDate => {
+  if (!entryDate) return null
+  const ms = Date.now() - new Date(entryDate + 'T00:00:00Z').getTime()
+  return Math.max(1, Math.floor(ms / 86400000))
+}
+export const pctDia = (gpPct, entryDate) => {
+  const n = diasAbiertos(entryDate)
+  return gpPct == null || n == null ? null : gpPct / n
+}
 
 // ─── Resolución de nombres de captura → ticker canónico ─────────────────
 // Los brokers no llaman igual al mismo activo: XTB escribe "Micron" o "MU.US"
