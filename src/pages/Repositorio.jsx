@@ -31,7 +31,6 @@ export default function Repositorio() {
     await supabase.from('repositorio').update(patch).eq('id', r.id); cargar()
   }
   async function borrar(r) {
-    if (!confirm(`¿Borrar ${r.ticker} del repositorio?`)) return
     await supabase.from('repositorio').delete().eq('id', r.id); cargar()
   }
 
