@@ -23,7 +23,7 @@ Tras crearlas: **Redeploy** del último despliegue (las funciones leen las varia
 ### GET /api/belar-lectura
 Cabecera `Authorization: Bearer <BELAR_TOKEN>` (o `x-belar-token`).
 - `?que=todo` (defecto): posiciones abiertas, alertas, calendario ≥ hoy, app_state (liquidez), últimos 4 snapshots.
-- `?que=posiciones|alertas|calendario|liquidez|historico`
+- `?que=posiciones|alertas|calendario|liquidez|historico` (historico = `position_history`; columnas reales: `broker`, `event_date`, `week_end`)
 - `?que=esquema` → tabla → columnas reales (OpenAPI de PostgREST).
 - `?que=tabla&tabla=positions&limite=200&orden=updated_at.desc` → cualquier tabla de la lista blanca.
 Respuesta siempre con `served_at` y `Cache-Control: no-store`.
@@ -32,7 +32,7 @@ Respuesta siempre con `served_at` y `Cache-Control: no-store`.
 Body JSON: `{ "tabla", "accion", "datos", "filtro"?, "nota"? }`
 - Tablas y acciones: positions (insert/update/upsert), alerts (idem), calendar_events (idem), position_notes (insert), repositorio (insert/update/upsert), verdict_history (insert).
 - `update` exige `filtro` (p.ej. `{ "id": 21 }`) y un único objeto en `datos`.
-- Sin `delete`. Un cierre es `update` con `is_open=false` + campos de cierre (el trigger de sello hace el resto).
+- Sin `delete`. En BTP `positions` contiene solo las abiertas (no existe `is_open`); los cierres viven en `position_history` y los sella la ingesta de capturas de la app en el cierre de semana. Belar no sella cierres por esta ruta.
 - Antes de escribir se comprueban las columnas contra el esquema real: columnas inexistentes → 400 con la lista de las existentes.
 - Cada escritura se registra en los logs de Vercel (`[belar-escritura] …`).
 
