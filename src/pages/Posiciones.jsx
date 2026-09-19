@@ -451,8 +451,8 @@ export default function Posiciones() {
                     : fmt$(p.valor)}</td>
                   <td className={'col-clave ' + pctClass(p.gp)}>{fmt$(p.gp)}</td>
                   <td className={'col-clave col-fin ' + pctClass(p.gpPct)}>{fmtPct(p.gpPct)}</td>
-                  <td className={pctClass(p.dia)} title={p.diasAbiertos ? `${p.diasAbiertos} días abiertos` : ''}>{fmtPct(p.dia)}</td>
-                  <td className={pctClass(p.sem)} title={p.semFresco || ''}>{fmtPct(p.sem)}</td>
+                  <td title={p.diasAbiertos ? `${p.diasAbiertos} días abiertos` : ''}>{fmtPct(p.dia)}</td>
+                  <td title={p.semFresco || ''}>{fmtPct(p.sem)}</td>
                   <td>
                     <span className={'chip chip-' + p.estado}>{ESTADOS[p.estado]?.label || p.estado}</span>
                   </td>
