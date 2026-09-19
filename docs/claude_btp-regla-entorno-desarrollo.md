@@ -88,3 +88,15 @@ broker corregible en la revisión · invertido/valor contrastados contra la BD.
 %/día (G/P% ÷ días abiertos) y vari/sem (precio vivo vs cierre semana anterior) en
 Posiciones; `/api/quotes` con `week_close` y `prev_close` desde serie 1mo. Tres commits
 en btp (primero `00a7c87`), verificados por hash y en btp-belar.vercel.app.
+
+
+## Vía C · Commit desde Chrome por la API del editor (19/09/2026) — LA QUE FUNCIONA HOY
+Belar hace los commits él mismo con la extensión de Chrome (José solo deja Chrome abierto con sesión de GitHub). Verificado el 19/09 con Posiciones.jsx y la spec: sin error 500 y con el email correcto (permanecer_debuts_5l@icloud.com).
+1. Clonar `btp` en el contenedor (solo lectura), editar, `npx vite build`, calcular SHA-256 del fichero final.
+2. Navegar a `github.com/Jose-Index/belar-tracker/edit/btp/<ruta>`.
+3. Obtener el EditorView de CodeMirror 6: `document.querySelector('.cm-content').cmTile.view` (si no, `.cmTile.rootView.view`). `cmView` ya no existe.
+4. Editar con `view.dispatch({changes:[{from,to,insert}]})` sobre anclas únicas (comprobar que aparecen una sola vez). Nada de pegar el fichero entero ni simular teclado.
+5. Verificar `SHA-256(view.state.doc.toString())` contra el del contenedor ANTES de confirmar.
+6. Botón "Commit changes…" → esperar a `#commit-message-input` (sondeo, tarda) → `execCommand('insertText')` con el mensaje → botón "Commit changes" del diálogo. La URL pasa a `/blob/btp/...`.
+7. Verificar por `raw.githubusercontent.com` (hash) y el bundle servido en btp-belar.vercel.app.
+Ficheros nuevos: `/new/btp/<carpeta>?filename=<nombre>` y mismo procedimiento (insertar en documento vacío).
