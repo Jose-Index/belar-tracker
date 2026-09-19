@@ -2,6 +2,7 @@
 
 Decisiones cerradas con José en sesión 03/08/2026. Base para el DDL y el frontend. Sin pendientes.
 Revisión 22/08/2026: %/día y vari/sem redefinidas (ver Columnas). Commits rama btp: api/quotes, lib/quotes, Posiciones.jsx.
+Revisión 19/09/2026 (José): %/día y vari/sem se pintan en MONOCROMO (sin verde/rojo; el signo +/− se mantiene). El color queda reservado a G/P $ y G/P %, que es la lectura principal. Commit rama btp: Posiciones.jsx.
 
 ## Columnas
 ACTIVO / BROKER / ENTRADA / INVERTIDO / VALOR / G/P $ / G/P % / %/día / vari/sem / ESTADO / CLASE / APAL / PESO / FUENTE / NOTAS (icono)
