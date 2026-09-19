@@ -4,9 +4,15 @@
 
 import { timingSafeEqual } from 'node:crypto'
 
-export const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
-const SECRET = process.env.SUPABASE_SECRET_KEY || ''
-const TOKEN = process.env.BELAR_TOKEN || ''
+const limpia = v => String(v || '').trim().replace(/^["']|["']$/g, '')
+export const SUPABASE_URL = limpia(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL).replace(/\/+$/, '')
+const SECRET = limpia(process.env.SUPABASE_SECRET_KEY)
+const TOKEN = limpia(process.env.BELAR_TOKEN)
+// Clave secreta antigua (JWT service_role, empieza por eyJ) → apikey + Authorization Bearer.
+// Clave secreta nueva (sb_secret_…) → solo apikey; un Bearer no-JWT hace que la pasarela responda "Invalid API key".
+const cabecerasSupabase = () => SECRET.startsWith('eyJ')
+  ? { apikey: SECRET, Authorization: `Bearer ${SECRET}` }
+  : { apikey: SECRET }
 
 // Compara tokens en tiempo constante.
 function iguales(a, b) {
@@ -25,8 +31,7 @@ export function autorizar(req) {
 // Llamada a PostgREST con la clave secreta (service role): salta el RLS.
 export async function rest(path, { method = 'GET', body, prefer } = {}) {
   const headers = {
-    apikey: SECRET,
-    Authorization: `Bearer ${SECRET}`,
+    ...cabecerasSupabase(),
     'Content-Type': 'application/json',
     'Cache-Control': 'no-cache',
   }
@@ -37,14 +42,14 @@ export async function rest(path, { method = 'GET', body, prefer } = {}) {
   const texto = await r.text()
   let datos = null
   try { datos = texto ? JSON.parse(texto) : null } catch { datos = texto }
-  if (!r.ok) throw new Error(`Supabase ${r.status} en ${path}: ${typeof datos === 'string' ? datos : JSON.stringify(datos)}`)
+  if (!r.ok) throw new Error(`Supabase ${r.status} en ${path}: ${typeof datos === 'string' ? datos : JSON.stringify(datos)} [clave ${SECRET.slice(0, 10)}… len=${SECRET.length}]`)
   return datos
 }
 
 // Esquema real (tabla → columnas) leído del OpenAPI de PostgREST. Sin suposiciones.
 export async function esquema() {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/`, {
-    headers: { apikey: SECRET, Authorization: `Bearer ${SECRET}`, Accept: 'application/openapi+json' },
+    headers: { ...cabecerasSupabase(), Accept: 'application/openapi+json' },
   })
   if (!r.ok) throw new Error('no se pudo leer el esquema: HTTP ' + r.status)
   const j = await r.json()
