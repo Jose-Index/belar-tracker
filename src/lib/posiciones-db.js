@@ -24,12 +24,31 @@ export function guardarBtcWallet(qty) {
   return supabase.from('app_state').upsert({ key: 'btc_wallet', value: { qty }, updated_at: new Date().toISOString() })
 }
 
-export function updatePosicion(id, patch) {
-  return supabase.from('positions').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)
+// Columnas de la Cartera v3 (30/09/2026): `bloque` y `tp_price` en positions.
+// Si el DDL aún no se ha ejecutado, la escritura se reintenta sin ellas para que
+// el resto de la app no se rompa (PostgREST devuelve "column ... does not exist").
+const COLS_V3 = ['bloque', 'tp_price']
+const sinColV3 = (obj, msg) => {
+  const out = { ...obj }
+  for (const c of COLS_V3) if (msg.includes(c)) delete out[c]
+  return out
+}
+const faltaColV3 = e => e && /column|schema cache/i.test(e.message || '') && COLS_V3.some(c => (e.message || '').includes(c))
+
+export async function updatePosicion(id, patch) {
+  const r = await supabase.from('positions').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)
+  if (r.error && faltaColV3(r.error)) {
+    const p2 = sinColV3(patch, r.error.message)
+    if (!Object.keys(p2).length) return { error: new Error('La columna ' + Object.keys(patch).join(', ') + ' aún no existe en BTP (falta el DDL de la Cartera v3)') }
+    return supabase.from('positions').update({ ...p2, updated_at: new Date().toISOString() }).eq('id', id)
+  }
+  return r
 }
 
 export async function altaPosicion(p) {
-  return supabase.from('positions').insert({ ingest_source: 'alta manual', ...p })
+  const r = await supabase.from('positions').insert({ ingest_source: 'alta manual', ...p })
+  if (r.error && faltaColV3(r.error)) return supabase.from('positions').insert(sinColV3({ ingest_source: 'alta manual', ...p }, r.error.message))
+  return r
 }
 
 // Borrar = cerrar: registro en histórico ANTES de borrar. Nunca delete seco.
@@ -42,6 +61,7 @@ export async function cerrarPosicion(p, motivo) {
     pl_pct: inv && cv != null ? Math.round((cv - inv) / inv * 10000) / 100 : null,
     close_reason: motivo, clase: p.clase, fuente: p.fuente,
     apalancamiento: p.apalancamiento,
+    ...(p.bloque ? { bloque: p.bloque } : {}),
   })
   if (error) return { error }
   // Repositorio: toda cerrada entra automáticamente
@@ -61,6 +81,7 @@ export async function registrarCierre(c) {
     pl_pct: inv && cv != null ? Math.round((cv - inv) / inv * 10000) / 100 : null,
     close_reason: c.motivo || 'manual', clase: c.clase || null, fuente: c.fuente || null,
     apalancamiento: c.apalancamiento || 1,
+    ...(c.bloque ? { bloque: c.bloque } : {}),
   })
   if (error) return { error }
   await supabase.from('repositorio').insert({ ticker: c.ticker, estado: 'CERRADA', nota: `${c.motivo || 'manual'} · captura` })
