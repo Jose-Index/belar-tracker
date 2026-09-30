@@ -46,7 +46,7 @@ const pctClass = v => v == null ? '' : v > 0 ? 'up' : v < 0 ? 'down' : ''
 
 // `embed`: dentro de la portada (Inicio). `onCambio`: avisa a la portada de que
 // las posiciones han cambiado (para recalcular boxes y bloques).
-export default function Posiciones({ embed = false, onCambio, seleccionInicial = null }) {
+export default function Posiciones({ embed = false, onCambio, seleccionInicial = null, wallet: walletProp = null }) {
   const [raw, setRaw] = useState(null)          // {positions, snapshots, liquidez, lastClose}
   const [orden, setOrden] = useState(() => localStorage.getItem('btp-orden') || 'entrada')
   const [desc, setDesc] = useState(() => localStorage.getItem('btp-orden-desc') === '1')
@@ -84,12 +84,20 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
   }
   useEffect(() => { recargar() }, [])
 
+  // Wallet BTC personal: cantidad de app_state (raw.btcQty) valorada al precio vivo de BTC-USD
+  // (o al que traiga la portada). Entra en la base de los pesos y en el bloque BTC (30/09/2026).
+  const wallet = useMemo(() => {
+    const qty = Number(raw?.btcQty) || 0
+    const precio = quotes['BTC-USD']?.price || walletProp?.precio || null
+    return { qty, precio, usd: qty && precio ? qty * precio : (Number(walletProp?.usd) || 0) }
+  }, [raw, quotes, walletProp])
+
   // ── Cálculo de derivados ──
   const rows = useMemo(() => {
     if (!raw) return null
     const { positions, liquidez } = raw
-    // Peso sobre posiciones + liquidez de brókers (misma base que el panel de bloques)
-    const base = pesosBloques(positions, liquidez).base
+    // Peso sobre posiciones + liquidez de brókers + wallet BTC (misma base que el panel de bloques)
+    const base = pesosBloques(positions, liquidez, null, wallet).base
     return positions.map(p => {
       const val = Number(p.current_value ?? p.invested)
       const inv = Number(p.invested)
@@ -124,7 +132,7 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
         aSL: ret == null ? null : ret - TESIS_SL,
       }
     })
-  }, [raw, quotes, simbolos, eventos])
+  }, [raw, quotes, simbolos, eventos, wallet])
 
   const sorted = useMemo(() => {
     if (!rows) return null
@@ -146,10 +154,12 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
   // Agrupación por bloque (Cartera v3): una tabla por bloque, en el orden de la cartera
   const grupos = useMemo(() => {
     if (!sorted || !raw) return null
-    const w = pesosBloques(raw.positions, raw.liquidez)
-    return BLOQUES.map(b => ({ b, peso: w.filas.find(f => f.id === b.id), rows: sorted.filter(r => r.bloqueEf === b.id) }))
-      .filter(g => g.rows.length)
-  }, [sorted, raw])
+    const w = pesosBloques(raw.positions, raw.liquidez, null, wallet)
+    return BLOQUES.map(b => ({
+      b, peso: w.filas.find(f => f.id === b.id), rows: sorted.filter(r => r.bloqueEf === b.id),
+      wallet: b.id === 'BTC' && wallet.qty > 0 ? { ...wallet, peso: w.base ? wallet.usd / w.base * 100 : null } : null,
+    })).filter(g => g.rows.length || g.wallet)
+  }, [sorted, raw, wallet])
 
   const sel = sorted?.find(p => p.id === selId) || null
 
@@ -443,7 +453,7 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
         <p className="pos-fuente">
           {cierre
             ? 'Modo cierre: edita VALOR/INVERTIDO (Enter salta a la siguiente fila), ✕ cierra posición, y CERRAR SEMANA sella todo.'
-            : 'Agrupadas por bloque (Cartera v3). PESO = valor sobre posiciones + liquidez · %/día = G/P% ÷ días abiertos · vari/sem = precio vivo Yahoo vs cierre de la semana anterior'}
+            : 'Agrupadas por bloque (Cartera v3). PESO = valor sobre posiciones + liquidez + wallet BTC · %/día = G/P% ÷ días abiertos · vari/sem = precio vivo Yahoo vs cierre de la semana anterior'}
         </p>
         {!cierre && (
           <div className="pos-leyenda num">
@@ -466,20 +476,20 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
 
 // ─── Una tabla por bloque, con cabecera de bloque y fila de subtotal ─────
 function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorrar }) {
-  const { b, peso, rows } = g
+  const { b, peso, rows, wallet } = g
   const esTesis = b.id === 'TESIS'
   const inv = rows.reduce((a, p) => a + Number(p.invested || 0), 0)
-  const val = rows.reduce((a, p) => a + p.valor, 0)
-  const gp = val - inv
+  const val = rows.reduce((a, p) => a + p.valor, 0) + (wallet?.usd || 0)
+  const gp = val - (wallet?.usd || 0) - inv                 // G/P solo de las posiciones de bróker
   const gpPct = inv ? gp / inv * 100 : null
-  const pesoSum = rows.reduce((a, p) => a + (p.peso || 0), 0)
+  const pesoSum = rows.reduce((a, p) => a + (p.peso || 0), 0) + (wallet?.peso || 0)
 
   return (
     <div className="card pos-tabla-wrap bloque-card">
       <div className="bloque-cab" title={b.ayuda}>
         <span className="bq-dot" style={{ background: b.color }} />
         <span className="bloque-nombre">{b.label}</span>
-        <span className="bloque-n num">{rows.length}</span>
+        <span className="bloque-n num">{rows.length + (wallet ? 1 : 0)}</span>
         {peso && (
           <span className="bloque-chips num">
             <span className={'chip-peso ' + peso.semaforo} title="peso real · objetivo · desvío en puntos">
@@ -515,7 +525,7 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
             <th title="Tu valoración de la posición.">ESTADO</th>
             <th className="tl" title="Clasificación: NÚCLEO, MOMENTUM, TÁCTICA, DISRUPTIVA">CLASE</th>
             <th title="Apalancamiento (x1 = sin apalancar; máximo de la casa x2)">APAL</th>
-            <th title="Peso de la posición sobre posiciones + liquidez">PESO</th>
+            <th title="Peso de la posición sobre posiciones + liquidez + wallet BTC">PESO</th>
             <th title="FUENTE de la idea: en blanco = YO · B = BELAR · M = MIXTA · P = PRENSA · R = REDES">FTE</th>
             {cierre && <th></th>}
           </tr>
@@ -573,6 +583,24 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
                 onClick={e => { e.stopPropagation(); onBorrar(p) }}>✕</button></td>}
             </tr>
           ))}
+          {wallet && (
+            <tr className="fila-wallet" title="Monedero BTC personal: cantidad de app_state valorada al precio vivo de BTC-USD. Sin coste registrado: no entra en el G/P. Se edita en modo cierre de semana (₿ wallet).">
+              <td className="tl ticker">₿ wallet</td>
+              <td className="tl broker">wallet</td>
+              <td>—</td>
+              <td>—</td>
+              <td className="col-clave col-ini">{wallet.precio ? fmt$(wallet.usd) : '—'}</td>
+              <td className="col-clave">—</td>
+              <td className="col-clave col-fin">—</td>
+              <td colSpan={2} className="tl calc">{wallet.qty} ₿ {wallet.precio ? '× $' + fmt$(wallet.precio) : '· sin precio'}</td>
+              <td></td>
+              <td className="tl clase">NÚCLEO</td>
+              <td></td>
+              <td>{wallet.peso == null ? '—' : wallet.peso.toFixed(1) + '%'}</td>
+              <td className="fuente"></td>
+              {cierre && <td></td>}
+            </tr>
+          )}
         </tbody>
         <tfoot>
           <tr className="subtotal">
