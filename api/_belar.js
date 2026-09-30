@@ -67,6 +67,17 @@ export async function rest(path, { method = 'GET', body, prefer } = {}) {
   return datos
 }
 
+// Recuento exacto de filas de una consulta PostgREST (Content-Range con Prefer: count=exact),
+// sin traer filas: el max-rows de Supabase (1000) no afecta.
+export async function contar(path) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    headers: { ...cabecerasSupabase(), Prefer: 'count=exact', Range: '0-0', 'Range-Unit': 'items', 'Cache-Control': 'no-cache' },
+  })
+  if (!r.ok && r.status !== 206 && r.status !== 416) throw new Error(`Supabase ${r.status} contando ${path}`)
+  const m = /\/(\d+)\s*$/.exec(r.headers.get('content-range') || '')
+  return m ? Number(m[1]) : 0
+}
+
 // Esquema real (tabla → columnas) leído del OpenAPI de PostgREST. Sin suposiciones.
 export async function esquema() {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/`, {
