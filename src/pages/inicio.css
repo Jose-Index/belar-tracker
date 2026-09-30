@@ -199,3 +199,5 @@
   .tabla-bloques { font-size: 11px; }
   .tabla-bloques th, .tabla-bloques td { padding: 5px 6px; }
 }
+
+.tabla-bloques .bq-wallet { font-family: var(--font-ui); font-weight: 500; font-size: 11px; color: var(--texto-neutro); margin-left: 4px; }
