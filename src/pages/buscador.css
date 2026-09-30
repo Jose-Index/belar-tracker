@@ -1,0 +1,68 @@
+/* ─── Buscador de la Tesis JOSE −11/+23,5 (30/09/2026) ─── */
+.buscador .pos-head h1 { margin: 0 0 12px; }
+.buscador .pos-head .hist-n { font-family: var(--font-ui); font-weight: 500; font-size: 12.5px; }
+
+.filtros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 22px; margin-bottom: 12px; font-size: 12.5px; }
+.filtro { display: grid; gap: 6px; align-content: start; }
+.filtro.sectores { grid-column: 1 / -1; }
+.filtro.acciones { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; }
+.f-t { font: 600 10.5px var(--font-ui); letter-spacing: .05em; text-transform: uppercase; color: var(--texto-neutro); }
+.f-t a { text-transform: none; letter-spacing: 0; font-weight: 500; margin-left: 8px; cursor: pointer; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chips button {
+  font: 600 11.5px var(--font-datos); padding: 5px 10px; border-radius: 14px; cursor: pointer;
+  border: 1px solid var(--borde); background: var(--superficie); color: var(--texto-sec);
+}
+.chips button.on { background: var(--azul-belar); border-color: var(--azul-belar); color: #fff; }
+.chips button:hover:not(.on) { border-color: var(--azul-belar); color: var(--azul-belar); }
+.chips.rango input { width: 58px; font: 500 12.5px var(--font-datos); padding: 5px 7px; border-radius: 7px; border: 1px solid var(--borde); text-align: right; }
+.chips.rango input:disabled { opacity: .45; }
+.chips .check { display: inline-flex; align-items: center; gap: 5px; font: 500 12px var(--font-ui); color: var(--texto-sec); cursor: pointer; margin-left: 4px; white-space: nowrap; }
+.chips .check input { accent-color: var(--azul-belar); }
+.filtro.sectores .chips { gap: 4px 14px; }
+.f-q { font: 500 13px var(--font-datos); padding: 7px 10px; border-radius: 8px; border: 1px solid var(--borde); width: 220px; }
+
+.tabla-busc th { cursor: pointer; user-select: none; padding-left: 7px; padding-right: 7px; }
+.tabla-busc td { padding-left: 7px; padding-right: 7px; }
+.tabla-busc th:hover { color: var(--texto); }
+.tabla-busc th.ord { color: var(--azul-belar); }
+.tabla-busc td .nombre { font-family: var(--font-ui); color: var(--texto-sec); font-size: 11.5px; margin-left: 6px; }
+.tabla-busc td.merc, .tabla-busc td.sector { font-family: var(--font-ui); color: var(--texto-sec); font-size: 11.5px; }
+.tabla-busc td.merc i { font-style: normal; color: var(--texto-neutro); font-size: 9.5px; }
+.tabla-busc td.earn-cerca { color: var(--baja); font-weight: 700; }
+.tabla-busc td.flags { font-size: 12px; }
+.tabla-busc .rat { font-weight: 600; }
+.tabla-busc .rat.r1, .tabla-busc .rat.r2 { color: var(--azul-belar); }
+.tabla-busc .rat.r4, .tabla-busc .rat.r5 { color: var(--texto-neutro); }
+.tabla-busc td.calc { color: var(--texto-neutro); font-style: italic; }
+
+/* Ficha */
+.modal.ficha { width: min(1040px, 94vw); max-height: 92vh; overflow: auto; }
+.ficha-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.ficha-head h2 { margin: 0; }
+.ficha-head h2 .nombre { font: 500 14px var(--font-ui); color: var(--texto-sec); margin-left: 8px; }
+.ficha-sub { font: 500 12px var(--font-ui); color: var(--texto-sec); margin-top: 3px; }
+.ficha-head .cerrar { border: none; background: none; cursor: pointer; color: var(--texto-neutro); font-size: 16px; }
+.ficha-datos { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; margin: 14px 0 8px; }
+.dato { display: grid; gap: 2px; border: 1px solid var(--borde); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+.d-l { font: 600 9.5px var(--font-ui); letter-spacing: .05em; text-transform: uppercase; color: var(--texto-neutro); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.d-v { font-weight: 600; font-size: 13.5px; white-space: nowrap; }
+.d-s { font-size: 10.5px; color: var(--texto-sec); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dato.earn-cerca .d-v, .dato.earn-cerca .d-s { color: var(--baja); }
+.dato.warn .d-v { color: var(--aviso); }
+.ficha-aviso { font: 500 12.5px var(--font-ui); color: var(--baja); margin: 4px 0 8px; }
+.ficha-chart-head { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; flex-wrap: wrap; }
+.ficha-chart-head .periodos { display: flex; border: 1px solid var(--borde); border-radius: 8px; overflow: hidden; }
+.ficha-chart-head .periodos button { font: 600 12px var(--font-datos); padding: 4px 11px; border: none; background: var(--superficie); color: var(--texto-sec); cursor: pointer; }
+.ficha-chart-head .periodos button.on { background: var(--azul-belar); color: #fff; }
+.ficha-pct { font-weight: 600; }
+.leyenda { margin-left: auto; font: 500 11px var(--font-ui); color: var(--texto-sec); display: flex; gap: 8px; align-items: center; }
+.leyenda i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 3px; vertical-align: middle; }
+.ficha-pie { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; border-top: 1px solid var(--borde); padding-top: 10px; }
+.ficha-tesis { font-size: 12px; color: var(--texto-sec); }
+
+@media (max-width: 900px) {
+  .filtros { grid-template-columns: 1fr; }
+  .ficha-datos { grid-template-columns: repeat(2, 1fr); }
+  .modal.ficha { width: 96vw; }
+}
