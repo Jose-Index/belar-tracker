@@ -1,11 +1,15 @@
 // BTP · api/_yahoo.js — acceso a Yahoo Finance desde el servidor (30/09/2026).
 // Tres puertas:
-//  · chart / spark (v8): sin credenciales. Series de cierres.
+//  · chart (v8, un símbolo por llamada): sin credenciales. Es la que usan api/quotes y api/history
+//    y la única que Yahoo no limita desde las IPs de Vercel (comprobado el 30/09/2026).
+//  · spark (v8, 20 símbolos por llamada): desde Vercel devuelve 429 sin cookie+crumb; aquí se pide
+//    con sesión y, si aun así falla, se cae a chart símbolo a símbolo (4 en paralelo).
 //  · screener (v1/finance/screener) y quote (v7): necesitan cookie + crumb.
 //    La cookie sale de fc.yahoo.com y el crumb de /v1/test/getcrumb (mismo patrón que yfinance).
 //    Las funciones de Vercel corren en EE. UU. (iad1): sin muro de consentimiento europeo.
 // Verificado el 30/09/2026 desde Chrome (campos y límites): screener max 250 por página,
 // spark max 20 símbolos por llamada, screener ~0,5 s por página.
+// Diagnóstico desde producción: POST /api/universo-refresh?paso=prueba (con BELAR_TOKEN).
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 const H = { 'User-Agent': UA, Accept: 'application/json, text/plain, */*', 'Accept-Language': 'en-US,en;q=0.9' }
@@ -61,24 +65,62 @@ export async function quotesV7(symbols) {
   return out
 }
 
-// Spark: cierres diarios de hasta 20 símbolos por llamada (sin crumb).
-// Devuelve { symbol: { timestamp:[s], close:[n] } }
-export async function spark(symbols, range = '1y', interval = '1d') {
+// Chart v8: serie de cierres de UN símbolo. Devuelve { timestamp:[s], close:[n] }.
+export async function chart(symbol, range = '1y', interval = '1d') {
+  const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`, { headers: H })
+  const j = await r.json().catch(() => null)
+  const res = j?.chart?.result?.[0]
+  if (!r.ok || !res) throw new Error('chart ' + symbol + ': HTTP ' + r.status + ' ' + (j?.chart?.error?.description || ''))
+  return { timestamp: res.timestamp || [], close: res.indicators?.quote?.[0]?.close || [] }
+}
+
+async function enParalelo(items, n, fn) {
+  let i = 0
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => { while (i < items.length) await fn(items[i++]) }))
+}
+
+function parseSpark(j) {
   const out = {}
+  // Forma nueva: { SYM: {timestamp, close, …} }. Forma antigua: { spark: { result: [{symbol, response:[{timestamp, indicators}]}] } }
+  if (j?.spark?.result) {
+    for (const x of j.spark.result) {
+      const resp = x.response?.[0]
+      if (resp) out[x.symbol] = { timestamp: resp.timestamp || [], close: resp.indicators?.quote?.[0]?.close || [] }
+    }
+  } else {
+    for (const [k, v] of Object.entries(j || {})) if (v && Array.isArray(v.timestamp)) out[k] = { timestamp: v.timestamp, close: v.close || [] }
+  }
+  return out
+}
+
+// Un lote de spark (≤20 símbolos), con o sin sesión. Lanza error con el HTTP si falla.
+export async function sparkLote(lote, range = '1y', interval = '1d', conSesionYahoo = true) {
+  const url = `https://query1.finance.yahoo.com/v8/finance/spark?symbols=${encodeURIComponent(lote.join(','))}&range=${range}&interval=${interval}`
+  const r = conSesionYahoo
+    ? await conSesion(s => fetch(url + `&crumb=${encodeURIComponent(s.crumb)}`, { headers: { ...H, Cookie: s.cookie } }))
+    : await fetch(url, { headers: H })
+  if (!r.ok) { const t = await r.text(); throw new Error('spark: HTTP ' + r.status + ' ' + t.slice(0, 120)) }
+  return parseSpark(await r.json())
+}
+
+// Spark: cierres diarios de hasta 20 símbolos por llamada. Devuelve { symbol: { timestamp:[s], close:[n] } }.
+// Si Yahoo rechaza el lote (429 desde Vercel), esos símbolos se piden por chart uno a uno.
+export async function spark(symbols, range = '1y', interval = '1d') {
+  let out = {}
+  const pendientes = []
+  let sesionRota = false
   for (let i = 0; i < symbols.length; i += 20) {
     const lote = symbols.slice(i, i + 20)
-    const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/spark?symbols=${encodeURIComponent(lote.join(','))}&range=${range}&interval=${interval}`, { headers: H })
-    if (!r.ok) { const t = await r.text(); throw new Error('spark: HTTP ' + r.status + ' ' + t.slice(0, 120)) }
-    const j = await r.json()
-    // Forma nueva: { SYM: {timestamp, close, …} }. Forma antigua: { spark: { result: [{symbol, response:[{timestamp, indicators}]}] } }
-    if (j?.spark?.result) {
-      for (const x of j.spark.result) {
-        const resp = x.response?.[0]
-        if (resp) out[x.symbol] = { timestamp: resp.timestamp || [], close: resp.indicators?.quote?.[0]?.close || [] }
-      }
-    } else {
-      for (const [k, v] of Object.entries(j || {})) if (v && Array.isArray(v.timestamp)) out[k] = { timestamp: v.timestamp, close: v.close || [] }
+    try {
+      if (sesionRota) throw new Error('sesión rota')
+      out = { ...out, ...(await sparkLote(lote, range, interval, true)) }
+    } catch (e) {
+      if (/cookie|crumb/.test(e.message)) sesionRota = true   // sin sesión no insistimos lote a lote
+      pendientes.push(...lote)
     }
+  }
+  if (pendientes.length) {
+    await enParalelo(pendientes, 4, async sym => { try { out[sym] = await chart(sym, range, interval) } catch { /* símbolo sin serie: se omite */ } })
   }
   return out
 }
