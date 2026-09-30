@@ -1,4 +1,4 @@
-// BTP · /api/universo-refresh?paso=auto|forzar|estado&presupuesto=45
+// BTP · /api/universo-refresh?paso=auto|forzar|estado|prueba&presupuesto=45
 // Refresco del universo del Buscador (Tesis JOSE −11/+23,5) desde el screener de Yahoo.
 // Reanudable: cada llamada trabaja hasta `presupuesto` segundos, guarda el progreso en
 // app_state.universo_refresh y devuelve { pendiente: true } si queda tarea. El cliente
@@ -7,7 +7,7 @@
 // Auth: BELAR_TOKEN, CRON_SECRET o sesión Supabase del usuario de la app.
 
 import { autorizarUsuario, rest, sinCache, ahora } from './_belar.js'
-import { screener, tiposCambioUSD } from './_yahoo.js'
+import { screener, tiposCambioUSD, sesionYahoo, sparkLote, chart } from './_yahoo.js'
 
 export const config = { maxDuration: 60 }
 
@@ -86,6 +86,18 @@ export default async function handler(req, res) {
   const paso = String(req.query.paso || 'auto')
   const presupuesto = Math.min(50, Math.max(5, Number(req.query.presupuesto) || 42)) * 1000
   const t0 = Date.now()
+
+  // paso=prueba: diagnóstico de las puertas de Yahoo desde Vercel, sin tocar la base de datos
+  if (paso === 'prueba') {
+    const out = { served_at: ahora() }
+    try { const s = await sesionYahoo(true); out.sesion = `cookie ${s.cookie.length} chars, crumb ${s.crumb.length} chars` } catch (e) { out.sesion = 'ERROR ' + e.message }
+    try { const p = await screener([{ operator: 'eq', operands: ['exchange', 'NMS'] }, { operator: 'gt', operands: ['intradaymarketcap', 1e12] }], { size: 3 }); out.screener = `total ${p.total}: ${p.quotes.map(q => q.symbol).join(', ')}` } catch (e) { out.screener = 'ERROR ' + e.message }
+    try { const x = await sparkLote(['NVDA', 'EURUSD=X'], '5d', '1d', true); out.spark_sesion = Object.keys(x).join(', ') || 'vacío' } catch (e) { out.spark_sesion = 'ERROR ' + e.message }
+    try { const x = await sparkLote(['NVDA', 'EURUSD=X'], '5d', '1d', false); out.spark_sin_sesion = Object.keys(x).join(', ') || 'vacío' } catch (e) { out.spark_sin_sesion = 'ERROR ' + e.message }
+    try { const c = await chart('NVDA', '5d', '1d'); out.chart = `${c.close.filter(v => v != null).length} cierres` } catch (e) { out.chart = 'ERROR ' + e.message }
+    out.ms = Date.now() - t0
+    res.status(200).json(out); return
+  }
 
   try {
     let st = await leerEstado()
