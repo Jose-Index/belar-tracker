@@ -7,7 +7,7 @@
 // Auth: BELAR_TOKEN, CRON_SECRET o sesión Supabase del usuario de la app.
 
 import { autorizarUsuario, rest, sinCache, ahora } from './_belar.js'
-import { screener, tiposCambioUSD, sesionYahoo, sparkLote, chart } from './_yahoo.js'
+import { screener, tiposCambioUSD, sesionYahoo, sparkLote, chart, H_CHROME } from './_yahoo.js'
 
 export const config = { maxDuration: 60 }
 
@@ -95,6 +95,7 @@ export default async function handler(req, res) {
     try { const x = await sparkLote(['NVDA', 'EURUSD=X'], '5d', '1d', true); out.spark_sesion = Object.keys(x).join(', ') || 'vacío' } catch (e) { out.spark_sesion = 'ERROR ' + e.message }
     try { const x = await sparkLote(['NVDA', 'EURUSD=X'], '5d', '1d', false); out.spark_sin_sesion = Object.keys(x).join(', ') || 'vacío' } catch (e) { out.spark_sin_sesion = 'ERROR ' + e.message }
     try { const c = await chart('NVDA', '5d', '1d'); out.chart = `${c.close.filter(v => v != null).length} cierres` } catch (e) { out.chart = 'ERROR ' + e.message }
+    try { const c = await chart('NVDA', '5d', '1d', H_CHROME); out.chart_ua_chrome = `${c.close.filter(v => v != null).length} cierres` } catch (e) { out.chart_ua_chrome = 'ERROR ' + e.message }
     out.ms = Date.now() - t0
     res.status(200).json(out); return
   }
