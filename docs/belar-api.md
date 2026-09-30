@@ -45,6 +45,10 @@ Body JSON: `{ "tabla", "accion", "datos", "filtro"?, "nota"? }`
   screener de Yahoo (progreso en `app_state.universo_refresh`; `pendiente:true` mientras quede tarea).
   Auth: `Bearer BELAR_TOKEN` | `Bearer CRON_SECRET` | JWT de sesión Supabase. Belar por curl:
   `while :; do curl -s -X POST -H "Authorization: Bearer $BELAR_TOKEN" "https://btp-belar.vercel.app/api/universo-refresh?paso=auto" | grep -q '"pendiente":true' || break; done`
+- `POST /api/universo-refresh?paso=prueba` → diagnóstico de las puertas de Yahoo desde Vercel sin tocar la base de datos
+  (cookie+crumb, screener, spark con y sin sesión, chart con UA mínimo y con UA de Chrome). Comprobado el 30/09/2026:
+  todas funcionan con el `User-Agent` mínimo de api/quotes; con el UA completo de Chrome Yahoo devuelve 429 en todas
+  (regla: en api/*.js el UA de Yahoo es siempre el mínimo, `H` de api/_yahoo.js).
 - `POST /api/universo-series` `{ "symbols": [...] }` (≤100) → tendencia por valor (perf 3d/1M/3M/6M, MA20, ATR≈,
   ATRs sobre MA20) calculada con spark de Yahoo y guardada en `universo`. Misma auth que el refresco.
 - `GET /api/history?symbol=X&range=3y&ohlc=1` → serie diaria de 3 años con máximos y mínimos (Ficha).
