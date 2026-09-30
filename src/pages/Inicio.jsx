@@ -151,9 +151,9 @@ export default function Inicio() {
         </div>
       </div>
 
-      <Bloques positions={positions} liquidez={liquidez} objetivos={objetivos} />
+      <Bloques positions={positions} liquidez={liquidez} objetivos={objetivos} wallet={{ qty: btcQty, usd: btcUsd, precio: btcPrecio }} />
 
-      <Posiciones embed onCambio={posicionesCambiaron} seleccionInicial={altaInicial} />
+      <Posiciones embed onCambio={posicionesCambiaron} seleccionInicial={altaInicial} wallet={{ qty: btcQty, usd: btcUsd, precio: btcPrecio }} />
 
       <Evolucion />
 
