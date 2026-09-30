@@ -22,7 +22,7 @@ Seis bloques con peso objetivo (Cartera v3 adoptada el 30/09/2026) + caja:
 | TESIS | Tesis JOSE −11/+23,5 | 30 % |
 | CAJA | Liquidez de brókers | 8 % → 5 % |
 
-- Base de los pesos = posiciones + liquidez de brókers. La wallet BTC personal NO entra.
+- Base de los pesos = posiciones + liquidez de brókers + wallet BTC personal (decisión de José, 30/09/2026 noche: la wallet, `app_state.btc_wallet.qty` valorada al precio vivo de BTC-USD, suma al bloque BTC núcleo y a la base; sin coste registrado, no entra en el G/P). En la tabla del bloque BTC aparece como fila "₿ wallet".
 - Los objetivos se pueden sobrescribir sin código con `app_state.bloques_objetivo` = `{"TESIS":20,…}`.
 - Semáforo de desvío (§7.3 de las instrucciones): |desvío| > 5 pp rojo (sin entradas nuevas en el bloque),
   > 3 pp ámbar. La tabla muestra además los $ que faltan (+) o sobran (−) para el objetivo.
