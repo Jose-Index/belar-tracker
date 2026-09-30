@@ -28,6 +28,27 @@ export function autorizar(req) {
   return iguales(dado, TOKEN) ? null : 'no autorizado'
 }
 
+// Autoriza a Belar (BELAR_TOKEN), al cron de Vercel (CRON_SECRET) o al usuario de la app
+// (JWT de sesión de Supabase, verificado contra /auth/v1/user con la clave publicable).
+// Para rutas que trabajan (refresco del universo) o escriben datos derivados (series).
+export async function autorizarUsuario(req) {
+  if (!SECRET || !SUPABASE_URL) return 'servidor sin configurar (SUPABASE_SECRET_KEY / SUPABASE_URL)'
+  const auth = String(req.headers['authorization'] || '')
+  const tok = auth.startsWith('Bearer ') ? auth.slice(7) : String(req.headers['x-belar-token'] || '')
+  if (!tok) return 'sin credenciales'
+  if (TOKEN && iguales(tok, TOKEN)) return null
+  const CRON = limpia(process.env.CRON_SECRET)
+  if (CRON && iguales(tok, CRON)) return null
+  const PUB = limpia(process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY)
+  if (!PUB) return 'servidor sin clave publicable'
+  try {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: PUB, Authorization: `Bearer ${tok}` } })
+    if (!r.ok) return 'sesión no válida'
+    const u = await r.json()
+    return u?.email ? null : 'sesión no válida'
+  } catch (e) { return 'no se pudo verificar la sesión: ' + e.message }
+}
+
 // Llamada a PostgREST con la clave secreta (service role): salta el RLS.
 export async function rest(path, { method = 'GET', body, prefer } = {}) {
   const headers = {
