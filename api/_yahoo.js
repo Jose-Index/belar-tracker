@@ -11,8 +11,10 @@
 // spark max 20 símbolos por llamada, screener ~0,5 s por página.
 // Diagnóstico desde producción: POST /api/universo-refresh?paso=prueba (con BELAR_TOKEN).
 
-const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-const H = { 'User-Agent': UA, Accept: 'application/json, text/plain, */*', 'Accept-Language': 'en-US,en;q=0.9' }
+// Cabeceras: el User-Agent mínimo es el que usan api/quotes y api/history y Yahoo lo acepta desde Vercel;
+// el UA completo de Chrome (sin el resto de cabeceras de un navegador real) recibió 429 en todas las puertas (30/09/2026).
+export const H = { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' }
+export const H_CHROME = { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36', Accept: 'application/json, text/plain, */*', 'Accept-Language': 'en-US,en;q=0.9' }
 
 let sesion = null   // { cookie, crumb, at } — cacheada en la instancia mientras viva
 
@@ -66,8 +68,8 @@ export async function quotesV7(symbols) {
 }
 
 // Chart v8: serie de cierres de UN símbolo. Devuelve { timestamp:[s], close:[n] }.
-export async function chart(symbol, range = '1y', interval = '1d') {
-  const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`, { headers: H })
+export async function chart(symbol, range = '1y', interval = '1d', headers = H) {
+  const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`, { headers })
   const j = await r.json().catch(() => null)
   const res = j?.chart?.result?.[0]
   if (!r.ok || !res) throw new Error('chart ' + symbol + ': HTTP ' + r.status + ' ' + (j?.chart?.error?.description || ''))
