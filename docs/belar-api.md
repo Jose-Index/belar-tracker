@@ -32,7 +32,7 @@ Respuesta siempre con `served_at` y `Cache-Control: no-store`.
 
 ### POST /api/belar-escritura
 Body JSON: `{ "tabla", "accion", "datos", "filtro"?, "nota"? }`
-- Tablas y acciones: positions (insert/update/upsert), alerts (idem), calendar_events (idem), position_notes (insert), repositorio (insert/update/upsert), verdict_history (insert).
+- Tablas y acciones: positions (insert/update/upsert), alerts (idem), calendar_events (idem), position_notes (insert), repositorio (insert/update/upsert), verdict_history (insert), app_state (update/upsert por `key`; p. ej. `{"tabla":"app_state","accion":"upsert","datos":{"key":"btc_wallet","value":{"qty":0.01470635}}}`).
 - `update` exige `filtro` (p.ej. `{ "id": 21 }`) y un único objeto en `datos`.
 - Sin `delete`. En BTP `positions` contiene solo las abiertas (no existe `is_open`); los cierres viven en `position_history` y los sella la ingesta de capturas de la app en el cierre de semana. Belar no sella cierres por esta ruta.
 - Antes de escribir se comprueban las columnas contra el esquema real: columnas inexistentes → 400 con la lista de las existentes.
