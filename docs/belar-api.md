@@ -16,6 +16,8 @@ leer posiciones al inicio de cada sesión y escribir cierres, alertas y calendar
 - `SUPABASE_SECRET_KEY` — clave secreta (service role) del dashboard de Supabase. Solo servidor. Marcar *Sensitive*.
 - `BELAR_TOKEN` — cadena aleatoria larga (≥32 caracteres). José la guarda en su gestor de contraseñas y la pega en la conversación con Belar SOLO en el momento de configurar la variable de red de Claude; nunca en el chat en claro si puede evitarse.
 - `SUPABASE_URL` — opcional; si no existe se usa `VITE_SUPABASE_URL`.
+- `CRON_SECRET` — opcional (30/09/2026): si existe, el cron de Vercel lo envía como Bearer y `/api/universo-refresh` lo acepta.
+- La clave publicable (`VITE_SUPABASE_PUBLISHABLE_KEY`) la usan también las rutas api/ para verificar el JWT de sesión del usuario.
 
 Tras crearlas: **Redeploy** del último despliegue (las funciones leen las variables al arrancar).
 
@@ -35,6 +37,18 @@ Body JSON: `{ "tabla", "accion", "datos", "filtro"?, "nota"? }`
 - Sin `delete`. En BTP `positions` contiene solo las abiertas (no existe `is_open`); los cierres viven en `position_history` y los sella la ingesta de capturas de la app en el cierre de semana. Belar no sella cierres por esta ruta.
 - Antes de escribir se comprueban las columnas contra el esquema real: columnas inexistentes → 400 con la lista de las existentes.
 - Cada escritura se registra en los logs de Vercel (`[belar-escritura] …`).
+
+### Buscador de la Tesis (30/09/2026) — ver docs/claude_btp-cartera-v3-300926.md
+- `GET /api/universo?mercado=US,EU&cap=MG,M,P&pe_min=10&pe_max=35&pe_na=1&sector=…&rating_max=2.5&rating_na=1&earn_dias=15&ma50=1&ma200=1&p3m=1&q=texto&orden=cap_usd.desc&limite=300`
+  → `{ n, filas }`. Abierta (datos públicos de mercado). `?estado=1` → estado del último refresco y tamaño del universo.
+- `POST /api/universo-refresh?paso=auto|forzar|estado&presupuesto=42` → refresco reanudable del universo desde el
+  screener de Yahoo (progreso en `app_state.universo_refresh`; `pendiente:true` mientras quede tarea).
+  Auth: `Bearer BELAR_TOKEN` | `Bearer CRON_SECRET` | JWT de sesión Supabase. Belar por curl:
+  `while :; do curl -s -X POST -H "Authorization: Bearer $BELAR_TOKEN" "https://btp-belar.vercel.app/api/universo-refresh?paso=auto" | grep -q '"pendiente":true' || break; done`
+- `POST /api/universo-series` `{ "symbols": [...] }` (≤100) → tendencia por valor (perf 3d/1M/3M/6M, MA20, ATR≈,
+  ATRs sobre MA20) calculada con spark de Yahoo y guardada en `universo`. Misma auth que el refresco.
+- `GET /api/history?symbol=X&range=3y&ohlc=1` → serie diaria de 3 años con máximos y mínimos (Ficha).
+- `universo` está en la lista blanca de `?que=tabla`.
 
 ## Uso desde Belar
 ```bash
