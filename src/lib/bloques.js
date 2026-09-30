@@ -50,24 +50,29 @@ export const DESVIO_ROJO = 5
 export const DESVIO_AMBAR = 3
 export const semaforoDesvio = pp => pp == null ? '' : Math.abs(pp) > DESVIO_ROJO ? 'rojo' : Math.abs(pp) > DESVIO_AMBAR ? 'ambar' : 'ok'
 
-// Pesos reales por bloque. Base = posiciones + liquidez de brókers (la wallet BTC
-// personal NO entra: los pesos de la Cartera v3 son sobre la cartera de brókers).
-export function pesosBloques(positions, liquidez, objetivos) {
+// Pesos reales por bloque. Base = posiciones + liquidez de brókers + wallet BTC personal
+// (decisión de José del 30/09/2026: la wallet entra en la base y suma al bloque BTC núcleo).
+// wallet = { qty, usd } — usd ya valorado a precio de mercado; sin precio, usd = 0 y no cuenta.
+export function pesosBloques(positions, liquidez, objetivos, wallet) {
   const val = p => Number(p.current_value ?? p.invested) || 0
   const totalPos = (positions || []).reduce((a, p) => a + val(p), 0)
   const caja = Object.values(liquidez || {}).reduce((a, v) => a + (Number(v) || 0), 0)
-  const base = totalPos + caja
+  const walletUsd = Number(wallet?.usd) > 0 ? Number(wallet.usd) : 0
+  const base = totalPos + caja + walletUsd
   const obj = { ...Object.fromEntries(BLOQUES.map(b => [b.id, b.objetivo])), CAJA: CAJA.objetivo, ...(objetivos || {}) }
   const filas = BLOQUES.map(b => {
     const ps = (positions || []).filter(p => bloqueDe(p) === b.id)
-    const valor = ps.reduce((a, p) => a + val(p), 0)
+    const extra = b.id === 'BTC' ? walletUsd : 0            // la wallet suma al bloque BTC, sin coste conocido
+    const valor = ps.reduce((a, p) => a + val(p), 0) + extra
     const invertido = ps.reduce((a, p) => a + (Number(p.invested) || 0), 0)
+    const gp = valor - extra - invertido                     // G/P solo de las posiciones de bróker
     const real = base ? valor / base * 100 : null
     const objetivo = Number(obj[b.id]) || 0
     const desvio = real == null ? null : real - objetivo
     return {
-      ...b, objetivo, n: ps.length, valor, invertido, gp: valor - invertido,
-      gpPct: invertido ? (valor - invertido) / invertido * 100 : null,
+      ...b, objetivo, n: ps.length + (extra ? 1 : 0), valor, invertido, gp,
+      gpPct: invertido ? gp / invertido * 100 : null,
+      wallet: extra || 0,
       real, desvio, usd: real == null ? null : (objetivo - real) / 100 * base, // $ que faltan (+) o sobran (−)
       semaforo: semaforoDesvio(desvio),
     }
@@ -79,5 +84,5 @@ export function pesosBloques(positions, liquidez, objetivos) {
     real: realCaja, desvio: realCaja == null ? null : realCaja - objCaja,
     usd: realCaja == null ? null : (objCaja - realCaja) / 100 * base, semaforo: semaforoDesvio(realCaja == null ? null : realCaja - objCaja),
   }
-  return { base, totalPos, caja, filas, filaCaja, todas: [...filas, filaCaja] }
+  return { base, totalPos, caja, walletUsd, filas, filaCaja, todas: [...filas, filaCaja] }
 }
