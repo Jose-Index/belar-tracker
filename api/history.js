@@ -9,6 +9,9 @@ const RANGES = {
   '6mo': { range: '6mo', interval: '1d' },
   'ytd': { range: 'ytd', interval: '1d' },
   '1y': { range: '1y', interval: '1wk' },
+  '1yd': { range: '1y', interval: '1d' },
+  '2y': { range: '2y', interval: '1d' },
+  '3y': { range: '3y', interval: '1d' },     // Ficha del Buscador: 2 años de vista + 200 sesiones para la MA200
   '5y': { range: '5y', interval: '1wk' },
   'max': { range: 'max', interval: '1mo' },
 }
@@ -26,10 +29,18 @@ export default async function handler(req, res) {
     const result = j?.chart?.result?.[0]
     if (!result) { res.status(404).json({ error: j?.chart?.error?.description || 'sin datos' }); return }
     const ts = result.timestamp || []
-    const closes = result.indicators?.quote?.[0]?.close || []
-    const points = ts.map((t, i) => ({ t: t * 1000, v: closes[i] })).filter(p => p.v != null)
+    const q0 = result.indicators?.quote?.[0] || {}
+    const closes = q0.close || []
+    // ohlc=1 (Ficha): máximo y mínimo de sesión para el ATR real
+    const ohlc = String(req.query.ohlc || '') === '1'
+    const points = ts.map((t, i) => ohlc
+      ? { t: t * 1000, v: closes[i], h: q0.high?.[i] ?? null, l: q0.low?.[i] ?? null }
+      : { t: t * 1000, v: closes[i] }).filter(p => p.v != null)
     res.setHeader('Cache-Control', 'no-store, max-age=0')
-    res.status(200).json({ symbol, range: r.range, served_at: Date.now(), points, currency: result.meta?.currency })
+    res.status(200).json({ symbol, range: r.range, served_at: Date.now(), points, currency: result.meta?.currency, meta: {
+      name: result.meta?.longName || result.meta?.shortName || null, exchange: result.meta?.exchangeName || null,
+      price: result.meta?.regularMarketPrice ?? null, quoted_at: result.meta?.regularMarketTime ? result.meta.regularMarketTime * 1000 : null,
+    } })
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) })
   }
