@@ -7,6 +7,7 @@ import { exportBackup } from '../lib/backup'
 import { AreaChart, Area, YAxis, XAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import { getSimbolos, yahooDe, fetchQuotes, pctDia, pctSem, diasAbiertos, frescura } from '../lib/quotes'
 import { eventosProximos } from '../lib/ia'
+import { BLOQUES, BLOQUE_DE_ID, bloqueDe, bloquePorDefecto, pesosBloques, TESIS_SL, TESIS_TP, tesisSL, tesisTP } from '../lib/bloques'
 import IngestaIA from '../components/IngestaIA.jsx'
 import './posiciones.css'
 
@@ -27,23 +28,27 @@ const CLASE_AYUDA = {
   TACTICA: 'TÁCTICA — oportunidad de corto/medio plazo. SL técnico activo (−5/−8%, mínimo 2×ATR) sobre soporte claro.',
   DISRUPTIVA: 'DISRUPTIVA — smallcap especulativa. Sizing pequeño, SL muy amplio o sin SL: la invalidación es la tesis, no el precio.',
 }
-const FUENTES = ['YO', 'BELAR', 'PRENSA', 'REDES']
+const FUENTES = ['YO', 'BELAR', 'MIXTA', 'PRENSA', 'REDES']
 const BROKERS = ['etoro', 'xtb', 'ibkr']
 const ORDEN_BROKER = { etoro: 0, xtb: 1, ibkr: 2 }   // orden de la casa, no alfabético
 const ORDENES = [
-  { id: 'broker', label: 'Broker' }, { id: 'entrada', label: 'Entrada' },
-  { id: 'clase', label: 'Clase' }, { id: 'estado', label: 'Estado' },
+  { id: 'entrada', label: 'Entrada' }, { id: 'gp', label: 'G/P %' },
+  { id: 'peso', label: 'Peso' }, { id: 'estado', label: 'Estado' },
   { id: 'sem', label: 'vari/sem' }, { id: 'dia', label: '%/día' },
-  { id: 'peso', label: 'Peso' }, { id: 'gp', label: 'G/P %' },
+  { id: 'broker', label: 'Broker' }, { id: 'clase', label: 'Clase' },
 ]
 
 const fmt$ = v => v == null ? '—' : Number(v).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const fmtPx = v => v == null ? '—' : Number(v).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: v < 10 ? 3 : 2 })
 const fmtPct = v => v == null ? '—' : (v > 0 ? '+' : '') + v.toFixed(2) + '%'
+const fmtPP = v => v == null ? '—' : (v > 0 ? '+' : '') + v.toFixed(1)
 const pctClass = v => v == null ? '' : v > 0 ? 'up' : v < 0 ? 'down' : ''
 
-export default function Posiciones() {
+// `embed`: dentro de la portada (Inicio). `onCambio`: avisa a la portada de que
+// las posiciones han cambiado (para recalcular boxes y bloques).
+export default function Posiciones({ embed = false, onCambio, seleccionInicial = null }) {
   const [raw, setRaw] = useState(null)          // {positions, snapshots, liquidez, lastClose}
-  const [orden, setOrden] = useState(() => localStorage.getItem('btp-orden') || 'broker')
+  const [orden, setOrden] = useState(() => localStorage.getItem('btp-orden') || 'entrada')
   const [desc, setDesc] = useState(() => localStorage.getItem('btp-orden-desc') === '1')
   const [selId, setSelId] = useState(null)
   const [cierre, setCierre] = useState(false)   // MODO CIERRE SEMANA
@@ -53,7 +58,7 @@ export default function Posiciones() {
   const [liqDraft, setLiqDraft] = useState(null)
   const [liqTocada, setLiqTocada] = useState(false)
   const [btcDraft, setBtcDraft] = useState(null)
-  const [alta, setAlta] = useState(false)
+  const [alta, setAlta] = useState(null)        // null | {} | {…prefill}
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
   const [quotes, setQuotes] = useState({})     // yahoo_symbol -> quote
@@ -64,17 +69,12 @@ export default function Posiciones() {
 
   useEffect(() => { localStorage.setItem('btp-orden', orden) }, [orden])
   useEffect(() => { localStorage.setItem('btp-orden-desc', desc ? '1' : '0') }, [desc])
+  useEffect(() => { if (seleccionInicial) setAlta(seleccionInicial) }, [seleccionInicial])
 
   async function recargar() {
     const data = await fetchPosiciones()
-    if (!data.positions.length && import.meta.env.DEV) {
-      try {
-        const fx = { positions: [], snapshots: [] }
-        data.positions = fx.positions.map((p, i) => ({ ...p, id: p.id ?? i }))
-        data.snapshots = fx.snapshots
-      } catch { /* sin fixture */ }
-    }
     setRaw(data)
+    onCambio && onCambio(data)
     // vari/sem: precios de los activos vía Yahoo (bajo demanda, con frescura)
     const sims = await getSimbolos()
     setSimbolos(sims)
@@ -84,14 +84,12 @@ export default function Posiciones() {
   }
   useEffect(() => { recargar() }, [])
 
-  // Calendario: alimentación manual / Belar en sesión. La regeneración IA de 24h
-  // se retiró el 13/08/2026 (consumía créditos de Console sin intervención de José).
-
   // ── Cálculo de derivados ──
   const rows = useMemo(() => {
     if (!raw) return null
-    const { positions, snapshots } = raw
-    const total = positions.reduce((a, p) => a + Number(p.current_value ?? p.invested), 0)
+    const { positions, liquidez } = raw
+    // Peso sobre posiciones + liquidez de brókers (misma base que el panel de bloques)
+    const base = pesosBloques(positions, liquidez).base
     return positions.map(p => {
       const val = Number(p.current_value ?? p.invested)
       const inv = Number(p.invested)
@@ -100,6 +98,9 @@ export default function Posiciones() {
       const evEarn = evs.find(e => e.event_type === 'earnings')
       const diasEarn = evEarn ? Math.ceil((new Date(evEarn.event_date) - Date.now()) / 86400000) : null
       const gpPct = inv ? (val - inv) / inv * 100 : null
+      const apal = Number(p.apalancamiento || 1)
+      const ret = gpPct == null ? null : gpPct / apal          // retorno del PRECIO (sin apalancar)
+      const entry = p.entry_price ? Number(p.entry_price) : null
       return {
         evs, evUrgente: diasEarn != null && diasEarn <= 3,
         // Punto sólido solo si TODOS los eventos están confirmados; hueco si hay estimados
@@ -111,7 +112,16 @@ export default function Posiciones() {
         diasAbiertos: diasAbiertos(p.entry_date),
         sem: pctSem(q),
         semFresco: q ? frescura(q) : null,
-        peso: total ? val / total * 100 : null,
+        peso: base ? val / base * 100 : null,
+        bloqueEf: bloqueDe(p),
+        ret, apal,
+        // Tesis: SL/TP del ticket o, si faltan, los calculados sobre el precio de entrada
+        slTesis: p.sl_price != null ? Number(p.sl_price) : tesisSL(entry),
+        slCalc: p.sl_price == null && !!entry,
+        tpTesis: p.tp_price != null ? Number(p.tp_price) : tesisTP(entry),
+        tpCalc: p.tp_price == null && !!entry,
+        aTP: ret == null ? null : TESIS_TP - ret,
+        aSL: ret == null ? null : ret - TESIS_SL,
       }
     })
   }, [raw, quotes, simbolos, eventos])
@@ -119,7 +129,6 @@ export default function Posiciones() {
   const sorted = useMemo(() => {
     if (!rows) return null
     // Orden natural de cada criterio (asc = el que tiene sentido leer primero).
-    // Broker: eToro → XTB → IBKR, no alfabético (decisión José).
     const by = {
       broker: (a, b) => (ORDEN_BROKER[a.broker] ?? 9) - (ORDEN_BROKER[b.broker] ?? 9) || a.ticker.localeCompare(b.ticker),
       entrada: (a, b) => (b.entry_date || '').localeCompare(a.entry_date || ''),
@@ -130,9 +139,17 @@ export default function Posiciones() {
       peso: (a, b) => (b.peso ?? 0) - (a.peso ?? 0),
       gp: (a, b) => (b.gpPct ?? -999) - (a.gpPct ?? -999),
     }
-    const cmp = by[orden] || by.broker
+    const cmp = by[orden] || by.entrada
     return [...rows].sort(desc ? (a, b) => -cmp(a, b) : cmp)
   }, [rows, orden, desc])
+
+  // Agrupación por bloque (Cartera v3): una tabla por bloque, en el orden de la cartera
+  const grupos = useMemo(() => {
+    if (!sorted || !raw) return null
+    const w = pesosBloques(raw.positions, raw.liquidez)
+    return BLOQUES.map(b => ({ b, peso: w.filas.find(f => f.id === b.id), rows: sorted.filter(r => r.bloqueEf === b.id) }))
+      .filter(g => g.rows.length)
+  }, [sorted, raw])
 
   const sel = sorted?.find(p => p.id === selId) || null
 
@@ -145,7 +162,7 @@ export default function Posiciones() {
     setCierre(false); setDraft({}); setLiqDraft(null); setPendCierres([]); setPendAltas([])
   }
 
-  // Edición fluida: Enter/Tab salta a la misma columna de la fila siguiente
+  // Edición fluida: Enter salta a la misma columna de la fila siguiente (todas las tablas)
   function keyNav(e) {
     if (e.key !== 'Enter') return
     e.preventDefault()
@@ -184,7 +201,7 @@ export default function Posiciones() {
         entry_date: n.entry_date || new Date().toISOString().slice(0, 10),
         invested: n.invested, current_value: n.current_value,
         apalancamiento: n.apalancamiento || 1,
-        clase: n.clase, fuente: n.fuente,
+        clase: n.clase, fuente: n.fuente, bloque: n.bloque || bloquePorDefecto(n),
         ingest_badge: 'NEW', ingest_source: `captura ${n.broker} ${n.stamp}`,
       })
     }
@@ -205,10 +222,10 @@ export default function Posiciones() {
   }
 
   async function borrarEnCierre(p) {
-    const motivo = window.prompt(`Cerrar ${p.ticker} (${p.broker}). Motivo: xSL / manual / escalonada`, 'xSL')
+    const motivo = window.prompt(`Cerrar ${p.ticker} (${p.broker}). Motivo: xSL / xTP / manual / escalonada`, 'xSL')
     if (!motivo) return
     setBusy(true)
-    await cerrarPosicion(p, ['xSL', 'manual', 'escalonada'].includes(motivo) ? motivo : 'xSL')
+    await cerrarPosicion(p, ['xSL', 'xTP', 'manual', 'escalonada'].includes(motivo) ? motivo : 'xSL')
     setBusy(false); setSelId(null); recargar()
   }
 
@@ -238,12 +255,13 @@ export default function Posiciones() {
       if (!n.sel) continue
       const inv = n.invertido ?? n.valor
       if (!inv) continue
+      const ticker = (n.ticker || n.nombre || '?').toUpperCase()
       await altaPosicion({
-        ticker: (n.ticker || n.nombre || '?').toUpperCase(), broker: n.broker,
+        ticker, broker: n.broker,
         entry_date: n.entry_date || new Date().toISOString().slice(0, 10),
         invested: inv, current_value: n.valor ?? inv,
         apalancamiento: n.apalancamiento || 1,
-        clase: n.clase || 'TACTICA', fuente: n.fuente || 'YO',
+        clase: n.clase || 'TACTICA', fuente: n.fuente || 'YO', bloque: bloquePorDefecto({ ticker }),
         ingest_badge: 'NEW', ingest_source: `captura ${n.broker} ${stamp}`,
       }); nAltas++
     }
@@ -301,6 +319,12 @@ export default function Posiciones() {
       + (d.aprendidos ? ` · ${d.aprendidos} nombre(s) de broker aprendidos` : ''))
   }
 
+  // Cierra el alta y, si venía prellenada por URL (Buscador), limpia la query
+  function cerrarAlta() {
+    setAlta(null)
+    if (seleccionInicial && window.location.search.includes('alta=')) window.history.replaceState(null, '', window.location.pathname)
+  }
+
   async function cerrarManual(p) {
     if (!window.confirm(`¿Cerrar ${p.ticker} (${p.broker})? Se registrará en el histórico (motivo: manual).`)) return
     setBusy(true)
@@ -313,13 +337,14 @@ export default function Posiciones() {
   const totalPos = rows.reduce((a, p) => a + p.valor, 0)
   const liq = cierre ? liqDraft : raw.liquidez
   const totalLiq = Object.values(liq || {}).reduce((a, v) => a + (Number(v) || 0), 0)
+  const Titulo = embed ? 'h2' : 'h1'
 
   return (
-    <div className="pos-layout">
+    <div className={'pos-layout' + (embed ? ' embed' : '')}>
       <div>
         <div className="pos-head">
-          <h1>Posiciones <span className="pos-n num">{sorted.length}</span>
-            <a href="/sandbox" style={{ fontSize: 11.5, fontWeight: 500, marginLeft: 10, color: 'var(--texto-neutro)', textDecoration: 'none' }}>sandbox ↗</a></h1>
+          <Titulo>Posiciones <span className="pos-n num">{sorted.length}</span>
+            {!embed && <a href="/sandbox" style={{ fontSize: 11.5, fontWeight: 500, marginLeft: 10, color: 'var(--texto-neutro)', textDecoration: 'none' }}>sandbox ↗</a>}</Titulo>
           <div className="pos-controls">
             {raw.lastClose && <span className="sello num">Último cierre: {raw.lastClose.date?.split('-').reverse().join('/')}</span>}
             <label>Orden:{' '}
@@ -331,7 +356,7 @@ export default function Posiciones() {
                 {desc ? '↓' : '↑'}
               </button>
             </label>
-            <button className="btn-sec" onClick={() => setAlta(true)}>+ Posición</button>
+            <button className="btn-sec" onClick={() => setAlta({})}>+ Posición</button>
             {!cierre && <button className="btn-sec" onClick={() => setIngesta(!ingesta)}>
               {ingesta ? 'cerrar captura' : 'ACTUALIZAR POR CAPTURA'}</button>}
             {!cierre
@@ -363,6 +388,12 @@ export default function Posiciones() {
                 <span className="badge-new">NEW</span>
                 <span className="t">{n.ticker} <i>{n.broker}</i></span>
                 <span>invertido ${fmt$(n.invested)} · abierta {n.entry_date ? n.entry_date.slice(2).split('-').reverse().join('/') : '—'} · {CLASES[n.clase] || n.clase} · fuente {n.fuente}</span>
+                <label>bloque
+                  <select value={n.bloque || bloquePorDefecto(n)}
+                    onChange={e => setPendAltas(p => p.map((x, j) => j === i ? { ...x, bloque: e.target.value } : x))}>
+                    {BLOQUES.map(b => <option key={b.id} value={b.id}>{b.corto}</option>)}
+                  </select>
+                </label>
                 <button className="btn-escape" title="Quitar del borrador"
                   onClick={() => setPendAltas(p => p.filter((_, j) => j !== i))}>✕</button>
               </div>
@@ -374,7 +405,7 @@ export default function Posiciones() {
                 <label>motivo
                   <select value={c.motivo}
                     onChange={e => setPendCierres(p => p.map((x, j) => j === i ? { ...x, motivo: e.target.value } : x))}>
-                    {['xSL', 'manual', 'escalonada'].map(m => <option key={m} value={m}>{m}</option>)}
+                    {['xSL', 'xTP', 'manual', 'escalonada'].map(m => <option key={m} value={m}>{m}</option>)}
                   </select>
                 </label>
                 <button className="btn-escape" title="Quitar del borrador"
@@ -401,84 +432,26 @@ export default function Posiciones() {
           </div>
         )}
 
-        <div className="card pos-tabla-wrap" ref={tablaRef}>
-          <table className={'pos-tabla num' + (cierre ? ' modo-cierre' : '')}>
-            <thead>
-              <tr>
-                <th className="tl" title="Ticker. ● = evento próximo en calendario (rojo si quedan menos de 3 días). NEW/· = alta/actualización por captura IA.">ACTIVO</th>
-                <th className="tl">BROKER</th>
-                <th title="Fecha de entrada en la posición">ENTRADA</th>
-                <th title="Capital invertido (USD)">INVERTIDO</th>
-                <th className="col-clave col-ini" title="Valor actual (USD). Fuente única: tus capturas del cierre de semana.">VALOR</th>
-                <th className="col-clave" title="Ganancia/pérdida abierta en dólares">G/P $</th>
-                <th className="col-clave col-fin" title="Ganancia/pérdida abierta en % sobre invertido">G/P %</th>
-                <th title="Rendimiento medio diario de la posición: G/P% ÷ días desde la entrada">%/día</th>
-                <th title="Variación del activo respecto al cierre de la semana anterior (precio vivo Yahoo vs viernes previo)">vari/sem</th>
-                <th title="Tu valoración de la posición.">ESTADO</th>
-                <th className="tl" title="Clasificación: NÚCLEO (Ancla/Estructural/Gestión), MOMENTUM, TÁCTICA, DISRUPTIVA">CLASE</th>
-                <th title="Apalancamiento (x1 = sin apalancar; máximo de la casa x2)">APAL</th>
-                <th title="Peso de la posición sobre el total de posiciones">PESO</th>
-                <th title="FUENTE de la idea: en blanco = YO · B = BELAR · P = PRENSA · R = REDES">FTE</th>
-                {cierre && <th></th>}
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map(p => (
-                <tr key={p.id} onClick={() => !cierre && setSelId(p.id)}
-                    className={(selId === p.id && !cierre ? 'sel ' : '') + 'fondo-' + p.estado}>
-                  <td className="tl ticker">
-                    {p.ticker}
-                    {p.ingest_badge === 'NEW' && <span className="badge new">NEW</span>}
-                    {p.ingest_badge === 'UPD' && <span className="badge upd">·</span>}
-                    {p.evs.length > 0 && (
-                      <span className={'ev-dot' + (p.evUrgente ? ' urgente' : '') + (p.evConfirmado ? '' : ' estimado')}
-                            title={p.evs.map(e => `${e.event_date.slice(2).split('-').reverse().join('/')} · ${e.titulo}`
-                              + (e.confirmacion === 'confirmado' ? ' [CONFIRMADO]' : e.confirmacion === 'estimado' ? ' [ESTIMADO — puede desviarse]' : '')
-                              + (e.fuente ? ' · ' + e.fuente : '')).join('\n')}>
-                        {p.evConfirmado ? '●' : '○'}
-                      </span>
-                    )}
-                  </td>
-                  <td className="tl broker">{p.broker}</td>
-                  <td>{p.entry_date ? p.entry_date.slice(2).split('-').reverse().join('/') : '—'}</td>
-                  <td>{cierre
-                    ? <input data-col="inv" value={draft[p.id]?.invested ?? p.invested} onKeyDown={keyNav}
-                        onChange={e => setDraft(d => ({ ...d, [p.id]: { ...d[p.id], invested: e.target.value === '' ? '' : Number(e.target.value) } }))} />
-                    : fmt$(p.invested)}</td>
-                  <td className="col-clave col-ini">{cierre
-                    ? <input data-col="val" value={draft[p.id]?.current_value ?? p.valor} onKeyDown={keyNav}
-                        onChange={e => setDraft(d => ({ ...d, [p.id]: { ...d[p.id], current_value: e.target.value === '' ? '' : Number(e.target.value) } }))} />
-                    : fmt$(p.valor)}</td>
-                  <td className={'col-clave ' + pctClass(p.gp)}>{fmt$(p.gp)}</td>
-                  <td className={'col-clave col-fin ' + pctClass(p.gpPct)}>{fmtPct(p.gpPct)}</td>
-                  <td title={p.diasAbiertos ? `${p.diasAbiertos} días abiertos` : ''}>{fmtPct(p.dia)}</td>
-                  <td title={p.semFresco || ''}>{fmtPct(p.sem)}</td>
-                  <td>
-                    <span className={'chip chip-' + p.estado}>{ESTADOS[p.estado]?.label || p.estado}</span>
-                  </td>
-                  <td className="tl clase" title={CLASE_AYUDA[p.clase] || ''}>{CLASES[p.clase] || p.clase}</td>
-                  <td>{p.apalancamiento > 1 ? 'x' + Number(p.apalancamiento) : ''}</td>
-                  <td>{p.peso == null ? '—' : p.peso.toFixed(1) + '%'}</td>
-                  <td className="fuente" title={'Fuente: ' + (p.fuente || 'YO')}>{p.fuente === 'YO' ? '' : (p.fuente || '').slice(0, 1)}</td>
-                  {cierre && <td><button className="btn-borrar" title="Cerrar posición"
-                    onClick={e => { e.stopPropagation(); borrarEnCierre(p) }}>✕</button></td>}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="bloques-tablas" ref={tablaRef}>
+          {grupos.map(g => (
+            <TablaBloque key={g.b.id} g={g} cierre={cierre} draft={draft} setDraft={setDraft} keyNav={keyNav}
+                         selId={selId} onSel={id => !cierre && setSelId(id)} onBorrar={borrarEnCierre} />
+          ))}
+          {!grupos.length && <p className="placeholder">Sin posiciones abiertas.</p>}
         </div>
+
         <p className="pos-fuente">
           {cierre
             ? 'Modo cierre: edita VALOR/INVERTIDO (Enter salta a la siguiente fila), ✕ cierra posición, y CERRAR SEMANA sella todo.'
-            : '%/día = G/P% ÷ días abiertos · vari/sem = precio vivo Yahoo vs cierre de la semana anterior (frescura al pasar el ratón)'}
+            : 'Agrupadas por bloque (Cartera v3). PESO = valor sobre posiciones + liquidez · %/día = G/P% ÷ días abiertos · vari/sem = precio vivo Yahoo vs cierre de la semana anterior'}
         </p>
         {!cierre && (
           <div className="pos-leyenda num">
             <span><i className="ev-dot">●</i> evento confirmado · <i className="ev-dot estimado">○</i> fecha estimada, puede desviarse (rojo si faltan &lt;3 días)</span>
             <span><i className="badge new">NEW</i> alta por captura IA</span>
-            <span><b>FTE</b> fuente de la idea: en blanco YO · B Belar · P prensa · R redes</span>
+            <span><b>FTE</b> origen de la idea: en blanco YO · B Belar · M mixta · P prensa · R redes</span>
             <span>fondo <i className="lg-ojo">ámbar OJO</i> · <i className="lg-duda">azul ¿?</i> · <i className="lg-xsalir">rojo xSALIR</i></span>
-            <span><b>CLASE</b> el detalle de cada una, al pasar el ratón</span>
+            <span><b>TESIS</b> SL/TP en gris = calculados (−11/+23,5 sobre la entrada), aún no puestos en el ticket</span>
           </div>
         )}
       </div>
@@ -486,8 +459,154 @@ export default function Posiciones() {
       {sel && !cierre && (
         <PanelDetalle p={sel} onClose={() => setSelId(null)} onChange={recargar} onCerrar={() => cerrarManual(sel)} />
       )}
-      {alta && <AltaDialog onClose={() => setAlta(false)} onDone={() => { setAlta(false); recargar() }} />}
+      {alta && <AltaDialog inicial={alta} onClose={() => cerrarAlta()} onDone={() => { cerrarAlta(); recargar() }} />}
     </div>
+  )
+}
+
+// ─── Una tabla por bloque, con cabecera de bloque y fila de subtotal ─────
+function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorrar }) {
+  const { b, peso, rows } = g
+  const esTesis = b.id === 'TESIS'
+  const inv = rows.reduce((a, p) => a + Number(p.invested || 0), 0)
+  const val = rows.reduce((a, p) => a + p.valor, 0)
+  const gp = val - inv
+  const gpPct = inv ? gp / inv * 100 : null
+  const pesoSum = rows.reduce((a, p) => a + (p.peso || 0), 0)
+
+  return (
+    <div className="card pos-tabla-wrap bloque-card">
+      <div className="bloque-cab" title={b.ayuda}>
+        <span className="bq-dot" style={{ background: b.color }} />
+        <span className="bloque-nombre">{b.label}</span>
+        <span className="bloque-n num">{rows.length}</span>
+        {peso && (
+          <span className="bloque-chips num">
+            <span className={'chip-peso ' + peso.semaforo} title="peso real · objetivo · desvío en puntos">
+              {peso.real?.toFixed(1)}% <i>obj {peso.objetivo}%</i> <b>{fmtPP(peso.desvio)}</b>
+            </span>
+            <span className={'chip-gp ' + pctClass(gp)}>{gp > 0 ? '+' : ''}${fmt$(gp)} ({fmtPct(gpPct)})</span>
+          </span>
+        )}
+      </div>
+      <table className={'pos-tabla num' + (cierre ? ' modo-cierre' : '') + (esTesis ? ' tesis' : '')}>
+        <thead>
+          <tr>
+            <th className="tl" title="Ticker. ● = evento próximo en calendario (rojo si quedan menos de 3 días). NEW/· = alta/actualización por captura IA.">ACTIVO</th>
+            <th className="tl">BROKER</th>
+            <th title="Fecha de entrada en la posición">ENTRADA</th>
+            <th title="Capital invertido (USD)">INVERTIDO</th>
+            <th className="col-clave col-ini" title="Valor actual (USD). Fuente única: tus capturas del cierre de semana.">VALOR</th>
+            <th className="col-clave" title="Ganancia/pérdida abierta en dólares">G/P $</th>
+            <th className="col-clave col-fin" title="Ganancia/pérdida abierta en % sobre invertido">G/P %</th>
+            {esTesis ? (
+              <>
+                <th title="Precio de entrada (por acción). Se fija al alta o en el panel de detalle.">P.ENT</th>
+                <th title="Stop loss del ticket. Gris = calculado −11 % sobre la entrada, aún no puesto.">SL</th>
+                <th title="Take profit del ticket. Gris = calculado +23,5 % sobre la entrada, aún no puesto.">TP</th>
+                <th className="tl" title="Recorrido del precio entre el SL (−11) y el TP (+23,5). El texto es lo que falta hasta el TP, en puntos.">→ TP</th>
+              </>
+            ) : (
+              <>
+                <th title="Rendimiento medio diario de la posición: G/P% ÷ días desde la entrada">%/día</th>
+                <th title="Variación del activo respecto al cierre de la semana anterior (precio vivo Yahoo vs viernes previo)">vari/sem</th>
+              </>
+            )}
+            <th title="Tu valoración de la posición.">ESTADO</th>
+            <th className="tl" title="Clasificación: NÚCLEO, MOMENTUM, TÁCTICA, DISRUPTIVA">CLASE</th>
+            <th title="Apalancamiento (x1 = sin apalancar; máximo de la casa x2)">APAL</th>
+            <th title="Peso de la posición sobre posiciones + liquidez">PESO</th>
+            <th title="FUENTE de la idea: en blanco = YO · B = BELAR · M = MIXTA · P = PRENSA · R = REDES">FTE</th>
+            {cierre && <th></th>}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(p => (
+            <tr key={p.id} onClick={() => onSel(p.id)}
+                className={(selId === p.id && !cierre ? 'sel ' : '') + 'fondo-' + p.estado}>
+              <td className="tl ticker">
+                {p.ticker}
+                {p.ingest_badge === 'NEW' && <span className="badge new">NEW</span>}
+                {p.ingest_badge === 'UPD' && <span className="badge upd">·</span>}
+                {p.evs.length > 0 && (
+                  <span className={'ev-dot' + (p.evUrgente ? ' urgente' : '') + (p.evConfirmado ? '' : ' estimado')}
+                        title={p.evs.map(e => `${e.event_date.slice(2).split('-').reverse().join('/')} · ${e.titulo}`
+                          + (e.confirmacion === 'confirmado' ? ' [CONFIRMADO]' : e.confirmacion === 'estimado' ? ' [ESTIMADO — puede desviarse]' : '')
+                          + (e.fuente ? ' · ' + e.fuente : '')).join('\n')}>
+                    {p.evConfirmado ? '●' : '○'}
+                  </span>
+                )}
+              </td>
+              <td className="tl broker">{p.broker}</td>
+              <td>{p.entry_date ? p.entry_date.slice(2).split('-').reverse().join('/') : '—'}</td>
+              <td>{cierre
+                ? <input data-col="inv" value={draft[p.id]?.invested ?? p.invested} onKeyDown={keyNav}
+                    onChange={e => setDraft(d => ({ ...d, [p.id]: { ...d[p.id], invested: e.target.value === '' ? '' : Number(e.target.value) } }))} />
+                : fmt$(p.invested)}</td>
+              <td className="col-clave col-ini">{cierre
+                ? <input data-col="val" value={draft[p.id]?.current_value ?? p.valor} onKeyDown={keyNav}
+                    onChange={e => setDraft(d => ({ ...d, [p.id]: { ...d[p.id], current_value: e.target.value === '' ? '' : Number(e.target.value) } }))} />
+                : fmt$(p.valor)}</td>
+              <td className={'col-clave ' + pctClass(p.gp)}>{fmt$(p.gp)}</td>
+              <td className={'col-clave col-fin ' + pctClass(p.gpPct)}>{fmtPct(p.gpPct)}</td>
+              {esTesis ? (
+                <>
+                  <td className={p.entry_price ? '' : 'falta'} title={p.entry_price ? '' : 'Sin precio de entrada: ponlo en el panel de detalle'}>{p.entry_price ? fmtPx(p.entry_price) : '—'}</td>
+                  <td className={p.slCalc ? 'calc' : ''} title={p.slCalc ? 'Calculado: −11 % sobre la entrada' : p.sl_price != null ? 'SL puesto en el ticket' : ''}>{p.slTesis != null ? fmtPx(p.slTesis) : '—'}</td>
+                  <td className={p.tpCalc ? 'calc' : ''} title={p.tpCalc ? 'Calculado: +23,5 % sobre la entrada' : p.tp_price != null ? 'TP puesto en el ticket' : ''}>{p.tpTesis != null ? fmtPx(p.tpTesis) : '—'}</td>
+                  <td className="tl"><BarraTesis p={p} /></td>
+                </>
+              ) : (
+                <>
+                  <td title={p.diasAbiertos ? `${p.diasAbiertos} días abiertos` : ''}>{fmtPct(p.dia)}</td>
+                  <td title={p.semFresco || ''}>{fmtPct(p.sem)}</td>
+                </>
+              )}
+              <td>
+                <span className={'chip chip-' + p.estado}>{ESTADOS[p.estado]?.label || p.estado}</span>
+              </td>
+              <td className="tl clase" title={CLASE_AYUDA[p.clase] || ''}>{CLASES[p.clase] || p.clase}</td>
+              <td>{p.apalancamiento > 1 ? 'x' + Number(p.apalancamiento) : ''}</td>
+              <td>{p.peso == null ? '—' : p.peso.toFixed(1) + '%'}</td>
+              <td className="fuente" title={'Fuente: ' + (p.fuente || 'YO')}>{p.fuente === 'YO' ? '' : (p.fuente || '').slice(0, 1)}</td>
+              {cierre && <td><button className="btn-borrar" title="Cerrar posición"
+                onClick={e => { e.stopPropagation(); onBorrar(p) }}>✕</button></td>}
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="subtotal">
+            <td className="tl" colSpan={3}>Σ {b.corto}</td>
+            <td>{fmt$(inv)}</td>
+            <td className="col-clave col-ini">{fmt$(val)}</td>
+            <td className={'col-clave ' + pctClass(gp)}>{fmt$(gp)}</td>
+            <td className={'col-clave col-fin ' + pctClass(gpPct)}>{fmtPct(gpPct)}</td>
+            <td colSpan={esTesis ? 7 : 5}></td>
+            <td>{pesoSum.toFixed(1)}%</td>
+            <td colSpan={cierre ? 2 : 1}></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  )
+}
+
+// Barra del recorrido −11 → +23,5 con la marca de entrada y el texto "faltan X pp al TP"
+function BarraTesis({ p }) {
+  if (p.ret == null) return <span className="calc">—</span>
+  const rango = TESIS_TP - TESIS_SL
+  const pos = Math.max(0, Math.min(1, (p.ret - TESIS_SL) / rango))
+  const cero = (0 - TESIS_SL) / rango
+  const izq = Math.min(pos, cero), ancho = Math.abs(pos - cero)
+  const txt = p.ret >= TESIS_TP ? 'TP alcanzado' : p.ret <= TESIS_SL ? 'en SL' : `${p.aTP.toLocaleString('es-ES', { maximumFractionDigits: 1 })} pp`
+  return (
+    <span className="barra-tesis" title={`Retorno del precio ${fmtPct(p.ret)} · faltan ${p.aTP?.toFixed(1)} pp al TP · ${p.aSL?.toFixed(1)} pp sobre el SL`}>
+      <i className="bt-pista">
+        <i className={'bt-relleno ' + (p.ret >= 0 ? 'pos' : 'neg')} style={{ left: `${izq * 100}%`, width: `${ancho * 100}%` }} />
+        <i className="bt-cero" style={{ left: `${cero * 100}%` }} />
+      </i>
+      <span className="bt-txt">{txt}</span>
+    </span>
   )
 }
 
@@ -498,18 +617,23 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
   const [serie, setSerie] = useState([])
   const [estr, setEstr] = useState(p.estrategia || '')  // Estrategia de entrada (texto libre)
   const [estrPend, setEstrPend] = useState(false)       // autoguardado en vuelo
+  const [px, setPx] = useState({ entry_price: p.entry_price ?? '', sl_price: p.sl_price ?? '', tp_price: p.tp_price ?? '' })
+  const [pxMsg, setPxMsg] = useState(null)
   const estrTimer = useRef(null)
   const estrRef = useRef(null)
+  const bloque = bloqueDe(p)
 
   useEffect(() => {
     fetchNotas(p.id).then(({ data }) => setNotas(data || []))
     clearTimeout(estrTimer.current); setEstr(p.estrategia || ''); setEstrPend(false)
+    setPx({ entry_price: p.entry_price ?? '', sl_price: p.sl_price ?? '', tp_price: p.tp_price ?? '' }); setPxMsg(null)
     fetchSeriePosicion(p.ticker, p.broker, p.entry_date).then(({ data }) =>
       setSerie((data || []).map(s => ({ fecha: s.week_end, v: Number(s.value) }))))
   }, [p.id])
 
   async function setAttr(campo, valor) {
-    await updatePosicion(p.id, { [campo]: valor })
+    const { error } = await updatePosicion(p.id, { [campo]: valor })
+    if (error) { setPxMsg('No se pudo guardar: ' + error.message); return }
     onChange()
   }
   // Estrategia: autoguardado silencioso (sin botón, sin recarga). Guarda a los
@@ -526,6 +650,24 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
     const el = estrRef.current
     if (el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px' }
   }, [estr, p.id])
+
+  // Precios del ticket: entrada, SL, TP. Se guardan al salir del campo (blur) o con Enter.
+  async function guardarPx(campo) {
+    const v = px[campo] === '' ? null : Number(String(px[campo]).replace(',', '.'))
+    if (v != null && Number.isNaN(v)) { setPxMsg('Número no válido'); return }
+    if ((v ?? null) === (p[campo] ?? null)) return
+    const { error } = await updatePosicion(p.id, { [campo]: v })
+    if (error) setPxMsg('No se pudo guardar ' + campo + ': ' + error.message)
+    else { setPxMsg(null); onChange() }
+  }
+  async function aplicarTesis() {
+    const e = Number(String(px.entry_price).replace(',', '.'))
+    if (!e) { setPxMsg('Pon primero el precio de entrada'); return }
+    const patch = { entry_price: e, sl_price: tesisSL(e), tp_price: tesisTP(e) }
+    setPx({ entry_price: e, sl_price: patch.sl_price, tp_price: patch.tp_price })
+    const { error } = await updatePosicion(p.id, patch)
+    if (error) setPxMsg('No se pudo guardar: ' + error.message); else { setPxMsg(null); onChange() }
+  }
   async function borrarNota(n) {
     if (!confirm(`¿Borrar la nota «${n.texto.slice(0, 60)}${n.texto.length > 60 ? '…' : ''}»?`)) return
     await borrarNotaDB(n.id)
@@ -548,7 +690,8 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
       <dl className="num">
         <div><dt>Entrada</dt><dd>{p.entry_date || '—'} · ${fmt$(p.invested)}</dd></div>
         <div><dt>Valor</dt><dd>${fmt$(p.valor)} <span className={pctClass(p.gpPct)}>({fmtPct(p.gpPct)})</span></dd></div>
-        <div><dt>SL</dt><dd>{p.sl_price ?? 'sin SL'}</dd></div>
+        <div><dt>Bloque</dt><dd><i className="bq-dot" style={{ background: BLOQUE_DE_ID[bloque]?.color }} />{BLOQUE_DE_ID[bloque]?.label}{p.bloque ? '' : <span className="calc" title="Bloque por defecto: aún no asignado en la base de datos"> (por defecto)</span>}</dd></div>
+        {bloque === 'TESIS' && p.ret != null && <div><dt>Tesis</dt><dd>{fmtPct(p.ret)} precio · {p.aTP?.toFixed(1)} pp al TP · {p.aSL?.toFixed(1)} pp sobre SL</dd></div>}
         {p.ingest_source && <div><dt>Origen</dt><dd>{p.ingest_source}</dd></div>}
       </dl>
       {serie.length > 1 && (
@@ -581,6 +724,11 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
             {Object.entries(ESTADOS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
           </select>
         </label>
+        <label title={BLOQUE_DE_ID[bloque]?.ayuda || ''}>Bloque
+          <select value={bloque} onChange={e => setAttr('bloque', e.target.value)}>
+            {BLOQUES.map(b => <option key={b.id} value={b.id} title={b.ayuda}>{b.corto}</option>)}
+          </select>
+        </label>
         <label title={CLASE_AYUDA[p.clase] || ''}>Clase
           <select value={p.clase} onChange={e => setAttr('clase', e.target.value)}>
             {Object.entries(CLASES).map(([k, v]) => <option key={k} value={k} title={CLASE_AYUDA[k]}>{v}</option>)}
@@ -591,6 +739,23 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
             {FUENTES.map(f => <option key={f}>{f}</option>)}
           </select>
         </label>
+      </div>
+
+      <div className="precios-ticket num">
+        <div className="ia-head"><h3>Precios del ticket</h3>
+          {bloque === 'TESIS' && <button type="button" className="btn-escape" onClick={aplicarTesis} title="Calcula SL −11 % y TP +23,5 % sobre el precio de entrada y los guarda">Tesis −11/+23,5</button>}
+        </div>
+        <div className="precios-grid">
+          {[['entry_price', 'Entrada'], ['sl_price', 'SL'], ['tp_price', 'TP']].map(([k, l]) => (
+            <label key={k}>{l}
+              <input value={px[k]} inputMode="decimal" placeholder="—"
+                     onChange={e => setPx(x => ({ ...x, [k]: e.target.value }))}
+                     onBlur={() => guardarPx(k)}
+                     onKeyDown={e => { if (e.key === 'Enter') e.target.blur() }} />
+            </label>
+          ))}
+        </div>
+        {pxMsg && <p className="auth-err" style={{ margin: '4px 0 0', fontSize: 12 }}>{pxMsg}</p>}
       </div>
 
       <div className="estrategia-bloque">
@@ -625,14 +790,24 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
 }
 
 // ─── Alta de posición (permitida siempre, modo OFF incluido) ────────────
-function AltaDialog({ onClose, onDone }) {
+// `inicial`: prellenado (desde el Buscador: ticker, precio de entrada, SL/TP de la Tesis).
+export function AltaDialog({ inicial = {}, onClose, onDone }) {
   const [f, setF] = useState({
-    ticker: '', broker: 'etoro', entry_date: new Date().toISOString().slice(0, 10),
+    ticker: '', broker: 'xtb', entry_date: new Date().toISOString().slice(0, 10),
     invested: '', current_value: '', clase: 'TACTICA', estado: 'OK', fuente: 'YO',
-    apalancamiento: 1, sl_price: '',
+    apalancamiento: 1, entry_price: '', sl_price: '', tp_price: '', bloque: 'TESIS',
+    ...Object.fromEntries(Object.entries(inicial || {}).filter(([, v]) => v != null)),
   })
   const [err, setErr] = useState(null)
   const set = (k, v) => setF(x => ({ ...x, [k]: v }))
+  const num = v => v === '' || v == null ? null : Number(String(v).replace(',', '.'))
+
+  // Tesis: al fijar la entrada, SL y TP se rellenan solos si están vacíos
+  function entradaBlur() {
+    const e = num(f.entry_price)
+    if (f.bloque !== 'TESIS' || !e) return
+    setF(x => ({ ...x, sl_price: x.sl_price === '' ? tesisSL(e) : x.sl_price, tp_price: x.tp_price === '' ? tesisTP(e) : x.tp_price }))
+  }
 
   async function guardar(e) {
     e.preventDefault()
@@ -641,9 +816,9 @@ function AltaDialog({ onClose, onDone }) {
     const { error } = await altaPosicion({
       ticker: f.ticker.trim().toUpperCase(), broker: f.broker, entry_date: f.entry_date,
       invested: inv, current_value: Number(f.current_value) || inv,
-      clase: f.clase, estado: f.estado, fuente: f.fuente,
+      clase: f.clase, estado: f.estado, fuente: f.fuente, bloque: f.bloque,
       apalancamiento: Number(f.apalancamiento) || 1,
-      sl_price: f.sl_price === '' ? null : Number(f.sl_price),
+      entry_price: num(f.entry_price), sl_price: num(f.sl_price), tp_price: num(f.tp_price),
     })
     if (error) setErr(error.message); else onDone()
   }
@@ -651,7 +826,7 @@ function AltaDialog({ onClose, onDone }) {
   return (
     <div className="modal-fondo" onClick={onClose}>
       <form className="card modal alta num" onClick={e => e.stopPropagation()} onSubmit={guardar}>
-        <h2>Nueva posición</h2>
+        <h2>Nueva posición {inicial?.nombre && <span className="hist-n">{inicial.nombre}</span>}</h2>
         <div className="alta-grid">
           <label>Ticker<input autoFocus value={f.ticker} onChange={e => set('ticker', e.target.value)} /></label>
           <label>Broker<select value={f.broker} onChange={e => set('broker', e.target.value)}>
@@ -659,13 +834,18 @@ function AltaDialog({ onClose, onDone }) {
           <label>Fecha<input type="date" value={f.entry_date} onChange={e => set('entry_date', e.target.value)} /></label>
           <label>Invertido $<input value={f.invested} onChange={e => set('invested', e.target.value)} /></label>
           <label>Valor $<input placeholder="= invertido" value={f.current_value} onChange={e => set('current_value', e.target.value)} /></label>
-          <label>SL<input placeholder="opcional" value={f.sl_price} onChange={e => set('sl_price', e.target.value)} /></label>
+          <label>Bloque<select value={f.bloque} onChange={e => set('bloque', e.target.value)}>
+            {BLOQUES.map(b => <option key={b.id} value={b.id} title={b.ayuda}>{b.corto}</option>)}</select></label>
+          <label>P. entrada<input placeholder="por acción" value={f.entry_price} onChange={e => set('entry_price', e.target.value)} onBlur={entradaBlur} /></label>
+          <label>SL<input placeholder={f.bloque === 'TESIS' ? '−11 %' : 'opcional'} value={f.sl_price} onChange={e => set('sl_price', e.target.value)} /></label>
+          <label>TP<input placeholder={f.bloque === 'TESIS' ? '+23,5 %' : 'opcional'} value={f.tp_price} onChange={e => set('tp_price', e.target.value)} /></label>
           <label>Clase<select value={f.clase} onChange={e => set('clase', e.target.value)}>
             {Object.entries(CLASES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
           <label>Fuente<select value={f.fuente} onChange={e => set('fuente', e.target.value)}>
             {FUENTES.map(x => <option key={x}>{x}</option>)}</select></label>
           <label>Apal.<input value={f.apalancamiento} onChange={e => set('apalancamiento', e.target.value)} /></label>
         </div>
+        {f.bloque === 'TESIS' && <p className="alta-nota">Tesis JOSE −11/+23,5: SL y TP se ponen en el mismo ticket, en el acto de la compra, y no se tocan. Máx. 8 líneas, ticket ≤4 % (small caps 2 %).</p>}
         {err && <p className="auth-err">{err}</p>}
         <div className="modal-botones">
           <button type="button" className="btn-sec" onClick={onClose}>Cancelar</button>
