@@ -277,3 +277,6 @@
   .bloque-chips { margin-left: 0; width: 100%; }
   .bt-pista { width: 60px; }
 }
+
+.pos-tabla tr.fila-wallet td { color: var(--texto-sec); }
+.pos-tabla tr.fila-wallet td.ticker { font-weight: 600; color: var(--texto); }
