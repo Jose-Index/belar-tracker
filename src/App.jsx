@@ -2,7 +2,7 @@ import { Routes, Route, NavLink } from 'react-router-dom'
 import Inicio from './pages/Inicio.jsx'
 import Historico from './pages/Historico.jsx'
 import Fuentes from './pages/Fuentes.jsx'
-import Posiciones from './pages/Posiciones.jsx'
+import Buscador from './pages/Buscador.jsx'
 import Repositorio from './pages/Repositorio.jsx'
 import Alertas from './pages/Alertas.jsx'
 import Patrimonio from './pages/Patrimonio.jsx'
@@ -13,7 +13,7 @@ import FooterFrase from './components/FooterFrase.jsx'
 
 const MENU = [
   { to: '/', label: 'Inicio', end: true },
-  { to: '/posiciones', label: 'Posiciones' },
+  { to: '/buscador', label: 'Buscador' },
   { to: '/historico', label: 'Histórico' },
   { to: '/repositorio', label: 'Repositorio' },
   { to: '/alertas', label: 'Alertas' },
@@ -42,7 +42,8 @@ export default function App() {
       <main className="content">
         <Routes>
           <Route path="/" element={<Inicio />} />
-          <Route path="/posiciones" element={<Posiciones />} />
+          <Route path="/posiciones" element={<Inicio />} />
+          <Route path="/buscador" element={<Buscador />} />
           <Route path="/historico" element={<Historico />} />
           <Route path="/repositorio" element={<Repositorio />} />
           <Route path="/alertas" element={<Alertas />} />
