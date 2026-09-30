@@ -13,6 +13,7 @@ const PERMITIDAS = {
   position_notes: ['insert'],
   repositorio: ['insert', 'update', 'upsert'],
   verdict_history: ['insert'],
+  app_state: ['update', 'upsert'],   // claves de estado (btc_wallet, liquidez, bloques_objetivo…): upsert por `key` (30/09/2026)
 }
 
 export default async function handler(req, res) {
@@ -45,7 +46,8 @@ export default async function handler(req, res) {
     if (accion === 'insert') {
       resultado = await rest(tabla, { method: 'POST', body: filas, prefer: 'return=representation' })
     } else if (accion === 'upsert') {
-      resultado = await rest(tabla, { method: 'POST', body: filas, prefer: 'return=representation,resolution=merge-duplicates' })
+      const destino = tabla === 'app_state' ? 'app_state?on_conflict=key' : tabla
+      resultado = await rest(destino, { method: 'POST', body: filas, prefer: 'return=representation,resolution=merge-duplicates' })
     } else {
       const q = Object.entries(filtro).map(([k, v]) => `${encodeURIComponent(k)}=eq.${encodeURIComponent(String(v))}`).join('&')
       resultado = await rest(`${tabla}?${q}`, { method: 'PATCH', body: filas[0], prefer: 'return=representation' })
