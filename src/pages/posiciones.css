@@ -226,3 +226,54 @@
   background: var(--superficie);
 }
 .estrategia-bloque textarea:focus { outline: none; border-color: var(--azul, #2E6BF6); }
+
+/* ─── Cartera v3 (30/09/2026): tablas por bloque, subtotales, Tesis ─── */
+.pos-layout.embed { margin: 14px 0; }
+.pos-layout.embed .pos-head h2 { margin: 0 0 10px; font-size: 17px; }
+.bloques-tablas { display: grid; gap: 12px; }
+.bloque-card { padding: 0; }
+.bloque-cab {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 9px 12px; border-bottom: 1px solid var(--borde); background: var(--papel);
+  border-radius: var(--radius) var(--radius) 0 0; cursor: help;
+}
+.bq-dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 7px; vertical-align: middle; flex: none; }
+.bloque-nombre { font: 600 12.5px var(--font-marca); letter-spacing: .01em; }
+.bloque-n { color: var(--texto-neutro); font-size: 11.5px; }
+.bloque-chips { margin-left: auto; display: flex; gap: 10px; align-items: center; font-size: 11.5px; }
+.chip-peso { border: 1px solid var(--borde); border-radius: 12px; padding: 2px 9px; background: var(--superficie); color: var(--texto-sec); }
+.chip-peso i { font-style: normal; color: var(--texto-neutro); margin: 0 3px; }
+.chip-peso b { font-weight: 700; }
+.chip-peso.rojo b { color: var(--baja); }
+.chip-peso.ambar b { color: var(--aviso); }
+.chip-peso.ok b { color: var(--texto-sec); }
+.chip-gp { font-weight: 600; }
+.pos-tabla tfoot td { border-top: 2px solid var(--borde); border-bottom: none; background: var(--papel); font-weight: 600; color: var(--texto-sec); }
+.pos-tabla tfoot td.col-clave { background: var(--papel); }
+.pos-tabla td.calc { color: var(--texto-neutro); font-style: italic; }
+.pos-tabla td.falta { color: var(--aviso); }
+
+.barra-tesis { display: inline-flex; align-items: center; gap: 8px; }
+.bt-pista { position: relative; display: inline-block; width: 64px; height: 7px; border-radius: 4px; background: var(--borde); overflow: hidden; }
+.pos-tabla.tesis th, .pos-tabla.tesis td { padding-left: 6px; padding-right: 6px; }
+.pos-tabla.tesis td.clase { font-size: 11px; }
+.bt-relleno { position: absolute; top: 0; bottom: 0; border-radius: 4px; }
+.bt-relleno.pos { background: var(--azul-belar); }
+.bt-relleno.neg { background: var(--baja); }
+.bt-cero { position: absolute; top: -1px; bottom: -1px; width: 2px; background: var(--texto); margin-left: -1px; }
+.bt-txt { font-size: 11px; color: var(--texto-sec); white-space: nowrap; }
+
+.precios-ticket { margin: 6px 0 12px; }
+.precios-ticket h3 { margin: 6px 0; font-size: 14px; }
+.precios-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.precios-grid label { display: grid; gap: 4px; font-size: 11px; color: var(--texto-neutro); font-family: var(--font-ui); }
+.precios-grid input { font: 500 13px var(--font-datos); padding: 6px 8px; border-radius: 7px; border: 1px solid var(--borde); width: 100%; box-sizing: border-box; text-align: right; }
+.attr-selects { grid-template-columns: 1fr 1fr; }
+.alta-nota { font-size: 11.5px; color: var(--texto-sec); margin: 10px 0 0; line-height: 1.45; }
+.pos-panel dd .bq-dot { margin-right: 5px; }
+.pos-panel dd .calc { color: var(--texto-neutro); font-style: italic; }
+
+@media (max-width: 900px) {
+  .bloque-chips { margin-left: 0; width: 100%; }
+  .bt-pista { width: 60px; }
+}
