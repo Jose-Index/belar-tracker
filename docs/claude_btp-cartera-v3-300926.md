@@ -80,6 +80,10 @@ del 30/09) que se refresca una vez al día desde el screener de Yahoo Finance.
   (20:30 UTC) se refresca solo (2-3 minutos, progreso en pantalla); botón "Actualizar" para forzar.
   Además un cron de Vercel a las 21:40 UTC L-V (solo actúa si el proyecto lo despliega como Production;
   en Preview no corre). Belar también puede lanzarlo por curl con BELAR_TOKEN.
+- Yahoo desde Vercel (verificado el 30/09/2026 con `?paso=prueba`): cookie, crumb, screener, spark y chart funcionan
+  con el `User-Agent` mínimo de api/quotes (`Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)`); con el UA completo
+  de Chrome Yahoo devuelve 429 en todas las puertas. Regla: en api/*.js el UA de Yahoo es siempre el mínimo (`H` de
+  api/_yahoo.js). Spark se pide con sesión y, si falla un lote, esos símbolos se piden por chart (4 en paralelo).
 - Auth de las rutas que trabajan (`universo-refresh`, `universo-series`): BELAR_TOKEN, CRON_SECRET o el JWT
   de sesión Supabase del usuario (verificado contra `/auth/v1/user` con la clave publicable).
   `GET /api/universo` (consulta) es abierta, como `/api/quotes`.
@@ -129,7 +133,7 @@ alter table universo enable row level security;   -- sin políticas: solo la cla
 ## 4. Pendiente / siguientes pasos
 - Ejecutar el DDL; asignar `bloque` a las 25 posiciones abiertas por API (Belar) y rellenar `entry_price`
   (alertas de Belar y capturas del sábado 03/10).
-- Primer refresco del universo en producción y comprobación de que Yahoo acepta el crumb desde Vercel
-  (si no: plan B, refresco desde Chrome de José con el mismo código).
+- Primer refresco del universo en producción (Yahoo ya comprobado desde Vercel el 30/09; el plan B —refresco desde
+  Chrome de José— queda solo como reserva).
 - XIRR por bloque en el panel mensual; GESTIÓN DELEGADA y BRK frente al S&P a 1/3/12 meses.
 - Fase 3: repositorio, alertas.
