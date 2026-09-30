@@ -38,6 +38,15 @@ const tareas = () => GRUPOS.flatMap((g, gi) => SECTORES.map(sector => ({ gi, sec
 const monedaCap = c => c === 'GBp' ? 'GBP' : c === 'ZAc' ? 'ZAR' : c === 'ILA' ? 'ILS' : c
 const num = v => (typeof v === 'number' && Number.isFinite(v)) ? v : null
 const fecha = ts => ts ? new Date(ts * 1000).toISOString().slice(0, 10) : null
+// Próxima fecha de resultados: Yahoo mezcla la última publicada (earningsTimestamp) con la ventana de la
+// siguiente (earningsTimestampStart/End). Se toma la primera futura; si no hay ninguna, la última conocida
+// (queda en el pasado y el filtro de ≤15 días no la considera).
+function fechaProxima(q) {
+  const ayer = Math.floor(Date.now() / 1000) - 86400
+  const c = [q.earningsTimestamp, q.earningsTimestampStart, q.earningsTimestampEnd].map(Number).filter(t => t > 0)
+  const fut = c.filter(t => t >= ayer).sort((a, b) => a - b)
+  return fecha(fut[0] ?? (c.length ? Math.max(...c) : null))
+}
 
 function fila(q, g, sector, fx) {
   const mc = monedaCap(q.currency)
@@ -59,7 +68,7 @@ function fila(q, g, sector, fx) {
     pe_trailing: num(q.trailingPE), pe_forward: num(q.forwardPE), eps_ttm: num(q.epsTrailingTwelveMonths),
     pb: num(q.priceToBook), div_yield: num(q.dividendYield),
     rating: m ? Number(m[1]) : null, rating_label: m ? m[2].trim() : null,
-    earnings_date: fecha(q.earningsTimestamp || q.earningsTimestampStart), earnings_estimada: q.isEarningsDateEstimate ?? null,
+    earnings_date: fechaProxima(q), earnings_estimada: q.isEarningsDateEstimate ?? null,
     ma50, ma200,
     dist_ma50: price && ma50 ? (price / ma50 - 1) * 100 : null,
     dist_ma200: price && ma200 ? (price / ma200 - 1) * 100 : null,
