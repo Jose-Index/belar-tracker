@@ -1,9 +1,14 @@
+// Portada (30/09/2026): Inicio y Posiciones fusionadas en una sola pantalla.
+// Mercados → boxes → bloques (Cartera v3) → posiciones por bloque → evolución → cuentas.
 import { useEffect, useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { serieTWRDesglose } from '../lib/twr'
 import { fetchQuotes } from '../lib/quotes'
 import Mercados from '../components/Mercados.jsx'
+import Bloques from '../components/Bloques.jsx'
 import Evolucion, { BROKER_COLS, BROKER_LBL } from '../components/Evolucion.jsx'
+import Posiciones from './Posiciones.jsx'
 import './inicio.css'
 
 const fmt$ = v => v == null ? '—' : Number(v).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -19,21 +24,37 @@ export default function Inicio() {
   const [liquidez, setLiquidez] = useState({})
   const [btcQty, setBtcQty] = useState(0)
   const [btcPrecio, setBtcPrecio] = useState(null)
+  const [objetivos, setObjetivos] = useState(null)   // app_state.bloques_objetivo (opcional)
+  const location = useLocation()
+  // Alta prellenada desde el Buscador: /?alta=<json>
+  const altaInicial = useMemo(() => {
+    const q = new URLSearchParams(location.search).get('alta')
+    if (!q) return null
+    try { return JSON.parse(q) } catch { return null }
+  }, [location.search])
 
   async function cargar() {
     const [w, p, c, st] = await Promise.all([
       supabase.from('weekly_snapshots').select('*').order('week_end'),
-      supabase.from('positions').select('broker,invested,current_value,entry_price,sl_price,apalancamiento'),
+      supabase.from('positions').select('*'),
       supabase.from('contributions').select('fecha,broker,importe_eur,importe_usd'),
-      supabase.from('app_state').select('key,value').in('key', ['liquidez', 'btc_wallet']),
+      supabase.from('app_state').select('key,value').in('key', ['liquidez', 'btc_wallet', 'bloques_objetivo']),
     ])
     const estado = Object.fromEntries((st.data || []).map(r => [r.key, r.value]))
     setWeeks(w.data || []); setPositions(p.data || [])
     setContribs(c.data || []); setLiquidez(estado.liquidez || {})
     setBtcQty(Number(estado.btc_wallet?.qty) || 0)
+    setObjetivos(estado.bloques_objetivo || null)
     fetchQuotes(['BTC-USD']).then(q => setBtcPrecio(q['BTC-USD']?.price || null))
   }
   useEffect(() => { cargar() }, [])
+
+  // Las posiciones cambian desde la tabla embebida (cierre de semana, altas, cierres…)
+  function posicionesCambiaron(data) {
+    if (data?.positions) setPositions(data.positions)
+    if (data?.liquidez) setLiquidez(data.liquidez)
+    if (data?.btcQty != null) setBtcQty(data.btcQty)
+  }
 
   const serie = useMemo(() => (weeks || []).map(w => ({ fecha: w.week_end, usd: Number(w.total_value) })), [weeks])
 
@@ -130,6 +151,12 @@ export default function Inicio() {
         </div>
       </div>
 
+      <Bloques positions={positions} liquidez={liquidez} objetivos={objetivos} />
+
+      <Posiciones embed onCambio={posicionesCambiaron} seleccionInicial={altaInicial} />
+
+      <Evolucion />
+
       <div className="boxes cuentas num">
         {cuentas.map(c => (
           <div key={c.b} className="card box">
@@ -146,8 +173,6 @@ export default function Inicio() {
           <Periodos per={perBtc} />
         </div>
       </div>
-
-      <Evolucion />
     </div>
   )
 }
