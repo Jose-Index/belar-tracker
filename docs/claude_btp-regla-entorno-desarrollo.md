@@ -100,3 +100,32 @@ Belar hace los commits él mismo con la extensión de Chrome (José solo deja Ch
 6. Botón "Commit changes…" → esperar a `#commit-message-input` (sondeo, tarda) → `execCommand('insertText')` con el mensaje → botón "Commit changes" del diálogo. La URL pasa a `/blob/btp/...`.
 7. Verificar por `raw.githubusercontent.com` (hash) y el bundle servido en btp-belar.vercel.app.
 Ficheros nuevos: `/new/btp/<carpeta>?filename=<nombre>` y mismo procedimiento (insertar en documento vacío).
+
+### Vía C, receta afinada (30/09/2026: 33 commits en un día, 0 fallos de contenido)
+- **Contenido**: el fichero entero va comprimido (gzip + base64) y se descomprime en la página con
+  `DecompressionStream('gzip')`; se sustituye todo el documento con
+  `view.dispatch({changes:{from:0,to:view.state.doc.length,insert}})` y se comprueba el SHA-256 del
+  editor contra el del contenedor; si no coincide, se lanza error y no se confirma. Generador:
+  `/home/claude/viaC/gen.py <ruta>` (el contenedor no persiste entre sesiones: reescribirlo si no está).
+- **Transporte**: las cadenas base64 largas (>3 KB) llegan a veces corruptas por `javascript_tool` (síntoma:
+  `TypeError: Failed to fetch` al descomprimir). Solución: trocear en 3-4 partes, acumular en
+  `window.__b64` con llamadas separadas y comprobar longitud y SHA-256 del base64 antes de descomprimir.
+- **Abrir el diálogo "Commit changes…"** es lo único frágil: `btn.click()` no funciona; el clic por
+  coordenadas, el clic por `ref` y `focus()` + tecla espacio funcionan solo a veces. Lo que ha
+  funcionado siempre: secuencia completa de eventos de puntero por JS sobre el botón
+  (`pointerover, pointerenter, mouseover, pointerdown, mousedown` → `focus()` →
+  `pointerup, mouseup, click`, con `clientX/clientY` en el centro del botón) y esperar 1,5 s a
+  `#commit-message-input`.
+- **Rellenar**: `#commit-message-input` → `focus()`, `select()` (si no, el mensaje se pega al texto por
+  defecto "Update x.js") y `execCommand('insertText')`; descripción en `dialog textarea`.
+  Confirmar con **cmd+Return**. NUNCA pulsar Return suelto con el diálogo abierto: confirma con el
+  mensaje por defecto (pasó una vez el 30/09, commit `4d89781`, contenido correcto).
+- **Verificación**: `git fetch origin btp` y `git show origin/btp:<ruta> | sha256sum` igual al local,
+  y `git log origin/btp -1 --format='%ae'` = permanecer_debuts_5l@icloud.com. Al final del día,
+  `git reset --hard origin/btp` deja el clon limpio (los commits nacen en GitHub, no en el contenedor).
+- **Dos Chrome conectados** a la extensión: hay que elegir uno (`select_browser`); la sesión de GitHub
+  y la de Supabase pueden estar en Chromes distintos. Supabase BTP vive en la cuenta lab@indexvideo.es
+  (org Index Lab); la cuenta de GitHub abre otra org (Index Producciones: tracker antiguo e INDO).
+- **DDL** (30/09/2026): con José logueado como lab@ en Chrome, Belar ejecuta el SQL en el editor de
+  Supabase (Monaco: `window.monaco.editor.getEditors()[0].setValue(sql)` + cmd+Return), tras una
+  consulta de solo lectura que confirme la base (24 posiciones, 109 cierres). Sigue prohibido el DDL por API.
