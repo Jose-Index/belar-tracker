@@ -82,7 +82,7 @@ export default function IngestaCierres({ positions = [], simbolos = [], onDone }
         entry_date: f.entry_date, closed_date: f.fecha_cierre,
         invested: f.invertido, closed_value: f.valorCierre,
         motivo: f.motivo, apalancamiento: f.apalancamiento,
-        clase: f.pos?.clase, fuente: f.pos?.fuente,
+        clase: f.pos?.clase, fuente: f.pos?.fuente, bloque: f.pos?.bloque,
         posId: f.pos?.id,
       })
       if (r.error) { setErr(`${f.ticker}: ${r.error.message}`); break }
