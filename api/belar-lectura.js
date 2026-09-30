@@ -8,7 +8,7 @@ import { autorizar, rest, esquema, sinCache, ahora } from './_belar.js'
 const TABLAS_LIBRES = new Set([
   'positions', 'position_history', 'position_notes', 'alerts', 'calendar_events',
   'weekly_snapshots', 'position_snapshots', 'contributions', 'symbols', 'repositorio',
-  'plan_rector', 'hitos', 'quotes', 'frases', 'yearly_results', 'app_state', 'verdict_history', 'positions_sandbox',
+  'plan_rector', 'hitos', 'quotes', 'frases', 'yearly_results', 'app_state', 'verdict_history', 'positions_sandbox', 'universo',
 ])
 
 export default async function handler(req, res) {
