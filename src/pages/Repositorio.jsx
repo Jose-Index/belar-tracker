@@ -4,9 +4,10 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import './inicio.css'
 
-const ESTADOS = ['ENTRAR_YA', 'RADAR', 'CERRADA']
-const LBL = { ENTRAR_YA: 'ENTRAR YA', RADAR: 'RADAR', CERRADA: 'CERRADAS' }
-const COL = { ENTRAR_YA: 'var(--alza)', RADAR: 'var(--ambar, #F0A020)', CERRADA: 'var(--texto-neutro)' }
+// SOMBRA (30/09/2026): ideas no ejecutadas o descartadas, con precio y fecha, seguidas en papel (§3).
+const ESTADOS = ['ENTRAR_YA', 'RADAR', 'SOMBRA', 'CERRADA']
+const LBL = { ENTRAR_YA: 'ENTRAR YA', RADAR: 'RADAR', SOMBRA: 'SOMBRA', CERRADA: 'CERRADAS' }
+const COL = { ENTRAR_YA: 'var(--alza)', RADAR: 'var(--ambar, #F0A020)', SOMBRA: 'var(--azul-belar)', CERRADA: 'var(--texto-neutro)' }
 const fFecha = d => d ? d.slice(2, 10).split('-').reverse().join('/') : '—'
 
 export default function Repositorio() {
