@@ -6,7 +6,9 @@
 //   earn_dias=15 (excluye resultados a ≤N días; 0 = no filtra)   ma50=1  ma200=1  p3m=1
 //   q=texto (símbolo o nombre)   orden=cap_usd.desc   limite=300 (máx. 1000)   estado=1 (solo estado del refresco)
 
-import { rest, sinCache, ahora } from './_belar.js'
+import { rest, contar, sinCache, ahora } from './_belar.js'
+
+const MERCADOS = ['US', 'EU', 'CN', 'JPKR', 'OTROS']
 
 const CAPS = { MG: ['cap_usd.gte.10000000000'], M: ['cap_usd.gte.2000000000', 'cap_usd.lt.10000000000'], P: ['cap_usd.lt.2000000000'] }
 const csv = v => String(v || '').split(',').map(s => s.trim()).filter(Boolean)
@@ -18,13 +20,14 @@ export default async function handler(req, res) {
   const p = req.query
   try {
     if (String(p.estado || '') === '1') {
-      const [st, n] = await Promise.all([
+      // Recuentos exactos por mercado (Content-Range): el max-rows de 1000 de Supabase no los recorta
+      const [st, ...cuentas] = await Promise.all([
         rest(`app_state?select=value,updated_at&key=eq.universo_refresh`),
-        rest(`universo?select=market&activo=eq.true`),
+        ...MERCADOS.map(m => contar(`universo?select=symbol&activo=eq.true&market=eq.${m}`)),
       ])
-      const porMercado = {}
-      for (const r of n || []) porMercado[r.market] = (porMercado[r.market] || 0) + 1
-      res.status(200).json({ estado: st?.[0]?.value || null, total: (n || []).length, por_mercado: porMercado, served_at: ahora() }); return
+      const porMercado = Object.fromEntries(MERCADOS.map((m, i) => [m, cuentas[i]]))
+      const total = cuentas.reduce((a, b) => a + b, 0)
+      res.status(200).json({ estado: st?.[0]?.value || null, total, por_mercado: porMercado, served_at: ahora() }); return
     }
 
     const f = ['activo=eq.true']
