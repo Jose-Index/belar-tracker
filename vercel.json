@@ -2,5 +2,12 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "framework": "vite",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
+  "functions": {
+    "api/universo-refresh.js": { "maxDuration": 60 },
+    "api/universo-series.js": { "maxDuration": 30 }
+  },
+  "crons": [
+    { "path": "/api/universo-refresh", "schedule": "40 21 * * 1-5" }
+  ]
 }
