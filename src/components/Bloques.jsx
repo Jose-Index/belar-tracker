@@ -10,8 +10,8 @@ const fmtPct = (v, d = 1) => v == null ? '—' : (v > 0 ? '+' : '') + v.toFixed(
 const fmtPP = v => v == null ? '—' : (v > 0 ? '+' : '') + v.toFixed(1)
 const pctClass = v => v == null ? '' : v > 0 ? 'up' : v < 0 ? 'down' : ''
 
-export default function Bloques({ positions, liquidez, objetivos, onBloque }) {
-  const w = useMemo(() => pesosBloques(positions, liquidez, objetivos), [positions, liquidez, objetivos])
+export default function Bloques({ positions, liquidez, objetivos, wallet, onBloque }) {
+  const w = useMemo(() => pesosBloques(positions, liquidez, objetivos, wallet), [positions, liquidez, objetivos, wallet])
   const datosReal = w.todas.map(f => ({ name: f.corto, value: Math.max(0, f.real || 0), color: f.color, f }))
   const datosObj = w.todas.map(f => ({ name: f.corto, value: f.objetivo, color: f.color, f }))
   const fuera = w.todas.filter(f => f.semaforo === 'rojo')
@@ -19,7 +19,7 @@ export default function Bloques({ positions, liquidez, objetivos, onBloque }) {
   return (
     <div className="card bloques num">
       <div className="bloques-head">
-        <h2>Bloques <span className="hist-n">pesos reales frente a objetivo · base ${fmt$(w.base)} (posiciones + liquidez)</span></h2>
+        <h2>Bloques <span className="hist-n">pesos reales frente a objetivo · base ${fmt$(w.base)} (posiciones + liquidez{w.walletUsd ? ' + ₿ wallet' : ''})</span></h2>
         {fuera.length
           ? <span className="bloques-aviso rojo" title={`Regla §7.3: un bloque a más de ${DESVIO_ROJO} puntos de su objetivo no recibe entradas nuevas hasta volver al rango.`}>
               ● fuera de rango: {fuera.map(f => f.corto).join(' · ')}
@@ -52,7 +52,7 @@ export default function Bloques({ positions, liquidez, objetivos, onBloque }) {
               <th title="Posiciones abiertas en el bloque">N</th>
               <th title="Valor actual del bloque (USD)">VALOR</th>
               <th title="G/P abierto del bloque">G/P</th>
-              <th title="Peso real sobre posiciones + liquidez">REAL</th>
+              <th title="Peso real sobre posiciones + liquidez + wallet BTC">REAL</th>
               <th title="Peso objetivo (Cartera v3)">OBJ.</th>
               <th title={`Desvío en puntos porcentuales. Rojo >${DESVIO_ROJO} pp (sin entradas nuevas hasta volver al rango), ámbar >${DESVIO_AMBAR} pp.`}>DESVÍO</th>
               <th title="Dólares que faltan (+) o sobran (−) para estar en el objetivo">$ AL OBJ.</th>
@@ -62,10 +62,10 @@ export default function Bloques({ positions, liquidez, objetivos, onBloque }) {
             {w.todas.map(f => (
               <tr key={f.id} className={'sem-' + f.semaforo + (onBloque && f.id !== 'CAJA' ? ' clic' : '')}
                   title={f.ayuda} onClick={() => onBloque && f.id !== 'CAJA' && onBloque(f.id)}>
-                <td className="tl"><i className="bq-dot" style={{ background: f.color }} />{f.label}</td>
+                <td className="tl"><i className="bq-dot" style={{ background: f.color }} />{f.label}{f.wallet ? <span className="bq-wallet" title="Incluye la wallet BTC personal, valorada a precio de mercado (sin coste conocido: no entra en el G/P)"> · incl. ₿ wallet ${fmt$(f.wallet)}</span> : null}</td>
                 <td>{f.id === 'CAJA' ? '' : f.n}</td>
                 <td>${fmt$(f.valor)}</td>
-                <td className={pctClass(f.gp)}>{f.id === 'CAJA' ? '' : fmtPct(f.gpPct)}</td>
+                <td className={pctClass(f.gp)} title={f.wallet ? 'G/P de las posiciones de bróker; la wallet no tiene coste registrado' : ''}>{f.id === 'CAJA' ? '' : fmtPct(f.gpPct)}</td>
                 <td className="real">{f.real == null ? '—' : f.real.toFixed(1) + '%'}</td>
                 <td className="obj">{f.objetivo}%</td>
                 <td className={'desvio ' + f.semaforo}>{fmtPP(f.desvio)}</td>
