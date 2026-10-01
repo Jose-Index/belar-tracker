@@ -8,7 +8,7 @@ import { AreaChart, Area, YAxis, XAxis, Tooltip, ResponsiveContainer, ReferenceL
 import { getSimbolos, yahooDe, fetchQuotes, pctDia, pctSem, diasAbiertos, frescura, intervaloPrecios } from '../lib/quotes'
 import { useCache, useSondeo, cargar, fijar } from '../lib/cache'
 import { eventosProximos } from '../lib/ia'
-import { BLOQUES, BLOQUE_IDS, BLOQUE_DE_ID, BTC_ESTRATEGIAS, estrategiaBTC, bloqueDe, bloquePorDefecto, pesosBloques, TESIS_SL, TESIS_TP, tesisSL, tesisTP } from '../lib/bloques'
+import { BLOQUES, BLOQUE_IDS, BLOQUE_DE_ID, BTC_ESTRATEGIAS, estrategiaBTC, esPuente, bloqueDe, bloquePorDefecto, pesosBloques, TESIS_SL, TESIS_TP, tesisSL, tesisTP } from '../lib/bloques'
 import IngestaIA from '../components/IngestaIA.jsx'
 import { useMovil, useSinScroll, useArrastreCierre } from '../lib/movil'
 import './posiciones.css'
@@ -550,6 +550,7 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
           <div className="pos-leyenda num">
             <span><i className="ev-dot">●</i> evento confirmado · <i className="ev-dot estimado">○</i> fecha estimada, puede desviarse (rojo si faltan &lt;3 días)</span>
             <span><i className="badge new">NEW</i> alta por captura IA</span>
+            <span><i className="chip-estr chip-puente">Puente</i> Tesis abierta antes de la regla (30/09): se gestiona como Tesis, no se mide como Tesis</span>
             <span><b>TESIS</b> SL/TP en gris = calculados (−11/+23,5 sobre la entrada), aún no puestos en el ticket</span>
             <EstadoVigia v={raw.vigia} n={raw.positions.filter(p => p.sl_type === 'ALERTA').length} />
           </div>
@@ -613,6 +614,7 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
                 <div className="pl-l1">
                   <span className="ticker">{p.ticker}</span>
                   {estrategiaBTC(p) && <span className="chip-estr">{estrategiaBTC(p).label}</span>}
+                  {esPuente(p) && <span className="chip-estr chip-puente" title="Tesis PUENTE: abierta antes de adoptar la regla (30/09/2026). Se gestiona con SL/TP de la Tesis pero no cuenta en la medición de la Tesis nativa.">Puente</span>}
                   {p.sl_type === 'ALERTA' && <span className="vigia-bell" title={tituloVigia(p)}>🔔</span>}
                   {p.evs.length > 0 && <span className={'ev-dot' + (p.evUrgente ? ' urgente' : '') + (p.evConfirmado ? '' : ' estimado')}>{p.evConfirmado ? '●' : '○'}</span>}
                   <span className="broker">{p.broker}</span>
@@ -690,6 +692,7 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
               <td className="tl ticker">
                 {p.ticker}
                 {estrategiaBTC(p) && <span className="chip-estr">{estrategiaBTC(p).label}</span>}
+                {esPuente(p) && <span className="chip-estr chip-puente" title="Tesis PUENTE: abierta antes de adoptar la regla (30/09/2026). Se gestiona con SL/TP de la Tesis pero no cuenta en la medición de la Tesis nativa.">Puente</span>}
                 {p.sl_type === 'ALERTA' && <span className="vigia-bell" title={tituloVigia(p)}>🔔</span>}
                 {p.ingest_badge === 'NEW' && <span className="badge new">NEW</span>}
                 {p.ingest_badge === 'UPD' && <span className="badge upd">·</span>}
@@ -912,7 +915,7 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
   return (
     <aside className="pos-panel card" {...arrastre}>
       <div className="pos-panel-head">
-        <h2>{p.ticker} <span className="broker">{p.broker}</span>{estrategiaBTC(p) && <span className="chip-estr">{estrategiaBTC(p).label}</span>}</h2>
+        <h2>{p.ticker} <span className="broker">{p.broker}</span>{estrategiaBTC(p) && <span className="chip-estr">{estrategiaBTC(p).label}</span>}{esPuente(p) && <span className="chip-estr chip-puente" title="Tesis PUENTE: abierta antes de adoptar la regla (30/09/2026). Se gestiona con SL/TP de la Tesis pero no cuenta en la medición de la Tesis nativa.">Puente</span>}</h2>
         <span className="cab-acciones">
           <button className="btn-cerrar-posicion" onClick={onCerrar} title="Cierra la posición y la pasa al histórico (pide confirmación)">Cerrar posición</button>
           <button className="btn-x" onClick={onClose} aria-label="Cerrar detalle" title="Cerrar detalle">✕</button>
