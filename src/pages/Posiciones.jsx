@@ -5,10 +5,12 @@ import {
 } from '../lib/posiciones-db'
 import { exportBackup } from '../lib/backup'
 import { AreaChart, Area, YAxis, XAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
-import { getSimbolos, yahooDe, fetchQuotes, pctDia, pctSem, diasAbiertos, frescura } from '../lib/quotes'
+import { getSimbolos, yahooDe, fetchQuotes, pctDia, pctSem, diasAbiertos, frescura, intervaloPrecios } from '../lib/quotes'
+import { useCache, useSondeo, cargar } from '../lib/cache'
 import { eventosProximos } from '../lib/ia'
 import { BLOQUES, BLOQUE_DE_ID, bloqueDe, bloquePorDefecto, pesosBloques, TESIS_SL, TESIS_TP, tesisSL, tesisTP } from '../lib/bloques'
 import IngestaIA from '../components/IngestaIA.jsx'
+import { useMovil, useSinScroll } from '../lib/movil'
 import './posiciones.css'
 
 // ─── Constantes de la spec ───────────────────────────────────────────────
@@ -46,8 +48,14 @@ const pctClass = v => v == null ? '' : v > 0 ? 'up' : v < 0 ? 'down' : ''
 
 // `embed`: dentro de la portada (Inicio). `onCambio`: avisa a la portada de que
 // las posiciones han cambiado (para recalcular boxes y bloques).
+// Posiciones + símbolos + eventos de calendario en una carga, cacheada y compartida (lib/cache.js)
+async function loaderPosiciones() {
+  const [data, simbolos, eventos] = await Promise.all([fetchPosiciones(), getSimbolos(), eventosProximos()])
+  return { ...data, simbolos, eventos }
+}
+
 export default function Posiciones({ embed = false, onCambio, seleccionInicial = null, wallet: walletProp = null }) {
-  const [raw, setRaw] = useState(null)          // {positions, snapshots, liquidez, lastClose}
+  const { data: raw } = useCache('posiciones', loaderPosiciones, { ttl: 60e3, persist: true })   // {positions, snapshots, liquidez, lastClose, simbolos, eventos}
   const [orden, setOrden] = useState(() => localStorage.getItem('btp-orden') || 'entrada')
   const [desc, setDesc] = useState(() => localStorage.getItem('btp-orden-desc') === '1')
   const [selId, setSelId] = useState(null)
@@ -61,28 +69,29 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
   const [alta, setAlta] = useState(null)        // null | {} | {…prefill}
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(null)
-  const [quotes, setQuotes] = useState({})     // yahoo_symbol -> quote
-  const [simbolos, setSimbolos] = useState([])
-  const [eventos, setEventos] = useState([])
+  const simbolos = raw?.simbolos || []
+  const eventos = raw?.eventos || []
+  // vari/sem y wallet: precios vivos vía Yahoo, sondeados (60 s con mercado abierto) y compartidos
+  const ys = useMemo(() => (raw?.positions || []).map(p => yahooDe(p.ticker, simbolos)).filter(Boolean).concat(['BTC-USD']), [raw])
+  const claveQuotes = 'quotes:pos:' + ys.join(',')
+  const { data: quotesCache } = useSondeo(claveQuotes, () => fetchQuotes(ys),
+    { intervalo: intervaloPrecios, persist: true, activo: !!raw, deps: [claveQuotes] })
+  const quotes = quotesCache || {}     // yahoo_symbol -> quote
   const [ingesta, setIngesta] = useState(false)  // ACTUALIZAR POR CAPTURA fuera del cierre
   const tablaRef = useRef(null)
+  const movil = useMovil()
+  useSinScroll(movil && !!selId && !cierre)   // en móvil el detalle es una hoja: el fondo no se mueve
 
   useEffect(() => { localStorage.setItem('btp-orden', orden) }, [orden])
   useEffect(() => { localStorage.setItem('btp-orden-desc', desc ? '1' : '0') }, [desc])
   useEffect(() => { if (seleccionInicial) setAlta(seleccionInicial) }, [seleccionInicial])
 
+  // Tras cualquier escritura: recarga forzada de la caché (la portada se entera por onCambio)
   async function recargar() {
-    const data = await fetchPosiciones()
-    setRaw(data)
+    const data = await cargar('posiciones', loaderPosiciones, { forzar: true, persist: true })
     onCambio && onCambio(data)
-    // vari/sem: precios de los activos vía Yahoo (bajo demanda, con frescura)
-    const sims = await getSimbolos()
-    setSimbolos(sims)
-    const ys = data.positions.map(p => yahooDe(p.ticker, sims)).filter(Boolean)
-    setQuotes(await fetchQuotes(ys))
-    setEventos(await eventosProximos())
+    return data
   }
-  useEffect(() => { recargar() }, [])
 
   // Wallet BTC personal: cantidad de app_state (raw.btcQty) valorada al precio vivo de BTC-USD
   // (o al que traiga la portada). Entra en la base de los pesos y en el bloque BTC (30/09/2026).
@@ -444,7 +453,7 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
 
         <div className="bloques-tablas" ref={tablaRef}>
           {grupos.map(g => (
-            <TablaBloque key={g.b.id} g={g} cierre={cierre} draft={draft} setDraft={setDraft} keyNav={keyNav}
+            <TablaBloque key={g.b.id} g={g} cierre={cierre} draft={draft} setDraft={setDraft} keyNav={keyNav} movil={movil}
                          selId={selId} onSel={id => !cierre && setSelId(id)} onBorrar={borrarEnCierre} />
           ))}
           {!grupos.length && <p className="placeholder">Sin posiciones abiertas.</p>}
@@ -467,7 +476,11 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
       </div>
 
       {sel && !cierre && (
-        <PanelDetalle p={sel} onClose={() => setSelId(null)} onChange={recargar} onCerrar={() => cerrarManual(sel)} />
+        <>
+          {/* Móvil: el detalle sube como hoja sobre un fondo que cierra al tocarlo */}
+          <div className="pos-panel-fondo" onClick={() => setSelId(null)} aria-hidden="true" />
+          <PanelDetalle p={sel} onClose={() => setSelId(null)} onChange={recargar} onCerrar={() => cerrarManual(sel)} />
+        </>
       )}
       {alta && <AltaDialog inicial={alta} onClose={() => cerrarAlta()} onDone={() => { cerrarAlta(); recargar() }} />}
     </div>
@@ -475,7 +488,7 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
 }
 
 // ─── Una tabla por bloque, con cabecera de bloque y fila de subtotal ─────
-function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorrar }) {
+function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorrar, movil = false }) {
   const { b, peso, rows, wallet } = g
   const esTesis = b.id === 'TESIS'
   const inv = rows.reduce((a, p) => a + Number(p.invested || 0), 0)
@@ -483,12 +496,16 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
   const gp = val - (wallet?.usd || 0) - inv                 // G/P solo de las posiciones de bróker
   const gpPct = inv ? gp / inv * 100 : null
   const pesoSum = rows.reduce((a, p) => a + (p.peso || 0), 0) + (wallet?.peso || 0)
+  const fFecha = d => d ? d.slice(2).split('-').reverse().join('/') : '—'
+
+  // Móvil (fuera del modo cierre): lista de tarjetas de dos líneas, sin tabla
+  const lista = movil && !cierre
 
   return (
-    <div className="card pos-tabla-wrap bloque-card">
+    <div className={'card pos-tabla-wrap bloque-card' + (lista ? ' lista' : '')}>
       <div className="bloque-cab" title={b.ayuda}>
         <span className="bq-dot" style={{ background: b.color }} />
-        <span className="bloque-nombre">{b.label}</span>
+        <span className="bloque-nombre">{lista ? b.corto : b.label}</span>
         <span className="bloque-n num">{rows.length + (wallet ? 1 : 0)}</span>
         {peso && (
           <span className="bloque-chips num">
@@ -499,6 +516,53 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
           </span>
         )}
       </div>
+      {lista ? (
+        <ul className="pos-lista num">
+          {rows.map(p => (
+            <li key={p.id} onClick={() => onSel(p.id)} className={(selId === p.id ? 'sel ' : '') + 'fondo-' + p.estado}>
+              <div className="pl-izq">
+                <div className="pl-l1">
+                  <span className="ticker">{p.ticker}</span>
+                  {p.evs.length > 0 && <span className={'ev-dot' + (p.evUrgente ? ' urgente' : '') + (p.evConfirmado ? '' : ' estimado')}>{p.evConfirmado ? '●' : '○'}</span>}
+                  <span className="broker">{p.broker}</span>
+                  {p.estado && p.estado !== 'OK' && <span className={'chip chip-' + p.estado}>{ESTADOS[p.estado]?.label || p.estado}</span>}
+                  {p.apalancamiento > 1 && <span className="pl-apal">x{Number(p.apalancamiento)}</span>}
+                </div>
+                <div className="pl-l2">
+                  {esTesis
+                    ? <BarraTesis p={p} etiqueta />
+                    : <>{fFecha(p.entry_date)} · inv {fmt$(p.invested)}</>}
+                </div>
+              </div>
+              <div className="pl-der">
+                <div className="pl-valor">{fmt$(p.valor)}</div>
+                <div className={'pl-gp ' + pctClass(p.gpPct)}>{fmtPct(p.gpPct)} <i>{fmt$(p.gp)}</i></div>
+                <div className="pl-peso">{p.peso == null ? '' : p.peso.toFixed(1) + '% cartera'}</div>
+              </div>
+            </li>
+          ))}
+          {wallet && (
+            <li className="fila-wallet">
+              <div className="pl-izq">
+                <div className="pl-l1"><span className="ticker">₿ wallet</span><span className="broker">wallet</span></div>
+                <div className="pl-l2">{wallet.qty} ₿ {wallet.precio ? '× $' + fmt$(wallet.precio) : '· sin precio'}</div>
+              </div>
+              <div className="pl-der">
+                <div className="pl-valor">{wallet.precio ? fmt$(wallet.usd) : '—'}</div>
+                <div className="pl-peso">{wallet.peso == null ? '' : wallet.peso.toFixed(1) + '% cartera'}</div>
+              </div>
+            </li>
+          )}
+          <li className="subtotal">
+            <div className="pl-izq">Σ {b.corto} · inv {fmt$(inv)}</div>
+            <div className="pl-der">
+              <div className="pl-valor">{fmt$(val)}</div>
+              <div className={'pl-gp ' + pctClass(gp)}>{fmtPct(gpPct)} <i>{fmt$(gp)}</i></div>
+              <div className="pl-peso">{pesoSum.toFixed(1)}% cartera</div>
+            </div>
+          </li>
+        </ul>
+      ) : (
       <table className={'pos-tabla num' + (cierre ? ' modo-cierre' : '') + (esTesis ? ' tesis' : '')}>
         <thead>
           <tr>
@@ -615,18 +679,19 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
           </tr>
         </tfoot>
       </table>
+      )}
     </div>
   )
 }
 
 // Barra del recorrido −11 → +23,5 con la marca de entrada y el texto "faltan X pp al TP"
-function BarraTesis({ p }) {
+function BarraTesis({ p, etiqueta = false }) {
   if (p.ret == null) return <span className="calc">—</span>
   const rango = TESIS_TP - TESIS_SL
   const pos = Math.max(0, Math.min(1, (p.ret - TESIS_SL) / rango))
   const cero = (0 - TESIS_SL) / rango
   const izq = Math.min(pos, cero), ancho = Math.abs(pos - cero)
-  const txt = p.ret >= TESIS_TP ? 'TP alcanzado' : p.ret <= TESIS_SL ? 'en SL' : `${p.aTP.toLocaleString('es-ES', { maximumFractionDigits: 1 })} pp`
+  const txt = p.ret >= TESIS_TP ? 'TP alcanzado' : p.ret <= TESIS_SL ? 'en SL' : `${p.aTP.toLocaleString('es-ES', { maximumFractionDigits: 1 })} pp${etiqueta ? ' al TP' : ''}`
   return (
     <span className="barra-tesis" title={`Retorno del precio ${fmtPct(p.ret)} · faltan ${p.aTP?.toFixed(1)} pp al TP · ${p.aSL?.toFixed(1)} pp sobre el SL`}>
       <i className="bt-pista">
