@@ -110,3 +110,22 @@ const miles = n => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
 export const fmtCap = v => v == null ? '—' : v >= 1e12 ? (v / 1e12).toLocaleString('es-ES', { maximumFractionDigits: 2 }) + ' B$' : miles(v / 1e6) + ' M$'
 export const capBucket = v => v == null ? '' : v >= 200e9 ? 'Mega' : v >= 10e9 ? 'Grande' : v >= 2e9 ? 'Media' : v >= 300e6 ? 'Pequeña' : 'Micro'
 export const diasHasta = d => d ? Math.ceil((new Date(d + 'T00:00:00') - Date.now()) / 86400e3) : null
+
+// ─── Estrellas del Buscador (01/10/2026) ─────────────────────────────────────
+// app_state.buscador_estrellas = { SYMBOL: { fecha: 'YYYY-MM-DD', precio, moneda, nombre } }.
+// La estrella guarda fecha y precio al marcar: es la cartera sombra sin trabajo extra y mide el ojo de José
+// (estrellas no ejecutadas frente al S&P y frente a las ejecutadas, en el panel mensual).
+export async function leerEstrellas() {
+  const { data } = await supabase.from('app_state').select('value').eq('key', 'buscador_estrellas').maybeSingle()
+  return data?.value || {}
+}
+export async function guardarEstrellas(estrellas) {
+  return supabase.from('app_state').upsert({ key: 'buscador_estrellas', value: estrellas, updated_at: new Date().toISOString() })
+}
+// Freno visible de la Tesis: líneas abiertas (máx. 8) y entradas del mes en curso (máx. 4)
+export async function contadoresTesis() {
+  const { data } = await supabase.from('positions').select('ticker,bloque,entry_date')
+  const mes = new Date().toISOString().slice(0, 7)
+  const tesis = (data || []).filter(p => (p.bloque || 'TESIS') === 'TESIS')
+  return { lineas: tesis.length, entradasMes: tesis.filter(p => (p.entry_date || '').startsWith(mes)).length }
+}
