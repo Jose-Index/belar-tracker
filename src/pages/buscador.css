@@ -226,3 +226,6 @@ button.estrella { border: none; background: none; padding: 0 6px 0 0; font-size:
 .tabla-busc tr.fuera td:not(.estrella-td):not(.ticker), .tabla-busc tr.fuera .ticker .nombre,
 .busc-lista li.fuera .bl-izq .nombre, .busc-lista li.fuera .bl-l2, .busc-lista li.fuera .bl-der { opacity: .5; }
 .tag-fuera { margin-left: 8px; font: 500 10.5px var(--font-ui); color: var(--texto-neutro); border: 1px dashed var(--borde); border-radius: 10px; padding: 1px 7px; white-space: nowrap; }
+.chip-borrar { font: 500 12px var(--font-ui); border: 1px solid var(--borde); border-radius: 14px; padding: 4px 12px; background: var(--superficie); color: var(--texto-neutro); cursor: pointer; }
+.chip-borrar:hover { color: var(--baja); border-color: var(--baja); }
+.chip-borrar.confirma { color: #fff; background: var(--baja); border-color: var(--baja); font-weight: 600; }
