@@ -6,7 +6,7 @@
 export const BLOQUES = [
   { id: 'BTC',       label: 'BTC',                 corto: 'BTC',        objetivo: 10, color: '#17202E',
     ayuda: 'Cuatro estrategias, cada posición etiquetada: Base (eToro, sin salida, horizonte 2036, 110 €/mes), Wallet (BTC propio), Combo MA200 v1 (VBTC.DE, entra y sale por la regla) y Táctica (VBTC.DE, con stop).' },
-  { id: 'ORO',       label: 'ORO núcleo',          corto: 'ORO',        objetivo: 8,  color: '#B08D2F',
+  { id: 'ORO',       label: 'ORO',                 corto: 'ORO',        objetivo: 8,  color: '#B08D2F',
     ayuda: 'IGLN físico. Compras solo en retroceso: nunca a <5 % del máximo de 52 semanas ni tras +15 % en 3 meses. Sin SL, invalidación escrita.' },
   { id: 'NUCLEO',    label: 'NÚCLEO',              corto: 'NÚCLEO',     objetivo: 24, color: '#2E6BF6',
     ayuda: '16 % ETF S&P 500 UCITS de acumulación (CSPX) con la aportación IBKR + 8 % en 3-5 convicciones (NVDA, GOOGL, MU…) con invalidación escrita. ETF sin salida; convicciones −25 % estructural, revisión semestral.' },
