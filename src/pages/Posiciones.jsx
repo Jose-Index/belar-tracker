@@ -135,6 +135,7 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
         diasAbiertos: diasAbiertos(p.entry_date),
         sem: pctSem(q),
         semFresco: q ? frescura(q) : null,
+        precioVivo: q?.price ?? null,
         peso: base ? val / base * 100 : null,
         bloqueEf: bloqueDe(p),
         ret, apal,
@@ -550,6 +551,7 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
             <span><i className="ev-dot">●</i> evento confirmado · <i className="ev-dot estimado">○</i> fecha estimada, puede desviarse (rojo si faltan &lt;3 días)</span>
             <span><i className="badge new">NEW</i> alta por captura IA</span>
             <span><b>TESIS</b> SL/TP en gris = calculados (−11/+23,5 sobre la entrada), aún no puestos en el ticket</span>
+            <EstadoVigia v={raw.vigia} n={raw.positions.filter(p => p.sl_type === 'ALERTA').length} />
           </div>
         )}
       </div>
@@ -611,6 +613,7 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
                 <div className="pl-l1">
                   <span className="ticker">{p.ticker}</span>
                   {estrategiaBTC(p) && <span className="chip-estr">{estrategiaBTC(p).label}</span>}
+                  {p.sl_type === 'ALERTA' && <span className="vigia-bell" title={tituloVigia(p)}>🔔</span>}
                   {p.evs.length > 0 && <span className={'ev-dot' + (p.evUrgente ? ' urgente' : '') + (p.evConfirmado ? '' : ' estimado')}>{p.evConfirmado ? '●' : '○'}</span>}
                   <span className="broker">{p.broker}</span>
                   {p.apalancamiento > 1 && <span className="pl-apal">x{Number(p.apalancamiento)}</span>}
@@ -687,6 +690,7 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
               <td className="tl ticker">
                 {p.ticker}
                 {estrategiaBTC(p) && <span className="chip-estr">{estrategiaBTC(p).label}</span>}
+                {p.sl_type === 'ALERTA' && <span className="vigia-bell" title={tituloVigia(p)}>🔔</span>}
                 {p.ingest_badge === 'NEW' && <span className="badge new">NEW</span>}
                 {p.ingest_badge === 'UPD' && <span className="badge upd">·</span>}
                 {p.evs.length > 0 && (
@@ -764,6 +768,28 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
       </table>
       )}
     </div>
+  )
+}
+
+// Vigía: texto con los niveles vigilados y la distancia del precio vivo a cada uno
+function tituloVigia(p) {
+  const px = p.precioVivo, sl = p.sl_price != null ? Number(p.sl_price) : null, tp = p.tp_price != null ? Number(p.tp_price) : null
+  const d = (a, b) => (a / b - 1) * 100
+  const partes = []
+  if (sl) partes.push(`suelo/SL ${fmtPx(sl)}${px ? ` (a ${d(px, sl).toFixed(1)} %)` : ''}`)
+  if (tp) partes.push(`TP ${fmtPx(tp)}${px ? ` (a ${d(tp, px).toFixed(1)} %)` : ''}`)
+  return 'Vigía BTP: ' + (partes.join(' · ') || 'sin niveles: pon SL y/o TP en Precios del ticket') + (px ? ` · precio ${fmtPx(px)}` : '')
+}
+
+// Estado del Vigía en la leyenda: última pasada y aviso si lleva parado más de 20 min en horario de mercado
+function EstadoVigia({ v, n }) {
+  if (!n && !v) return null
+  const hace = v?.last_run ? Math.round((Date.now() - new Date(v.last_run)) / 60000) : null
+  const d = new Date(), h = d.getUTCHours(), dow = d.getUTCDay()
+  const horario = dow >= 1 && dow <= 5 && h >= 7 && h < 21          // ~09:00-23:00 Madrid
+  const parado = n > 0 && (hace == null || (horario && hace > 20))
+  return (
+    <span className={parado ? 'vigia-parado' : ''}>🔔 <b>Vigía</b> {n} vigilada{n === 1 ? '' : 's'} · {hace == null ? 'aún sin pasadas' : `última pasada hace ${hace < 60 ? hace + ' min' : Math.round(hace / 60) + ' h'}`}{parado ? ' · ¡PARADO! revisa cron-job.org' : ''}{v?.errores?.length ? ` · ${v.errores.length} error(es): ${v.errores.join('; ')}` : ''}</span>
   )
 }
 
@@ -945,6 +971,11 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
       </div>
 
       <div className="precios-ticket num">
+        <label className="vigia-toggle" title="Para niveles que el bróker no admite como orden (p. ej. ECO en eToro, TP de la Tesis en XTB): el Vigía de BTP comprueba el precio cada 5 minutos y te avisa al móvil si se toca el SL/suelo o el TP, o si el precio se acerca a menos del 2 %.">
+          <input type="checkbox" checked={p.sl_type === 'ALERTA'} onChange={e => setAttr('sl_type', e.target.checked ? 'ALERTA' : null)} />
+          <span>🔔 Vigía BTP: el bróker no admite esta orden; avísame al móvil</span>
+        </label>
+        {p.sl_type === 'ALERTA' && <p className="vigia-info">{tituloVigia(p)}</p>}
         <div className="ia-head"><h3>Precios del ticket</h3>
           {bloque === 'TESIS' && <button type="button" className="btn-escape" onClick={aplicarTesis} title="Calcula SL −11 % y TP +23,5 % sobre el precio de entrada y los guarda">Tesis −11/+23,5</button>}
         </div>
