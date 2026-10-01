@@ -60,6 +60,12 @@ export const estrategiaBTC = p => {
   return BTC_ESTRATEGIAS.find(e => e.clase === p?.clase) || (p?.broker === 'etoro' ? BTC_ESTRATEGIAS[0] : BTC_ESTRATEGIAS[2])
 }
 
+// Tesis PUENTE (01/10/2026): posiciones del bloque Tesis abiertas ANTES de adoptar la regla (30/09/2026).
+// Se gestionan con las reglas de la Tesis (SL/TP fijos) pero NO se miden como Tesis nativa en el panel mensual.
+// Automático por fecha de entrada: no hay campo que marcar ni forma de colar una entrada nueva como puente.
+export const TESIS_ADOPCION = '2026-09-30'
+export const esPuente = p => bloqueDe(p) === 'TESIS' && !!p?.entry_date && p.entry_date < TESIS_ADOPCION
+
 // Wallet BTC personal (app_state.btc_wallet). Desde el 01/10/2026 guarda las aportaciones
 // [{ fecha, btc, usd }]: la cantidad es su suma y el invertido la suma de los USD, así la wallet
 // tiene G/P y G/P %. Sin aportaciones se usa `qty` a secas y no hay coste (no entra en el G/P).
