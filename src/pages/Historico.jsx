@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import Evolucion from '../components/Evolucion.jsx'
 import IngestaCierres from '../components/IngestaCierres.jsx'
 import { getSimbolos } from '../lib/quotes'
+import { useCache } from '../lib/cache'
 import './inicio.css'
 
 const fmt$ = v => v == null ? '—' : Number(v).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -11,17 +12,18 @@ const fmtPct = v => v == null ? '—' : (v > 0 ? '+' : '') + v.toFixed(2) + '%'
 const pctClass = v => v == null ? '' : v > 0 ? 'up' : v < 0 ? 'down' : ''
 const fFecha = d => d ? d.slice(2).split('-').reverse().join('/') : '—'
 
+async function loaderSemanas() {
+  const { data } = await supabase.from('weekly_snapshots').select('*').order('week_end')
+  return data || []
+}
+
 export default function Historico() {
-  const [weeks, setWeeks] = useState(null)
+  // Mismas semanas que la portada y Evolución: una sola carga compartida (lib/cache.js)
+  const { data: weeks } = useCache('historico:semanas', loaderSemanas, { ttl: 5 * 60e3, persist: true })
   const [cierres, setCierres] = useState(false)   // registro de cierres por captura (13/08/2026)
   const [positions, setPositions] = useState([])
   const [simbolos, setSimbolos] = useState([])
   const [msgCierres, setMsgCierres] = useState(null)
-
-  useEffect(() => {
-    supabase.from('weekly_snapshots').select('*').order('week_end')
-      .then(({ data }) => setWeeks(data || []))
-  }, [])
 
   useEffect(() => {
     if (!cierres) return
