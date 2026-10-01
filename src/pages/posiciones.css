@@ -359,3 +359,20 @@
 .wallet-form input { min-width: 0; }
 .fila-wallet .up { color: var(--alza) !important; }
 .fila-wallet .down { color: var(--baja) !important; }
+
+/* ─── 01/10/2026: bloques ordenables, gráfica de bloque, botones del cajón ─── */
+.bq-asa { cursor: grab; touch-action: none; user-select: none; color: var(--texto-neutro); font-size: 15px; line-height: 1; padding: 2px 4px; margin: -2px 0 -2px -4px; border-radius: 4px; }
+.bq-asa:hover { background: var(--borde); color: var(--texto); }
+.bloque-card.arrastrando { outline: 2px solid var(--azul-belar); opacity: .85; box-shadow: 0 8px 24px rgba(13,20,32,.12); }
+.bloque-card.arrastrando .bq-asa { cursor: grabbing; }
+.pos-tabla tr.fila-serie td { padding: 6px 10px 4px; background: var(--superficie); cursor: default; }
+.pos-tabla tr.fila-serie:hover td { background: var(--superficie); }
+.serie-bloque .sb-txt { display: flex; justify-content: space-between; align-items: baseline; font-size: 11px; color: var(--texto-neutro); margin-bottom: 2px; }
+.serie-bloque .sb-txt b { font-size: 12px; }
+.serie-bloque .sb-txt i { font-style: normal; font-weight: 400; color: var(--texto-neutro); font-size: 10.5px; }
+.pos-lista li.fila-serie { display: block; cursor: default; padding: 6px 12px 4px; }
+.pos-panel-head .btn-cerrar-posicion { font: 600 12px var(--font-ui); color: #fff; background: var(--baja); border: 1px solid var(--baja); border-radius: 7px; padding: 6px 11px; cursor: pointer; flex: none; }
+.pos-panel-head .btn-cerrar-posicion:hover { background: #C93A3F; }
+.btn-cerrar-cajon { margin-top: 14px; width: 100%; font: 600 12.5px var(--font-ui); padding: 9px; border-radius: 8px; cursor: pointer; border: 1px solid var(--borde); color: var(--texto-sec); background: var(--superficie); }
+.btn-cerrar-cajon:hover { background: var(--papel); color: var(--texto); }
+@media (max-width: 900px) { .pos-panel-head .btn-cerrar-posicion { font-size: 12px; padding: 6px 10px; } }
