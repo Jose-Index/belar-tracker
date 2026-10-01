@@ -73,6 +73,26 @@ export default function Buscador() {
     const nuevo = act.includes(id) ? act.filter(r => r !== id) : RATINGS.map(r => r.id).filter(r => r === id || act.includes(r))
     return { ...x, rating: nuevo.length >= RATINGS.length ? [] : nuevo }
   })
+  // Filtros distintos del valor por defecto (● en la etiqueta y recuento en la barra) · 01/10/2026
+  const igual = (x, y) => JSON.stringify(Array.isArray(x) ? [...x].sort() : x) === JSON.stringify(Array.isArray(y) ? [...y].sort() : y)
+  const D = FILTROS_DEFECTO
+  const CLAVES = {
+    mercado: ['mercado'], cap: ['cap'], sector: ['sector'], pe: ['pe_campo', 'pe_min', 'pe_max', 'pe_na'],
+    rating: ['rating', 'rating_na'], tendencia: ['ma50', 'ma200', 'p3m'], earn: ['earn_dias'],
+    atr: ['atr_on', 'atr_min', 'atr_max'], perseguir: ['sin_perseguir'],
+  }
+  const cambiado = id => CLAVES[id].some(k => !igual(f[k] ?? null, D[k] ?? null) && !(String(f[k]) === String(D[k])))
+  const GRUPOS = { universo: ['mercado', 'cap', 'sector'], valor: ['pe', 'rating'], grafico: ['tendencia'], reglas: ['earn', 'atr', 'perseguir'] }
+  const grupoCambiado = g => GRUPOS[g].some(cambiado)
+  const nCambiados = Object.keys(CLAVES).filter(cambiado).length
+  const [cerrados, setCerrados] = useState({})   // móvil: bloques plegables
+  const alternarGrupo = g => { if (movil) setCerrados(c => ({ ...c, [g]: !c[g] })) }
+  const despSectores = useRef(null)
+  useEffect(() => {                              // cierra el desplegable de sectores al pulsar fuera
+    const fuera = e => { const d = despSectores.current; if (d?.open && !d.contains(e.target)) d.open = false }
+    document.addEventListener('pointerdown', fuera)
+    return () => document.removeEventListener('pointerdown', fuera)
+  }, [])
   const toggle = (k, id) => setF(x => ({ ...x, [k]: x[k].includes(id) ? x[k].filter(v => v !== id) : [...x[k], id] }))
 
   async function cargarEstado() {
@@ -113,6 +133,7 @@ export default function Buscador() {
     f.cap.length ? f.cap.map(c => CAPS.find(x => x.id === c)?.label || c).join('/') : null,
     (f.pe_min || f.pe_max) ? `PER ${f.pe_campo === 'fwd' ? 'fut. ' : ''}${f.pe_min || '0'}–${f.pe_max || '∞'}` : null,
     f.atr_on ? `ATR ${f.atr_min}–${f.atr_max} %` : null,
+    f.sin_perseguir ? 'sin ⚠' : null,
     ratingTodos ? null : 'rating ' + f.rating.map(id => RATINGS.find(r => r.id === id)?.label).join('/'),
     f.earn_dias ? `sin result. <${f.earn_dias}d` : null,
     [f.ma50 && '>MA50', f.ma200 && '>MA200', f.p3m && '3M+'].filter(Boolean).join(' ') || null,
@@ -159,6 +180,7 @@ export default function Buscador() {
     const v = r => r[col]
     let base = soloEstrellas ? conSerie.filter(r => estrellas[r.symbol]) : conSerie
     // ATR % (01/10/2026): fuera los valores con ATR calculado fuera del rango; los pendientes se ven hasta que llega su serie
+    if (f.sin_perseguir) base = base.filter(r => !r.perseguir)
     if (f.atr_on) {
       const lo = Number(f.atr_min) || 0, hi = Number(f.atr_max) || Infinity
       base = base.filter(r => r.atr_pct == null || (r.atr_pct >= lo && r.atr_pct <= hi))
@@ -171,7 +193,7 @@ export default function Buscador() {
       const c = typeof x === 'string' ? x.localeCompare(y) : x - y
       return desc ? -c : c
     })
-  }, [filas, series, orden, soloEstrellas, estrellas, f.atr_on, f.atr_min, f.atr_max])
+  }, [filas, series, orden, soloEstrellas, estrellas, f.atr_on, f.atr_min, f.atr_max, f.sin_perseguir])
   const atrPendientes = f.atr_on && filasVista ? filasVista.filter(r => r.atr_pct == null).length : 0
 
   const ordenar = col => setOrden(o => o.col === col ? { col, desc: !o.desc } : { col, desc: !['symbol', 'market', 'sector', 'earnings_date', 'rating'].includes(col) })
@@ -199,75 +221,103 @@ export default function Buscador() {
         </button>
       )}
       <div className={'card filtros num' + (movil && plegado ? ' plegado' : '')}>
-        <div className="filtro">
-          <span className="f-t">Mercado</span>
-          <div className="chips">
-            {MERCADOS.map(m => <button key={m.id} className={f.mercado.includes(m.id) ? 'on' : ''} onClick={() => toggle('mercado', m.id)}>{m.label}</button>)}
-            <button className={f.mercado.length === MERCADOS.length ? 'on' : ''} onClick={() => set('mercado', f.mercado.length === MERCADOS.length ? ['US'] : MERCADOS.map(m => m.id))}>Todos</button>
-          </div>
+        <div className="f-grupos">
+          <section className={'f-grupo' + (cerrados.universo ? ' cerrado' : '')}>
+            <h3 onClick={() => alternarGrupo('universo')}>Qué universo{grupoCambiado('universo') && <i className="f-dot" />}</h3>
+            <div className="f-fila">
+              <span className="f-l">Mercado{cambiado('mercado') && <i className="f-dot" />}</span>
+              <div className="chips">
+                {MERCADOS.map(m => <button key={m.id} className={f.mercado.includes(m.id) ? 'on' : ''} onClick={() => toggle('mercado', m.id)}>{m.label}</button>)}
+                <button className={f.mercado.length === MERCADOS.length ? 'on' : ''} onClick={() => set('mercado', f.mercado.length === MERCADOS.length ? ['US'] : MERCADOS.map(m => m.id))}>Todos</button>
+              </div>
+            </div>
+            <div className="f-fila">
+              <span className="f-l">Tamaño{cambiado('cap') && <i className="f-dot" />}</span>
+              <div className="chips">
+                {CAPS.map(c => <button key={c.id} title={c.ayuda} className={f.cap.includes(c.id) ? 'on' : ''} onClick={() => toggle('cap', c.id)}>{c.label}</button>)}
+              </div>
+            </div>
+            <div className="f-fila">
+              <span className="f-l">Sectores{cambiado('sector') && <i className="f-dot" />}</span>
+              <details className="f-desp" ref={despSectores}>
+                <summary>{f.sector.length === SECTORES.length ? 'Todos' : f.sector.length === 0 ? 'Ninguno' : `${f.sector.length} de ${SECTORES.length}`}</summary>
+                <div className="f-desp-panel">
+                  <a onClick={() => set('sector', f.sector.length === SECTORES.length ? [] : SECTORES.map(x => x[0]))}>{f.sector.length === SECTORES.length ? 'ninguno' : 'todos'}</a>
+                  {SECTORES.map(([id, l]) => <label key={id} className="check"><input type="checkbox" checked={f.sector.includes(id)} onChange={() => toggle('sector', id)} /> {l}</label>)}
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <section className={'f-grupo' + (cerrados.valor ? ' cerrado' : '')}>
+            <h3 onClick={() => alternarGrupo('valor')}>Cuánto vale{grupoCambiado('valor') && <i className="f-dot" />}</h3>
+            <div className="f-fila">
+              <span className="f-l">PER{cambiado('pe') && <i className="f-dot" />}</span>
+              <div className="chips rango">
+                <span className="segm">
+                  <button className={f.pe_campo === 'fwd' ? 'on' : ''} onClick={() => set('pe_campo', 'fwd')} title="Sobre el beneficio estimado de los próximos 12 meses">Futuro</button>
+                  <button className={f.pe_campo !== 'fwd' ? 'on' : ''} onClick={() => set('pe_campo', 'ttm')} title="Sobre el beneficio de los últimos 12 meses">Actual</button>
+                </span>
+                <input value={f.pe_min} onChange={e => set('pe_min', e.target.value)} inputMode="decimal" title="PER mínimo" />
+                <span>–</span>
+                <input value={f.pe_max} onChange={e => set('pe_max', e.target.value)} inputMode="decimal" title="PER máximo" />
+              </div>
+              <span />
+              <label className="check sub"><input type="checkbox" checked={f.pe_na} onChange={e => set('pe_na', e.target.checked)} /> {f.pe_campo === 'fwd' ? 'incluir sin estimación' : 'incluir sin beneficios'}</label>
+            </div>
+            <div className="f-fila">
+              <span className="f-l">Rating{cambiado('rating') && <i className="f-dot" />}</span>
+              <div className="chips">
+                {RATINGS.map(r => <button key={r.id} className={!ratingTodos && f.rating.includes(r.id) ? 'on' : ''} onClick={() => alternarRating(r.id)}
+                  title={r.min == null ? `media ≤ ${r.max}` : r.max == null ? `media > ${r.min}` : `media ${r.min} – ${r.max}`}>{r.label}</button>)}
+                <button className={ratingTodos ? 'on' : ''} onClick={() => set('rating', [])} title="Sin filtro de rating (incluye los que no tienen)">Cualquiera</button>
+              </div>
+              <span />
+              <label className="check sub"><input type="checkbox" checked={f.rating_na} disabled={ratingTodos} onChange={e => set('rating_na', e.target.checked)} /> incluir sin rating</label>
+            </div>
+          </section>
+
+          <section className={'f-grupo' + (cerrados.grafico ? ' cerrado' : '')}>
+            <h3 onClick={() => alternarGrupo('grafico')}>Cómo está el gráfico{grupoCambiado('grafico') && <i className="f-dot" />}</h3>
+            <div className="f-fila">
+              <span className="f-l">Tendencia{cambiado('tendencia') && <i className="f-dot" />}</span>
+              <div className="chips">
+                <button className={f.ma50 ? 'on' : ''} onClick={() => set('ma50', !f.ma50)} title="Precio por encima de la media de 50 sesiones">&gt; MA50</button>
+                <button className={f.ma200 ? 'on' : ''} onClick={() => set('ma200', !f.ma200)} title="Precio por encima de la media de 200 sesiones">&gt; MA200</button>
+                <button className={f.p3m ? 'on' : ''} onClick={() => set('p3m', !f.p3m)} title="Sube en los últimos 3 meses (solo valores con tendencia ya calculada)">3M positivo</button>
+              </div>
+            </div>
+          </section>
+
+          <section className={'f-grupo reglas' + (cerrados.reglas ? ' cerrado' : '')}>
+            <h3 onClick={() => alternarGrupo('reglas')}>Reglas de la Tesis{grupoCambiado('reglas') && <i className="f-dot" />}</h3>
+            <div className="f-regla">
+              <label className="check"><input type="checkbox" checked={!!f.earn_dias} onChange={e => set('earn_dias', e.target.checked ? 15 : 0)} /> Sin resultados a menos de</label>
+              <input value={f.earn_dias || ''} disabled={!f.earn_dias} onChange={e => set('earn_dias', Number(e.target.value) || 0)} inputMode="numeric" />
+              <span>días</span>{cambiado('earn') && <i className="f-dot" />}
+            </div>
+            <div className="f-regla" title="Techo 5,5: con SL −11 el buffer es ≥ 2×ATR. Suelo 1,5: por debajo, el +23,5 en 20 semanas es improbable.">
+              <label className="check"><input type="checkbox" checked={!!f.atr_on} onChange={e => set('atr_on', e.target.checked)} /> ATR entre</label>
+              <input value={f.atr_min} disabled={!f.atr_on} onChange={e => set('atr_min', e.target.value)} inputMode="decimal" title="ATR % mínimo" />
+              <span>–</span>
+              <input value={f.atr_max} disabled={!f.atr_on} onChange={e => set('atr_max', e.target.value)} inputMode="decimal" title="ATR % máximo" />
+              <span>%</span>{cambiado('atr') && <i className="f-dot" />}
+            </div>
+            <div className="f-regla" title="Oculta los valores marcados ⚠: +8 % en 3 sesiones o más de 2×ATR sobre la MA20 (bandera roja: no se persigue)">
+              <label className="check"><input type="checkbox" checked={!!f.sin_perseguir} onChange={e => set('sin_perseguir', e.target.checked)} /> Ocultar "perseguir" ⚠</label>
+              {cambiado('perseguir') && <i className="f-dot" />}
+            </div>
+          </section>
         </div>
-        <div className="filtro">
-          <span className="f-t">Capitalización</span>
-          <div className="chips">
-            {CAPS.map(c => <button key={c.id} title={c.ayuda} className={f.cap.includes(c.id) ? 'on' : ''} onClick={() => toggle('cap', c.id)}>{c.label}</button>)}
-          </div>
-        </div>
-        <div className="filtro">
-          <span className="f-t">PER</span>
-          <div className="chips rango">
-            <button className={f.pe_campo === 'fwd' ? 'on' : ''} onClick={() => set('pe_campo', 'fwd')} title="Sobre el beneficio estimado de los próximos 12 meses">Futuro</button>
-            <button className={f.pe_campo !== 'fwd' ? 'on' : ''} onClick={() => set('pe_campo', 'ttm')} title="Sobre el beneficio de los últimos 12 meses">Actual</button>
-            <input value={f.pe_min} onChange={e => set('pe_min', e.target.value)} inputMode="decimal" title="PER mínimo" />
-            <span>–</span>
-            <input value={f.pe_max} onChange={e => set('pe_max', e.target.value)} inputMode="decimal" title="PER máximo" />
-            <label className="check"><input type="checkbox" checked={f.pe_na} onChange={e => set('pe_na', e.target.checked)} /> {f.pe_campo === 'fwd' ? 'incluir sin estimación' : 'incluir sin beneficios'}</label>
-          </div>
-        </div>
-        <div className="filtro">
-          <span className="f-t">Rating analistas</span>
-          <div className="chips">
-            <button className={ratingTodos ? 'on' : ''} onClick={() => set('rating', [])} title="Sin filtro de rating (incluye los que no tienen)">Cualquiera</button>
-            {RATINGS.map(r => <button key={r.id} className={!ratingTodos && f.rating.includes(r.id) ? 'on' : ''} onClick={() => alternarRating(r.id)}
-              title={r.min == null ? `media ≤ ${r.max}` : r.max == null ? `media > ${r.min}` : `media ${r.min} – ${r.max}`}>{r.label}</button>)}
-            <label className="check"><input type="checkbox" checked={f.rating_na} disabled={ratingTodos} onChange={e => set('rating_na', e.target.checked)} /> incluir sin rating</label>
-          </div>
-        </div>
-        <div className="filtro">
-          <span className="f-t">Resultados</span>
-          <div className="chips rango">
-            <label className="check"><input type="checkbox" checked={!!f.earn_dias} onChange={e => set('earn_dias', e.target.checked ? 15 : 0)} /> excluir resultados a menos de</label>
-            <input value={f.earn_dias || ''} disabled={!f.earn_dias} onChange={e => set('earn_dias', Number(e.target.value) || 0)} inputMode="numeric" />
-            <span>días</span>
-          </div>
-        </div>
-        <div className="filtro">
-          <span className="f-t">Volatilidad (ATR %)</span>
-          <div className="chips rango">
-            <label className="check" title="Techo 5,5: con SL −11 el buffer es ≥ 2×ATR. Suelo 1,5: por debajo, el +23,5 en 20 semanas es improbable."><input type="checkbox" checked={!!f.atr_on} onChange={e => set('atr_on', e.target.checked)} /> solo entre</label>
-            <input value={f.atr_min} disabled={!f.atr_on} onChange={e => set('atr_min', e.target.value)} inputMode="decimal" title="ATR % mínimo" />
-            <span>–</span>
-            <input value={f.atr_max} disabled={!f.atr_on} onChange={e => set('atr_max', e.target.value)} inputMode="decimal" title="ATR % máximo" />
-            <span>%</span>
-          </div>
-        </div>
-        <div className="filtro">
-          <span className="f-t">Tendencia</span>
-          <div className="chips">
-            <button className={f.ma50 ? 'on' : ''} onClick={() => set('ma50', !f.ma50)} title="Precio por encima de la media de 50 sesiones">&gt; MA50</button>
-            <button className={f.ma200 ? 'on' : ''} onClick={() => set('ma200', !f.ma200)} title="Precio por encima de la media de 200 sesiones">&gt; MA200</button>
-            <button className={f.p3m ? 'on' : ''} onClick={() => set('p3m', !f.p3m)} title="Sube en los últimos 3 meses (solo valores con tendencia ya calculada)">3M positivo</button>
-          </div>
-        </div>
-        <div className="filtro sectores">
-          <span className="f-t">Sectores <a onClick={() => set('sector', f.sector.length === SECTORES.length ? [] : SECTORES.map(s => s[0]))}>{f.sector.length === SECTORES.length ? 'ninguno' : 'todos'}</a></span>
-          <div className="chips">
-            {SECTORES.map(([id, l]) => <label key={id} className="check"><input type="checkbox" checked={f.sector.includes(id)} onChange={() => toggle('sector', id)} /> {l}</label>)}
-          </div>
-        </div>
+
         <div className="filtro acciones">
           <input className="f-q" placeholder="símbolo o nombre" value={f.q} onChange={e => set('q', e.target.value)} onKeyDown={e => e.key === 'Enter' && buscar()} />
           <button className="btn-primario" onClick={buscar} disabled={cargando}>{cargando ? 'Buscando…' : 'Buscar'}</button>
-          <button className="btn-escape" onClick={() => setF({ ...FILTROS_DEFECTO })}>valores por defecto</button>
+          <button className="btn-escape" onClick={() => setF({ ...FILTROS_DEFECTO })} disabled={!nCambiados}>valores por defecto</button>
+          <span className="f-estado">
+            {filasVista ? `${filasVista.length} valores` : ''}
+            {nCambiados ? <> · {nCambiados} {nCambiados === 1 ? 'filtro cambiado' : 'filtros cambiados'} <i className="f-dot" /></> : ' · filtros por defecto'}
+          </span>
         </div>
       </div>
 
