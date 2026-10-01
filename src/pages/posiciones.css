@@ -258,7 +258,7 @@
 .pos-tabla.tesis th, .pos-tabla.tesis td { padding-left: 6px; padding-right: 6px; }
 .pos-tabla.tesis td.clase { font-size: 11px; }
 .bt-relleno { position: absolute; top: 0; bottom: 0; border-radius: 4px; }
-.bt-relleno.pos { background: var(--azul-belar); }
+.bt-relleno.pos { background: var(--alza); }
 .bt-relleno.neg { background: var(--baja); }
 .bt-cero { position: absolute; top: -1px; bottom: -1px; width: 2px; background: var(--texto); margin-left: -1px; }
 .bt-txt { font-size: 11px; color: var(--texto-sec); white-space: nowrap; }
@@ -305,7 +305,7 @@
 .pos-lista .pl-gp { font-weight: 600; font-size: 12.5px; }
 .pos-lista .pl-gp i { font-style: normal; font-weight: 500; font-size: 11px; opacity: .8; margin-left: 3px; }
 .pos-lista .pl-peso { font-size: 10.5px; color: var(--texto-neutro); }
-.pos-lista li.fila-wallet { cursor: default; }
+.pos-lista li.fila-wallet { cursor: pointer; }
 .pos-lista li.fila-wallet .pl-valor { color: var(--texto-sec); }
 .pos-lista li.subtotal { cursor: default; background: var(--papel); border-top: 2px solid var(--borde); color: var(--texto-sec); font-weight: 600; font-size: 12px; }
 .pos-lista li.subtotal .pl-valor { color: var(--texto); }
@@ -341,3 +341,21 @@
   .modal { width: 100vw; max-height: 92vh; max-height: 92dvh; overflow-y: auto; border-radius: 16px 16px 0 0; padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
   .alta-grid { grid-template-columns: 1fr 1fr; }
 }
+
+/* ─── 01/10/2026: G/P % en segunda columna, destacada (el desempeño es un %) ─── */
+.pos-tabla th.col-gpp { color: var(--texto); font-weight: 700; }
+.pos-tabla td.col-gpp { font-size: 15px; font-weight: 700; letter-spacing: -.01em; padding-right: 14px; }
+.pos-tabla tfoot td.col-gpp { font-size: 14px; }
+@media (max-width: 900px) { .pos-tabla td.col-gpp { font-size: 13.5px; } }
+.pos-lista .pl-gpp { font-weight: 700; font-size: 16px; line-height: 1.15; }
+.pos-lista .pl-valor { font-size: 12.5px; font-weight: 500; color: var(--texto-sec); }
+.pos-lista .pl-valor i { font-style: normal; font-size: 11px; margin-left: 3px; }
+.pos-lista li.subtotal .pl-gpp { font-size: 14px; }
+/* Estrategia dentro del bloque BTC: Base · Wallet · Combo MA200 v1 · Táctica */
+.chip-estr { display: inline-block; margin-left: 6px; padding: 0 6px; border: 1px solid var(--borde); border-radius: 4px;
+  font-family: var(--font-ui); font-size: 10.5px; font-weight: 500; color: var(--texto-sec); white-space: nowrap; vertical-align: 1px; }
+.pos-tabla tr.fila-wallet { cursor: pointer; }
+.wallet-form { display: grid; grid-template-columns: 1.3fr 1fr 1.2fr auto; gap: 6px; margin: 8px 0 4px; }
+.wallet-form input { min-width: 0; }
+.fila-wallet .up { color: var(--alza) !important; }
+.fila-wallet .down { color: var(--baja) !important; }
