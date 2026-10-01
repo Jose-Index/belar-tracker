@@ -141,3 +141,12 @@ button.estrella { border: none; background: none; padding: 0 6px 0 0; font-size:
 .ficha-freno { font: 600 11.5px var(--font-ui); color: var(--texto-sec); border: 1px solid var(--borde); border-radius: 12px; padding: 3px 10px; }
 .ficha-freno.lleno { color: var(--baja); border-color: var(--baja); }
 @media (max-width: 900px) { .ficha-flecha { width: 28px; height: 46px; font-size: 22px; } .ficha-flecha.izq { left: -4px; } .ficha-flecha.der { right: -4px; } }
+
+/* 01/10/2026: ‹ › junto al contador, en la cabecera (no tapan la gráfica) */
+.ficha-pasar { display: inline-flex; align-items: center; gap: 4px; }
+.ficha-pasar button { width: 30px; height: 28px; border: 1px solid var(--borde); border-radius: 7px; background: var(--superficie);
+  font-size: 18px; line-height: 1; color: var(--texto); cursor: pointer; padding: 0; }
+.ficha-pasar button:hover:not(:disabled) { border-color: var(--azul-belar); color: var(--azul-belar); }
+.ficha-pasar button:disabled { opacity: .3; cursor: default; }
+.ficha-pasar .ficha-pos { min-width: 64px; text-align: center; }
+@media (max-width: 900px) { .ficha-pasar button { width: 34px; height: 32px; font-size: 20px; } }
