@@ -1,21 +1,25 @@
 // Alertas: vigilancia de Belar + alertas manuales. Resolver = desactivar (queda en histórico).
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { useCache } from '../lib/cache'
+import { useMovil } from '../lib/movil'
 import './inicio.css'
 
 const SEV = { alta: 'var(--baja)', media: 'var(--ambar, #F0A020)', baja: 'var(--texto-neutro)' }
 const fFecha = d => d ? d.slice(2, 10).split('-').reverse().join('/') : '—'
 
+async function loaderAlertas() {
+  const { data } = await supabase.from('alerts').select('*').order('created_at', { ascending: false }).limit(200)
+  return data || []
+}
+
 export default function Alertas() {
-  const [rows, setRows] = useState(null)
+  const { data: rows, recargar } = useCache('alertas', loaderAlertas, { ttl: 60e3, persist: true })
+  const cargar = () => recargar(true)
   const [verResueltas, setVerResueltas] = useState(false)
   const [nueva, setNueva] = useState({ severidad: 'media', ticker: '', titulo: '', detalle: '' })
-
-  async function cargar() {
-    const { data } = await supabase.from('alerts').select('*').order('created_at', { ascending: false }).limit(200)
-    setRows(data || [])
-  }
-  useEffect(() => { cargar() }, [])
+  const movil = useMovil()
+  const [formAbierto, setFormAbierto] = useState(false)   // móvil: el alta se pliega tras "+ Alerta"
 
   async function alta(e) {
     e.preventDefault()
@@ -44,9 +48,10 @@ export default function Alertas() {
             <button className={!verResueltas ? 'on' : ''} onClick={() => setVerResueltas(false)}>Activas <span className="hist-n">{activas.length}</span></button>
             <button className={verResueltas ? 'on' : ''} onClick={() => setVerResueltas(true)}>Resueltas <span className="hist-n">{resueltas.length}</span></button>
           </div>
+          {movil && !verResueltas && <button type="button" className="btn-sec" onClick={() => setFormAbierto(v => !v)}>{formAbierto ? 'cerrar' : '+ Alerta'}</button>}
         </div>
 
-        {!verResueltas && (
+        {!verResueltas && (!movil || formAbierto) && (
           <form className="repo-alta num" onSubmit={alta}>
             <select value={nueva.severidad} onChange={e => setNueva({ ...nueva, severidad: e.target.value })}>
               {['alta', 'media', 'baja'].map(s => <option key={s}>{s}</option>)}
