@@ -8,6 +8,8 @@ import {
   buscarUniverso, estadoUniverso, seriesUniverso, refrescarUniverso, universoViejo, fmtCap, capBucket, diasHasta,
 } from '../lib/universo'
 import Ficha from '../components/Ficha.jsx'
+import { useMovil } from '../lib/movil'
+import { useCache, cargar, fijar } from '../lib/cache'
 import './buscador.css'
 
 const fmtPct = (v, d = 1) => v == null ? '—' : (v > 0 ? '+' : '') + Number(v).toFixed(d) + '%'
@@ -36,20 +38,23 @@ export default function Buscador() {
   const [filas, setFilas] = useState(null)
   const [cargando, setCargando] = useState(false)
   const [err, setErr] = useState(null)
-  const [estado, setEstado] = useState(null)     // {estado, total, por_mercado}
+  // Estado del universo: cacheado y compartido (cuenta en el indicador de datos de la cabecera)
+  const { data: estado } = useCache('universo:estado', estadoUniverso, { ttl: 60e3, persist: true, activo: false })
   const [refresco, setRefresco] = useState(null) // texto de progreso
   const [orden, setOrden] = useState({ col: 'cap_usd', desc: true })
   const [sel, setSel] = useState(null)
   const [series, setSeries] = useState({})       // symbol → tendencia (perf, atr, perseguir)
   const seriesPedidas = useRef(new Set())
   const refrescando = useRef(false)
+  const movil = useMovil()
+  const [plegado, setPlegado] = useState(false)   // móvil: filtros plegados tras buscar
 
   useEffect(() => { guardarFiltros(f) }, [f])
   const set = (k, v) => setF(x => ({ ...x, [k]: v }))
   const toggle = (k, id) => setF(x => ({ ...x, [k]: x[k].includes(id) ? x[k].filter(v => v !== id) : [...x[k], id] }))
 
   async function cargarEstado() {
-    try { const e = await estadoUniverso(); setEstado(e); return e } catch { return null }
+    try { return await cargar('universo:estado', estadoUniverso, { forzar: true, persist: true }) } catch { return null }
   }
 
   async function refrescar(forzar = false) {
@@ -74,9 +79,23 @@ export default function Buscador() {
     try {
       const j = await buscarUniverso(f)
       setFilas(j.filas)
+      fijar('universo:busqueda', { n: j.filas?.length || 0 })   // marca de frescura para la cabecera
+      setPlegado(true)
     } catch (e) { setErr(e.message); setFilas([]) }
     setCargando(false)
   }
+
+  // Resumen de los filtros activos (cabecera plegada en móvil)
+  const resumenFiltros = [
+    f.mercado.length === MERCADOS.length ? 'todos los mercados' : f.mercado.join('/'),
+    f.cap.length ? f.cap.map(c => CAPS.find(x => x.id === c)?.label || c).join('/') : null,
+    (f.pe_min || f.pe_max) ? `PER ${f.pe_min || '0'}–${f.pe_max || '∞'}` : null,
+    f.rating_max ? `rating ≤${f.rating_max}` : null,
+    f.earn_dias ? `sin result. <${f.earn_dias}d` : null,
+    [f.ma50 && '>MA50', f.ma200 && '>MA200', f.p3m && '3M+'].filter(Boolean).join(' ') || null,
+    f.sector.length === SECTORES.length ? null : `${f.sector.length} sectores`,
+    f.q ? `"${f.q}"` : null,
+  ].filter(Boolean).join(' · ')
 
   // Arranque: estado del universo; si está viejo (o vacío), refresco automático; luego búsqueda
   useEffect(() => {
@@ -135,7 +154,14 @@ export default function Buscador() {
       </div>
       {refresco && <p className="pos-msg num">{refresco}</p>}
 
-      <div className="card filtros num">
+      {movil && (
+        <button type="button" className={'filtros-resumen num' + (plegado ? '' : ' abierto')} onClick={() => setPlegado(v => !v)} aria-expanded={!plegado}>
+          <span className="fr-t">Filtros</span>
+          <span className="fr-txt">{resumenFiltros}</span>
+          <span className="fr-flecha" aria-hidden="true">{plegado ? '▾' : '▴'}</span>
+        </button>
+      )}
+      <div className={'card filtros num' + (movil && plegado ? ' plegado' : '')}>
         <div className="filtro">
           <span className="f-t">Mercado</span>
           <div className="chips">
@@ -196,8 +222,42 @@ export default function Buscador() {
 
       {err && <p className="auth-err">{err}</p>}
 
+      {movil && filasVista && (
+        <div className="busc-orden num">
+          <span>{filasVista.length} valores · orden</span>
+          <select value={orden.col} onChange={e => ordenar(e.target.value)}>
+            {COLS.map(c => <option key={c.id} value={c.id}>{c.l}</option>)}
+          </select>
+          <button type="button" className="btn-dir" onClick={() => setOrden(o => ({ ...o, desc: !o.desc }))}>{orden.desc ? '↓' : '↑'}</button>
+        </div>
+      )}
       <div className="card pos-tabla-wrap">
-        {!filasVista ? <p className="placeholder" style={{ margin: 12 }}>{refresco || 'Cargando…'}</p> : (
+        {!filasVista ? <p className="placeholder" style={{ margin: 12 }}>{refresco || 'Cargando…'}</p> : movil ? (
+          <ul className="busc-lista num">
+            {filasVista.map(r => {
+              const dias = diasHasta(r.earnings_date)
+              const earnCerca = dias != null && dias >= 0 && dias <= 15
+              return (
+                <li key={r.symbol} onClick={() => setSel(r)}>
+                  <div className="bl-izq">
+                    <div className="bl-l1"><b>{r.symbol}</b><span className="nombre">{r.name}</span></div>
+                    <div className="bl-l2">
+                      {r.market}{r.adr ? ' ADR' : ''} · {fmtCap(r.cap_usd)} · PER {r.pe_trailing == null ? 'n/a' : fmtNum(r.pe_trailing, 0)}
+                      {r.rating != null ? <> · <span className={'rat r' + Math.round(r.rating)} title="rating analistas">★{r.rating.toFixed(1)}</span></> : null}
+                      {r.earnings_date ? <> · <span className={earnCerca ? 'earn-cerca' : ''} title="próximos resultados">{fFecha(r.earnings_date)}{r.earnings_estimada ? '~' : ''}</span></> : null}
+                      {r.perseguir && <span className="warn" title="No perseguir"> ⚠</span>}
+                    </div>
+                  </div>
+                  <div className="bl-der">
+                    <div className={'bl-3m ' + pctClass(r.perf_3m)}>{fmtPct(r.perf_3m)}<i>3M</i></div>
+                    <div className={'bl-sec ' + pctClass(r.dist_high52)}>{fmtPct(r.dist_high52)}<i>a máx</i></div>
+                  </div>
+                </li>
+              )
+            })}
+            {!filasVista.length && <li className="vacio">Sin resultados con estos filtros{total ? '' : ' (el universo está vacío: pulsa Actualizar)'}.</li>}
+          </ul>
+        ) : (
           <table className="pos-tabla num tabla-busc">
             <thead>
               <tr>
