@@ -172,7 +172,7 @@ export default function Ficha({ valor: v, onClose, lista = null, indice = -1, on
           <Dato l="Resultados" v={v.earnings_date ? v.earnings_date.slice(2).split('-').reverse().join('/') + (v.earnings_estimada ? '~' : '') : '—'}
                 s={dias != null ? (dias >= 0 ? `en ${dias} días` : 'pasados') : ''} cls={earnCerca ? 'earn-cerca' : ''} />
           <Dato l="vs MA50 / MA200" v={`${fmtPct(v.dist_ma50)} / ${fmtPct(v.dist_ma200)}`} cls={pctClass(v.dist_ma200)} />
-          <Dato l="A máx. 52 s" v={fmtPct(v.dist_high52)} s={v.high52 ? 'máx ' + fmtPx(v.high52) : ''} cls={pctClass(v.dist_high52)} />
+          <Dato l="vs máx. 52 s" v={fmtPct(v.dist_high52)} s={v.high52 ? 'máx ' + fmtPx(v.high52) : ''} />
           <Dato l="ATR14" v={calc?.atrPct != null ? calc.atrPct.toFixed(2) + '%' : '—'} s={calc?.atr ? fmtPx(calc.atr) : ''} />
           <Dato l="3 sesiones" v={fmtPct(calc?.p3d)} s={calc?.distMa20Atr != null ? `${calc.distMa20Atr.toFixed(1)}×ATR sobre MA20` : ''} cls={calc?.perseguir ? 'warn' : ''} />
         </div>
