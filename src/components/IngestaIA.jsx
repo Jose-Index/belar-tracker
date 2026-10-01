@@ -92,13 +92,19 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
         } else {
           // clase y fuente elegibles en la propia revisión (defecto prudente: TÁCTICA / YO).
           // entry_date: de la captura si la trae; si no, hay que ponerla a mano.
+          // Nombre no reconocido (p. ej. "XRP" leído donde ponía RR.L, 01/10/2026): si en el mismo
+          // broker hay una posición aún no vista con el MISMO invertido al céntimo, casi seguro es
+          // ella; se propone el mapeo ya elegido y el nombre leído NO se aprende como alias.
+          const porImporte = invertido != null && positions.find(p => p.broker === ex.broker && !vistos.has(p.id)
+            && !nuevas.some(n => n.mapear === String(p.id)) && Math.abs(Number(p.invested) - invertido) < 0.01)
           nuevas.push({
             ...r, ticker: canon || r.ticker || r.nombre, broker: ex.broker,
             invertido, valor, permutado,
             sel: true, clase: 'TACTICA', fuente: 'YO',
+            mapearAuto: porImporte ? String(porImporte.id) : '',
             entry_date: /^\d{4}-\d{2}-\d{2}$/.test(r.fecha_apertura || '') ? r.fecha_apertura : '',
             deCaptura: /^\d{4}-\d{2}-\d{2}$/.test(r.fecha_apertura || ''),
-            mapear: '', textos,
+            mapear: porImporte ? String(porImporte.id) : '', textos,
           })
         }
       }
@@ -132,8 +138,9 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
         curado: false, dudosa: false, textos: n.textos, canon: true,
       })
       cerrados.add(pos.id)
-      // Aprender el nombre del broker para que la próxima captura lo reconozca sola
-      aprendidos += await aprenderAlias(pos.ticker, n.textos) || 0
+      // Aprender el nombre del broker para que la próxima captura lo reconozca sola.
+      // Nunca de un mapeo propuesto solo por importe: el nombre leído puede ser un error de lectura.
+      if (n.mapear !== n.mapearAuto) aprendidos += await aprenderAlias(pos.ticker, n.textos) || 0
     }
     // También se aprenden los nombres de lo que se resolvió solo (p.ej. "Micron" → MU).
     // Nunca de las coincidencias laxas: un alias mal aprendido se arrastra para siempre.
@@ -229,6 +236,7 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
                   <option value="">no, es nueva</option>
                   {candidatas(n.broker).map(p => <option key={p.id} value={p.id}>sí → {p.ticker}</option>)}
                 </select>
+                {n.mapear && n.mapear === n.mapearAuto && <span className="warn" title="Nombre no reconocido, pero el invertido coincide al céntimo con esta posición: casi seguro es una lectura errónea del ticker."> mismo invertido</span>}
               </label>
             )}
             {!n.mapear && <>
@@ -253,8 +261,8 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
       </>}
 
       {d.faltantes.length > 0 && <>
-        <h4>No aparecen en la captura — ¿cerradas? ({d.faltantes.length})</h4>
-        {d.faltantes.map((f, i) => (
+        <h4>No aparecen en la captura — ¿cerradas? ({d.faltantes.filter(f => !d.nuevas.some(n => n.sel && n.mapear === String(f.pos.id))).length})</h4>
+        {d.faltantes.map((f, i) => d.nuevas.some(n => n.sel && n.mapear === String(f.pos.id)) ? null : (
           <div key={i} className="diff-row">
             <label className="diff-pick">
               <input type="checkbox" checked={f.sel} onChange={() => toggle('faltantes', i)} />
