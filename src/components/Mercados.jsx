@@ -4,8 +4,9 @@ import {
   ResponsiveContainer, ReferenceLine, CartesianGrid,
 } from 'recharts'
 import { supabase } from '../lib/supabase'
-import { fetchQuotes, fetchHistory, frescura } from '../lib/quotes'
+import { fetchQuotes, fetchHistory, frescura, intervaloPrecios } from '../lib/quotes'
 import { serieTWR } from '../lib/twr'
+import { useCache, useSondeo, cargar, entrada } from '../lib/cache'
 import './mercados.css'
 
 const PERIODOS = [['1d', '1D'], ['5d', '1S'], ['1mo', '1M'], ['6mo', '6M'], ['ytd', 'YTD'], ['1y', '1A'], ['5y', '5A'], ['max', 'MAX']]
@@ -17,9 +18,22 @@ const fFecha = t => {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getFullYear()).slice(2)}`
 }
 
+async function loaderLista() {
+  const { data } = await supabase.from('symbols').select('*')
+    .not('watchlist_pos', 'is', null).order('watchlist_pos')
+  return data || []
+}
+const claveHist = (sym, range) => `history:${sym}:${range}`
+
 export default function Mercados() {
-  const [lista, setLista] = useState([])
-  const [quotes, setQuotes] = useState({})
+  // Lista de la watchlist, precios y series: caché compartida con revalidación en segundo plano
+  const { data: listaCache, recargar: recargarLista } = useCache('mercados:lista', loaderLista, { ttl: 5 * 60e3, persist: true })
+  const lista = listaCache || []
+  const simbolos = lista.map(s => s.yahoo_symbol)
+  const claveQuotes = 'quotes:' + simbolos.join(',')
+  const { data: quotesCache } = useSondeo(claveQuotes, () => fetchQuotes(simbolos),
+    { intervalo: intervaloPrecios, persist: true, activo: simbolos.length > 0, deps: [claveQuotes] })
+  const quotes = quotesCache || {}
   const [series, setSeries] = useState({})      // yahoo_symbol -> points
   const [range, setRange] = useState(() => localStorage.getItem('btp-mercados-range') || '6mo')
   const [comparando, setComparando] = useState(null)  // symbol row
@@ -30,26 +44,20 @@ export default function Mercados() {
 
   useEffect(() => { localStorage.setItem('btp-mercados-range', range) }, [range])
 
-  async function cargarLista() {
-    const { data } = await supabase.from('symbols').select('*')
-      .not('watchlist_pos', 'is', null).order('watchlist_pos')
-    setLista(data || [])
-    setQuotes(await fetchQuotes((data || []).map(s => s.yahoo_symbol)))
-    return data || []
-  }
-  useEffect(() => { cargarLista() }, [])
+  const cargarLista = () => recargarLista(true)
 
-  // Series de todos los boxes para el periodo seleccionado
+  // Series de todos los boxes para el periodo seleccionado: primero lo que ya hay en caché
+  // (pintado instantáneo), después la revalidación (15 min de vida; instantánea en localStorage)
   useEffect(() => {
     if (!lista.length) return
     let vivo = true
-    setSeries({})
-    Promise.all(lista.map(async s => {
-      try {
-        const h = await fetchHistory(s.yahoo_symbol, range)
-        return [s.yahoo_symbol, h.points || []]
-      } catch { return [s.yahoo_symbol, []] }
-    })).then(pares => { if (vivo) setSeries(Object.fromEntries(pares)) })
+    const inicial = {}
+    for (const s of lista) { const e = entrada(claveHist(s.yahoo_symbol, range), true); if (e.data?.points) inicial[s.yahoo_symbol] = e.data.points }
+    setSeries(inicial)
+    Promise.all(lista.map(s =>
+      cargar(claveHist(s.yahoo_symbol, range), () => fetchHistory(s.yahoo_symbol, range), { ttl: 15 * 60e3, persist: true })
+        .then(h => [s.yahoo_symbol, h?.points || []]).catch(() => [s.yahoo_symbol, inicial[s.yahoo_symbol] || []])
+    )).then(pares => { if (vivo) setSeries(Object.fromEntries(pares)) })
     return () => { vivo = false }
   }, [lista, range])
 
@@ -87,7 +95,6 @@ export default function Mercados() {
     const nueva = [...lista]
     const [mov] = nueva.splice(i, 1)
     nueva.splice(j, 0, mov)
-    setLista(nueva)
     await Promise.all(nueva.map((s, k) =>
       s.watchlist_pos === k + 1 ? null : supabase.from('symbols').update({ watchlist_pos: k + 1 }).eq('id', s.id)
     ).filter(Boolean))
