@@ -66,6 +66,12 @@ export default function Buscador() {
 
   useEffect(() => { guardarFiltros(f) }, [f])
   const set = (k, v) => setF(x => ({ ...x, [k]: v }))
+  const ratingTodos = !f.rating?.length || f.rating.length >= RATINGS.length
+  const alternarRating = id => setF(x => {
+    const act = !x.rating?.length || x.rating.length >= RATINGS.length ? [] : x.rating
+    const nuevo = act.includes(id) ? act.filter(r => r !== id) : RATINGS.map(r => r.id).filter(r => r === id || act.includes(r))
+    return { ...x, rating: nuevo.length >= RATINGS.length ? [] : nuevo }
+  })
   const toggle = (k, id) => setF(x => ({ ...x, [k]: x[k].includes(id) ? x[k].filter(v => v !== id) : [...x[k], id] }))
 
   async function cargarEstado() {
@@ -105,7 +111,7 @@ export default function Buscador() {
     f.mercado.length === MERCADOS.length ? 'todos los mercados' : f.mercado.join('/'),
     f.cap.length ? f.cap.map(c => CAPS.find(x => x.id === c)?.label || c).join('/') : null,
     (f.pe_min || f.pe_max) ? `PER ${f.pe_min || '0'}–${f.pe_max || '∞'}` : null,
-    f.rating_max ? `rating ≤${f.rating_max}` : null,
+    ratingTodos ? null : 'rating ' + f.rating.map(id => RATINGS.find(r => r.id === id)?.label).join('/'),
     f.earn_dias ? `sin result. <${f.earn_dias}d` : null,
     [f.ma50 && '>MA50', f.ma200 && '>MA200', f.p3m && '3M+'].filter(Boolean).join(' ') || null,
     f.sector.length === SECTORES.length ? null : `${f.sector.length} sectores`,
@@ -203,8 +209,10 @@ export default function Buscador() {
         <div className="filtro">
           <span className="f-t">Rating analistas</span>
           <div className="chips">
-            {RATINGS.map(r => <button key={r.id} className={Number(f.rating_max) === r.id ? 'on' : ''} onClick={() => set('rating_max', r.id)}>{r.label}</button>)}
-            <label className="check"><input type="checkbox" checked={f.rating_na} onChange={e => set('rating_na', e.target.checked)} /> incluir sin rating</label>
+            <button className={ratingTodos ? 'on' : ''} onClick={() => set('rating', [])} title="Sin filtro de rating (incluye los que no tienen)">Cualquiera</button>
+            {RATINGS.map(r => <button key={r.id} className={!ratingTodos && f.rating.includes(r.id) ? 'on' : ''} onClick={() => alternarRating(r.id)}
+              title={r.min == null ? `media ≤ ${r.max}` : r.max == null ? `media > ${r.min}` : `media ${r.min} – ${r.max}`}>{r.label}</button>)}
+            <label className="check"><input type="checkbox" checked={f.rating_na} disabled={ratingTodos} onChange={e => set('rating_na', e.target.checked)} /> incluir sin rating</label>
           </div>
         </div>
         <div className="filtro">
