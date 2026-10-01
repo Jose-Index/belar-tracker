@@ -149,21 +149,43 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
     })
   }, [raw, quotes, simbolos, eventos, wallet])
 
-  // Gráfica de cada bloque: G/P % agregado por cierre semanal (Σ valor ÷ Σ invertido − 1) de las posiciones
-  // que estaban en el bloque esa semana. Las cerradas se asignan por su bloque por defecto.
+  // Gráfica de cada bloque: rentabilidad TWR acumulada (01/10/2026). Cada semana, el rendimiento del bloque
+  // es el de las posiciones que estaban en él la semana anterior y siguen esta, descontando el dinero nuevo
+  // (aumento de invertido): r = Σ(valor − Δinvertido) ÷ Σ valor anterior − 1. Las semanas se encadenan:
+  // altas, salidas y aportaciones no mueven la curva; solo la mueve lo que ganan o pierden las posiciones.
+  // Las posiciones ya cerradas se asignan por su bloque por defecto.
   const seriesBloque = useMemo(() => {
     if (!raw?.snapsBloque?.length) return {}
     const bloqueDeClave = new Map((raw.positions || []).map(p => [p.ticker + '|' + p.broker, bloqueDe(p)]))
-    const acc = {}
+    const porBloque = {}   // bq -> week -> clave -> { val, inv }
     for (const s of raw.snapsBloque) {
-      const inv = Number(s.invested), val = Number(s.value)
-      if (!(inv > 0) || !Number.isFinite(val)) continue
-      const bq = bloqueDeClave.get(s.ticker + '|' + s.broker) || bloquePorDefecto({ ticker: s.ticker })
-      const k = (acc[bq] ||= {}); const w = (k[s.week_end] ||= { inv: 0, val: 0 })
-      w.inv += inv; w.val += val
+      const val = Number(s.value), inv = Number(s.invested)
+      if (!Number.isFinite(val) || !(val > 0)) continue
+      const clave = s.ticker + '|' + s.broker
+      const bq = bloqueDeClave.get(clave) || bloquePorDefecto({ ticker: s.ticker })
+      const sem = ((porBloque[bq] ||= {})[s.week_end] ||= {})
+      const prev = sem[clave] || { val: 0, inv: 0 }
+      sem[clave] = { val: prev.val + val, inv: prev.inv + (Number.isFinite(inv) ? inv : 0) }
     }
-    return Object.fromEntries(Object.entries(acc).map(([bq, sem]) => [bq,
-      Object.entries(sem).sort(([a], [b]) => a.localeCompare(b)).map(([fecha, w]) => ({ fecha, pct: (w.val / w.inv - 1) * 100 }))]))
+    const out = {}
+    for (const [bq, sems] of Object.entries(porBloque)) {
+      const fechas = Object.keys(sems).sort()
+      let acum = 1
+      const serie = [{ fecha: fechas[0], pct: 0 }]
+      for (let i = 1; i < fechas.length; i++) {
+        const a = sems[fechas[i - 1]], b = sems[fechas[i]]
+        let num = 0, den = 0
+        for (const [clave, x] of Object.entries(b)) {
+          const y = a[clave]; if (!y) continue                       // alta de esta semana: aún sin rendimiento
+          const nuevo = x.inv && y.inv ? Math.max(0, x.inv - y.inv) : 0   // dinero añadido a la posición
+          num += x.val - nuevo; den += y.val
+        }
+        if (den > 0) acum *= num / den
+        serie.push({ fecha: fechas[i], pct: (acum - 1) * 100 })
+      }
+      out[bq] = serie
+    }
+    return out
   }, [raw])
 
   const sorted = useMemo(() => {
@@ -749,7 +771,7 @@ function SerieBloque({ serie }) {
   return (
     <div className="serie-bloque num">
       <div className="sb-txt">
-        <span>G/P % del bloque por cierre semanal · desde {fF(serie[0].fecha)}</span>
+        <span title="Rentabilidad ponderada en el tiempo: solo la mueve lo que ganan o pierden las posiciones, no las altas, salidas ni aportaciones">Rentabilidad del bloque (TWR) · desde {fF(serie[0].fecha)}</span>
         <b className={pctClass(ult.pct)}>{fmtPct(ult.pct)} <i>al {fF(ult.fecha)}</i></b>
       </div>
       <ResponsiveContainer width="100%" height={64}>
@@ -758,7 +780,7 @@ function SerieBloque({ serie }) {
           <YAxis domain={['auto', 'auto']} hide />
           <ReferenceLine y={0} stroke="#9AA6B8" strokeDasharray="3 3" />
           <Tooltip labelFormatter={fF} isAnimationActive={false} animationDuration={0} wrapperClassName="tip-recharts"
-                   formatter={v => [fmtPct(v), 'G/P %']} />
+                   formatter={v => [fmtPct(v), 'TWR']} />
           <Area type="monotone" dataKey="pct" stroke={color} strokeWidth={1.6} fill={color} fillOpacity={0.08} isAnimationActive={false} />
         </AreaChart>
       </ResponsiveContainer>
@@ -861,7 +883,10 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
     <aside className="pos-panel card" {...arrastre}>
       <div className="pos-panel-head">
         <h2>{p.ticker} <span className="broker">{p.broker}</span>{estrategiaBTC(p) && <span className="chip-estr">{estrategiaBTC(p).label}</span>}</h2>
-        <button className="btn-cerrar-posicion" onClick={onCerrar} title="Cierra la posición y la pasa al histórico (pide confirmación)">Cerrar posición</button>
+        <span className="cab-acciones">
+          <button className="btn-cerrar-posicion" onClick={onCerrar} title="Cierra la posición y la pasa al histórico (pide confirmación)">Cerrar posición</button>
+          <button className="btn-x" onClick={onClose} aria-label="Cerrar detalle" title="Cerrar detalle">✕</button>
+        </span>
       </div>
       <dl className="num">
         <div><dt>Entrada</dt><dd>{p.entry_date || '—'} · ${fmt$(p.invested)}</dd></div>
