@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   MERCADOS, CAPS, SECTORES, SECTOR_ES, RATINGS, FILTROS_DEFECTO, cargarFiltros, guardarFiltros,
   buscarUniverso, estadoUniverso, seriesUniverso, refrescarUniverso, universoViejo, fmtCap, capBucket, diasHasta,
-  leerEstrellas, guardarEstrellas, contadoresTesis, vixActual,
+  leerEstrellas, guardarEstrellas, contadoresTesis, vixActual, valoresUniverso,
 } from '../lib/universo'
 import Ficha, { ChipVix } from '../components/Ficha.jsx'
 import { useMovil } from '../lib/movil'
@@ -168,6 +168,23 @@ export default function Buscador() {
     })()
   }, [filas])
 
+  // Estrellas que la búsqueda deja fuera: se añaden atenuadas ("fuera de filtro"); solo desaparecen al quitar la estrella
+  const pidiendoFuera = useRef('')
+  useEffect(() => {
+    if (!filas) return
+    const dentro = new Set(filas.map(r => r.symbol))
+    const faltan = Object.keys(estrellas).filter(s => !dentro.has(s)).sort()
+    const clave = faltan.join(',')
+    if (!faltan.length || pidiendoFuera.current === clave) return
+    pidiendoFuera.current = clave
+    valoresUniverso(faltan).then(rows => {
+      setFilas(prev => {
+        const ya = new Set((prev || []).map(r => r.symbol))
+        return [...(prev || []), ...rows.filter(r => !ya.has(r.symbol)).map(r => ({ ...r, fuera: true }))]
+      })
+    }).catch(() => {}).finally(() => { pidiendoFuera.current = '' })
+  }, [filas, estrellasCache])
+
   const filasVista = useMemo(() => {
     if (!filas) return null
     const conSerie = filas.map(r => {
@@ -178,13 +195,17 @@ export default function Buscador() {
     })
     const { col, desc } = orden
     const v = r => r[col]
-    let base = soloEstrellas ? conSerie.filter(r => estrellas[r.symbol]) : conSerie
-    // ATR % (01/10/2026): fuera los valores con ATR calculado fuera del rango; los pendientes se ven hasta que llega su serie
-    if (f.sin_perseguir) base = base.filter(r => !r.perseguir)
-    if (f.atr_on) {
-      const lo = Number(f.atr_min) || 0, hi = Number(f.atr_max) || Infinity
-      base = base.filter(r => r.atr_pct == null || (r.atr_pct >= lo && r.atr_pct <= hi))
-    }
+    let base = conSerie.filter(r => !r.fuera || estrellas[r.symbol])     // fuera de filtro: solo mientras tenga estrella
+    if (soloEstrellas) base = base.filter(r => estrellas[r.symbol])
+    // Filtros en cliente (ATR, perseguir): las estrellas no se ocultan, se marcan "fuera de filtro" (01/10/2026)
+    const lo = Number(f.atr_min) || 0, hi = Number(f.atr_max) || Infinity
+    base = base.map(r => {
+      if (!estrellas[r.symbol] || r.fuera) return r
+      const sale = (f.sin_perseguir && r.perseguir) || (f.atr_on && r.atr_pct != null && (r.atr_pct < lo || r.atr_pct > hi))
+      return sale ? { ...r, fuera: true } : r
+    })
+    if (f.sin_perseguir) base = base.filter(r => r.fuera || !r.perseguir)
+    if (f.atr_on) base = base.filter(r => r.fuera || r.atr_pct == null || (r.atr_pct >= lo && r.atr_pct <= hi))
     return [...base].sort((a, b) => {
       const x = v(a), y = v(b)
       if (x == null && y == null) return 0
@@ -327,7 +348,7 @@ export default function Buscador() {
         <div className="busc-estrellas num">
           <button type="button" className={'chip-solo' + (soloEstrellas ? ' on' : '')} onClick={() => setSoloEstrellas(v => !v)}
                   title="Muestra solo los valores marcados con estrella (dentro de este filtro)">★ Solo estrellas</button>
-          <span className="hist-n">{Object.keys(estrellas).length} con estrella{soloEstrellas && filas ? ` · ${Object.keys(estrellas).filter(s => !filas.some(r => r.symbol === s)).length} fuera de este filtro` : ''} · en la ficha: ‹ › o flechas para pasar, S para la estrella</span>
+          <span className="hist-n">{Object.keys(estrellas).length} con estrella{filasVista && filasVista.some(r => r.fuera) ? ` · ${filasVista.filter(r => r.fuera).length} fuera del filtro (atenuadas)` : ''} · en la ficha: ‹ › o flechas para pasar, S para la estrella</span>
         </div>
       )}
       {movil && filasVista && (
@@ -346,11 +367,11 @@ export default function Buscador() {
               const dias = diasHasta(r.earnings_date)
               const earnCerca = dias != null && dias >= 0 && dias <= 15
               return (
-                <li key={r.symbol} onClick={() => setSel(r)}>
+                <li key={r.symbol} onClick={() => setSel(r)} className={r.fuera ? 'fuera' : ''}>
                   <div className="bl-izq">
                     <div className="bl-l1">
                       <span className={'estrella' + (estrellas[r.symbol] ? ' on' : '')} onClick={e => { e.stopPropagation(); alternarEstrella(r) }}>{estrellas[r.symbol] ? '★' : '☆'}</span>
-                      <b>{r.symbol}</b><span className="nombre">{r.name}</span>
+                      <b>{r.symbol}</b><span className="nombre">{r.name}</span>{r.fuera && <span className="tag-fuera">fuera</span>}
                       {desdeEstrella(r) != null && <span className={'desde-est ' + pctClass(desdeEstrella(r))}>{fmtPct(desdeEstrella(r))}</span>}
                     </div>
                     <div className="bl-l2">
@@ -387,13 +408,13 @@ export default function Buscador() {
                 const dias = diasHasta(r.earnings_date)
                 const earnCerca = dias != null && dias >= 0 && dias <= 15
                 return (
-                  <tr key={r.symbol} onClick={() => setSel(r)} className={sel?.symbol === r.symbol ? 'sel' : ''}>
+                  <tr key={r.symbol} onClick={() => setSel(r)} className={(sel?.symbol === r.symbol ? 'sel' : '') + (r.fuera ? ' fuera' : '')}>
                     <td className="estrella-td" onClick={e => { e.stopPropagation(); alternarEstrella(r) }}
                         title={estrellas[r.symbol] ? `★ desde ${estrellas[r.symbol].fecha.slice(2).split('-').reverse().join('/')} a ${estrellas[r.symbol].precio}` : 'Marcar con estrella'}>
                       <span className={'estrella' + (estrellas[r.symbol] ? ' on' : '')}>{estrellas[r.symbol] ? '★' : '☆'}</span>
                       {desdeEstrella(r) != null && <i className={'desde-est ' + pctClass(desdeEstrella(r))}>{fmtPct(desdeEstrella(r))}</i>}
                     </td>
-                    <td className="tl ticker"><b>{r.symbol}</b> <span className="nombre">{r.name}</span></td>
+                    <td className="tl ticker"><b>{r.symbol}</b> <span className="nombre">{r.name}</span>{r.fuera && <span className="tag-fuera" title="Con estrella pero fuera de los filtros actuales. Desaparece al quitar la estrella.">fuera de filtro</span>}</td>
                     <td className="tl merc">{r.market}{r.adr ? <i title={'ADR · empresa de ' + r.adr}> ADR</i> : ''}</td>
                     <td className="tl sector">{SECTOR_ES[r.sector] || r.sector}</td>
                     <td title={capBucket(r.cap_usd)}>{fmtCap(r.cap_usd)}</td>
