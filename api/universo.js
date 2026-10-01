@@ -2,7 +2,7 @@
 // Filtros en servidor (PostgREST) sobre la tabla `universo` que rellena /api/universo-refresh.
 // Sin auth: son datos públicos de mercado (como /api/quotes). Sin caché.
 //   mercado=US,EU,CN,JPKR,OTROS   cap=MG,M,P (MG ≥10 B$ · M 2-10 B$ · P <2 B$)
-//   pe_min=10&pe_max=35&pe_na=1   sector=Technology,Healthcare…   rating=FC,C&rating_na=1 (antes rating_max=2.5)
+//   pe_campo=fwd|ttm&pe_min=8&pe_max=25&pe_na=1   sector=Technology,Healthcare…   rating=FC,C&rating_na=1 (antes rating_max=2.5)
 //   earn_dias=15 (excluye resultados a ≤N días; 0 = no filtra)   ma50=1  ma200=1  p3m=1
 //   q=texto (símbolo o nombre)   orden=cap_usd.desc   limite=300 (máx. 1000)   estado=1 (solo estado del refresco)
 
@@ -40,11 +40,12 @@ export default async function handler(req, res) {
     }
     const peMin = p.pe_min !== undefined && p.pe_min !== '' ? Number(p.pe_min) : null
     const peMax = p.pe_max !== undefined && p.pe_max !== '' ? Number(p.pe_max) : null
+    const peCol = String(p.pe_campo || '') === 'fwd' ? 'pe_forward' : 'pe_trailing'   // 01/10/2026: PER futuro por defecto
     if (peMin != null || peMax != null) {
       const cond = []
-      if (peMin != null) cond.push(`pe_trailing.gte.${peMin}`)
-      if (peMax != null) cond.push(`pe_trailing.lte.${peMax}`)
-      if (String(p.pe_na || '') === '1') f.push(`or=(pe_trailing.is.null,${cond.length > 1 ? `and(${cond.join(',')})` : cond[0]})`)
+      if (peMin != null) cond.push(`${peCol}.gte.${peMin}`)
+      if (peMax != null) cond.push(`${peCol}.lte.${peMax}`)
+      if (String(p.pe_na || '') === '1') f.push(`or=(${peCol}.is.null,${cond.length > 1 ? `and(${cond.join(',')})` : cond[0]})`)
       else for (const c of cond) f.push(c.replace('.', '='))   // pe_trailing.gte.10 → pe_trailing=gte.10
     }
     const sectores = csv(p.sector)
