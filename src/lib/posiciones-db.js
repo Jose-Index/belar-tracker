@@ -8,7 +8,7 @@ export async function fetchPosiciones() {
     supabase.from('positions').select('*').order('ticker'),
     supabase.from('position_snapshots').select('week_end,ticker,broker,value')
       .order('week_end', { ascending: false }).limit(150),
-    supabase.from('app_state').select('key,value').in('key', ['liquidez', 'last_week_close', 'btc_wallet']),
+    supabase.from('app_state').select('key,value').in('key', ['liquidez', 'last_week_close', 'btc_wallet', 'bloques_orden']),
   ])
   const st = Object.fromEntries((state.data || []).map(r => [r.key, r.value]))
   return {
@@ -18,6 +18,7 @@ export async function fetchPosiciones() {
     btcQty: walletDe(st.btc_wallet).qty || 0.014706,  // monedero BTC personal
     btcWallet: walletDe(st.btc_wallet),               // { qty, invertido, aportes }
     lastClose: st.last_week_close || null,
+    bloquesOrden: Array.isArray(st.bloques_orden?.orden) ? st.bloques_orden.orden : null,   // orden de las tablas por bloque
     error: pos.error?.message || null,
   }
 }
@@ -99,6 +100,24 @@ export async function registrarCierre(c) {
   await supabase.from('repositorio').insert({ ticker: c.ticker, estado: 'CERRADA', nota: `${c.motivo || 'manual'} · captura` })
   if (c.posId) return supabase.from('positions').delete().eq('id', c.posId)
   return {}
+}
+
+// Orden de los bloques en Posiciones (arrastrar y soltar, 01/10/2026): app_state.bloques_orden = { orden: [ids] }
+export function guardarOrdenBloques(orden) {
+  return supabase.from('app_state').upsert({ key: 'bloques_orden', value: { orden }, updated_at: new Date().toISOString() })
+}
+
+// Todos los cierres semanales por posición (para la gráfica de cada bloque). Paginado: PostgREST corta en 1000.
+export async function fetchSnapsBloques() {
+  const filas = []
+  for (let desde = 0; desde < 20000; desde += 1000) {
+    const { data, error } = await supabase.from('position_snapshots').select('week_end,ticker,broker,value,invested')
+      .order('week_end').range(desde, desde + 999)
+    if (error || !data?.length) break
+    filas.push(...data)
+    if (data.length < 1000) break
+  }
+  return filas
 }
 
 export function guardarLiquidez(liq) {
