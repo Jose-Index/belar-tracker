@@ -12,6 +12,7 @@ import Herramientas from './pages/Herramientas.jsx'
 import Sandbox from './pages/Sandbox.jsx'
 import FooterFrase from './components/FooterFrase.jsx'
 import EstadoDatos from './components/EstadoDatos.jsx'
+import { useArrastreCierre } from './lib/movil'
 
 // Iconos de línea (24×24, trazo 2) para la barra inferior del móvil
 const ICONOS = {
@@ -47,6 +48,7 @@ export default function App() {
   useEffect(() => { setMas(false) }, [loc.pathname])   // cerrar la hoja "Más" al navegar
   useEffect(() => { document.body.classList.toggle('sin-scroll', mas); return () => document.body.classList.remove('sin-scroll') }, [mas])
   const enSecundario = SECUNDARIOS.some(m => loc.pathname.startsWith(m.to))
+  const arrastre = useArrastreCierre(() => setMas(false))
 
   return (
     <div className="app">
@@ -102,7 +104,7 @@ export default function App() {
       </nav>
       {mas && (
         <div className="hoja-fondo" onClick={() => setMas(false)}>
-          <div className="hoja hoja-mas" role="dialog" aria-label="Más secciones" onClick={e => e.stopPropagation()}>
+          <div className="hoja hoja-mas" role="dialog" aria-label="Más secciones" onClick={e => e.stopPropagation()} {...arrastre}>
             <div className="hoja-asa" aria-hidden="true" />
             {SECUNDARIOS.map(m => (
               <NavLink key={m.to} to={m.to} className={({ isActive }) => 'hoja-item' + (isActive ? ' active' : '')}>{m.label}</NavLink>
