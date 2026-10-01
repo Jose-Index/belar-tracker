@@ -6,9 +6,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   MERCADOS, CAPS, SECTORES, SECTOR_ES, RATINGS, FILTROS_DEFECTO, cargarFiltros, guardarFiltros,
   buscarUniverso, estadoUniverso, seriesUniverso, refrescarUniverso, universoViejo, fmtCap, capBucket, diasHasta,
-  leerEstrellas, guardarEstrellas, contadoresTesis,
+  leerEstrellas, guardarEstrellas, contadoresTesis, vixActual,
 } from '../lib/universo'
-import Ficha from '../components/Ficha.jsx'
+import Ficha, { ChipVix } from '../components/Ficha.jsx'
 import { useMovil } from '../lib/movil'
 import { useCache, cargar, fijar } from '../lib/cache'
 import './buscador.css'
@@ -54,6 +54,7 @@ export default function Buscador() {
   const estrellas = estrellasCache || {}
   const [soloEstrellas, setSoloEstrellas] = useState(false)
   const { data: contadores } = useCache('buscador:contadores', contadoresTesis, { ttl: 60e3 })
+  const { data: vix } = useCache('buscador:vix', vixActual, { ttl: 5 * 60e3 })
   async function alternarEstrella(r) {
     const nuevo = { ...estrellas }
     if (nuevo[r.symbol]) delete nuevo[r.symbol]
@@ -110,7 +111,8 @@ export default function Buscador() {
   const resumenFiltros = [
     f.mercado.length === MERCADOS.length ? 'todos los mercados' : f.mercado.join('/'),
     f.cap.length ? f.cap.map(c => CAPS.find(x => x.id === c)?.label || c).join('/') : null,
-    (f.pe_min || f.pe_max) ? `PER ${f.pe_min || '0'}–${f.pe_max || '∞'}` : null,
+    (f.pe_min || f.pe_max) ? `PER ${f.pe_campo === 'fwd' ? 'fut. ' : ''}${f.pe_min || '0'}–${f.pe_max || '∞'}` : null,
+    f.atr_on ? `ATR ${f.atr_min}–${f.atr_max} %` : null,
     ratingTodos ? null : 'rating ' + f.rating.map(id => RATINGS.find(r => r.id === id)?.label).join('/'),
     f.earn_dias ? `sin result. <${f.earn_dias}d` : null,
     [f.ma50 && '>MA50', f.ma200 && '>MA200', f.p3m && '3M+'].filter(Boolean).join(' ') || null,
@@ -131,12 +133,18 @@ export default function Buscador() {
   useEffect(() => {
     if (!filas?.length) return
     const hoy = new Date().toISOString().slice(0, 10)
-    const faltan = filas.filter(r => !(r.series_at || '').startsWith(hoy) && !seriesPedidas.current.has(r.symbol)).map(r => r.symbol).slice(0, 100)
+    // Todas las filas (no solo las 100 primeras): el filtro ATR se aplica sobre el ATR calculado. Tandas de 100.
+    const faltan = filas.filter(r => !(r.series_at || '').startsWith(hoy) && !seriesPedidas.current.has(r.symbol)).map(r => r.symbol)
     if (!faltan.length) return
     faltan.forEach(s => seriesPedidas.current.add(s))
-    seriesUniverso(faltan).then(rows => {
-      setSeries(prev => ({ ...prev, ...Object.fromEntries(rows.map(r => [r.symbol, r])) }))
-    }).catch(() => {})
+    ;(async () => {
+      for (let i = 0; i < faltan.length; i += 100) {
+        try {
+          const rows = await seriesUniverso(faltan.slice(i, i + 100))
+          setSeries(prev => ({ ...prev, ...Object.fromEntries(rows.map(r => [r.symbol, r])) }))
+        } catch { /* la tanda se queda sin tendencia */ }
+      }
+    })()
   }, [filas])
 
   const filasVista = useMemo(() => {
@@ -149,7 +157,12 @@ export default function Buscador() {
     })
     const { col, desc } = orden
     const v = r => r[col]
-    const base = soloEstrellas ? conSerie.filter(r => estrellas[r.symbol]) : conSerie
+    let base = soloEstrellas ? conSerie.filter(r => estrellas[r.symbol]) : conSerie
+    // ATR % (01/10/2026): fuera los valores con ATR calculado fuera del rango; los pendientes se ven hasta que llega su serie
+    if (f.atr_on) {
+      const lo = Number(f.atr_min) || 0, hi = Number(f.atr_max) || Infinity
+      base = base.filter(r => r.atr_pct == null || (r.atr_pct >= lo && r.atr_pct <= hi))
+    }
     return [...base].sort((a, b) => {
       const x = v(a), y = v(b)
       if (x == null && y == null) return 0
@@ -158,7 +171,8 @@ export default function Buscador() {
       const c = typeof x === 'string' ? x.localeCompare(y) : x - y
       return desc ? -c : c
     })
-  }, [filas, series, orden, soloEstrellas, estrellas])
+  }, [filas, series, orden, soloEstrellas, estrellas, f.atr_on, f.atr_min, f.atr_max])
+  const atrPendientes = f.atr_on && filasVista ? filasVista.filter(r => r.atr_pct == null).length : 0
 
   const ordenar = col => setOrden(o => o.col === col ? { col, desc: !o.desc } : { col, desc: !['symbol', 'market', 'sector', 'earnings_date', 'rating'].includes(col) })
   const total = estado?.total || 0
@@ -168,6 +182,7 @@ export default function Buscador() {
       <div className="pos-head">
         <h1>Buscador <span className="hist-n">Tesis JOSE −11/+23,5 · datos de cierre, sin tiempo real</span></h1>
         <div className="pos-controls num">
+          {vix?.v != null && <ChipVix vix={vix} />}
           <span className="sello">
             {estado ? `universo ${total.toLocaleString('es-ES')} valores · ${estado.estado?.fin ? 'refrescado ' + fHora(estado.estado.fin) : 'sin refrescar'}` : 'universo…'}
           </span>
@@ -200,10 +215,12 @@ export default function Buscador() {
         <div className="filtro">
           <span className="f-t">PER</span>
           <div className="chips rango">
+            <button className={f.pe_campo === 'fwd' ? 'on' : ''} onClick={() => set('pe_campo', 'fwd')} title="Sobre el beneficio estimado de los próximos 12 meses">Futuro</button>
+            <button className={f.pe_campo !== 'fwd' ? 'on' : ''} onClick={() => set('pe_campo', 'ttm')} title="Sobre el beneficio de los últimos 12 meses">Actual</button>
             <input value={f.pe_min} onChange={e => set('pe_min', e.target.value)} inputMode="decimal" title="PER mínimo" />
             <span>–</span>
             <input value={f.pe_max} onChange={e => set('pe_max', e.target.value)} inputMode="decimal" title="PER máximo" />
-            <label className="check"><input type="checkbox" checked={f.pe_na} onChange={e => set('pe_na', e.target.checked)} /> incluir sin beneficios</label>
+            <label className="check"><input type="checkbox" checked={f.pe_na} onChange={e => set('pe_na', e.target.checked)} /> {f.pe_campo === 'fwd' ? 'incluir sin estimación' : 'incluir sin beneficios'}</label>
           </div>
         </div>
         <div className="filtro">
@@ -221,6 +238,16 @@ export default function Buscador() {
             <label className="check"><input type="checkbox" checked={!!f.earn_dias} onChange={e => set('earn_dias', e.target.checked ? 15 : 0)} /> excluir resultados a menos de</label>
             <input value={f.earn_dias || ''} disabled={!f.earn_dias} onChange={e => set('earn_dias', Number(e.target.value) || 0)} inputMode="numeric" />
             <span>días</span>
+          </div>
+        </div>
+        <div className="filtro">
+          <span className="f-t">Volatilidad (ATR %)</span>
+          <div className="chips rango">
+            <label className="check" title="Techo 5,5: con SL −11 el buffer es ≥ 2×ATR. Suelo 1,5: por debajo, el +23,5 en 20 semanas es improbable."><input type="checkbox" checked={!!f.atr_on} onChange={e => set('atr_on', e.target.checked)} /> solo entre</label>
+            <input value={f.atr_min} disabled={!f.atr_on} onChange={e => set('atr_min', e.target.value)} inputMode="decimal" title="ATR % mínimo" />
+            <span>–</span>
+            <input value={f.atr_max} disabled={!f.atr_on} onChange={e => set('atr_max', e.target.value)} inputMode="decimal" title="ATR % máximo" />
+            <span>%</span>
           </div>
         </div>
         <div className="filtro">
@@ -346,14 +373,14 @@ export default function Buscador() {
         )}
       </div>
       <p className="pos-fuente">
-        {filasVista ? `${filasVista.length} valores` : ''} · fuente Yahoo Finance (cierre diario) · 1M/3M/6M y ⚠ se calculan al vuelo para los valores en pantalla · PER n/a = sin beneficios · rating 1 compra fuerte → 5 venta
+        {filasVista ? `${filasVista.length} valores` : ''}{atrPendientes ? ` (${atrPendientes} pendientes de ATR)` : ''} · fuente Yahoo Finance (cierre diario) · 1M/3M/6M y ⚠ se calculan al vuelo para los valores en pantalla · PER n/a = sin beneficios · rating 1 compra fuerte → 5 venta
       </p>
 
       {sel && (() => {
         const lista = filasVista || []
         const i = lista.findIndex(r => r.symbol === sel.symbol)
         return <Ficha valor={sel} onClose={() => setSel(null)} lista={lista} indice={i} onNav={j => setSel(lista[j])}
-                      estrella={estrellas[sel.symbol] || null} onEstrella={alternarEstrella} contadores={contadores || null} />
+                      estrella={estrellas[sel.symbol] || null} onEstrella={alternarEstrella} contadores={contadores || null} vix={vix || null} />
       })()}
     </div>
   )
