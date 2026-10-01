@@ -925,7 +925,13 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
       )}
       <div className="attr-selects">
         <label title={BLOQUE_DE_ID[bloque]?.ayuda || ''}>Bloque
-          <select value={bloque} onChange={e => setAttr('bloque', e.target.value)}>
+          <select value={bloque} onChange={e => {
+            const v = e.target.value
+            // Regla SATÉLITE: desde la Tesis solo se asciende en ganancia (≥ +23,5); nunca para esquivar un stop
+            if (v === 'SATELITE' && bloque === 'TESIS' && !(p.ret >= TESIS_TP) &&
+                !window.confirm(`${p.ticker} va ${fmtPct(p.ret)}: la regla solo permite pasar de Tesis a SATÉLITE en ganancia (≥ +23,5 %). ¿Pasarla igualmente?`)) return
+            setAttr('bloque', v)
+          }}>
             {BLOQUES.map(b => <option key={b.id} value={b.id} title={b.ayuda}>{b.corto}</option>)}
           </select>
         </label>
@@ -1077,7 +1083,7 @@ export function AltaDialog({ inicial = {}, onClose, onDone }) {
     const { error } = await altaPosicion({
       ticker: f.ticker.trim().toUpperCase(), broker: f.broker, entry_date: f.entry_date,
       invested: inv, current_value: Number(f.current_value) || inv,
-      clase: f.bloque === 'BTC' ? f.estrBtc : f.bloque === 'TESIS' ? 'TACTICA' : 'NUCLEO', estado: 'OK', fuente: 'YO', bloque: f.bloque,
+      clase: f.bloque === 'BTC' ? f.estrBtc : f.bloque === 'TESIS' ? 'TACTICA' : f.bloque === 'SATELITE' ? 'DISRUPTIVA' : 'NUCLEO', estado: 'OK', fuente: 'YO', bloque: f.bloque,
       apalancamiento: Number(f.apalancamiento) || 1,
       entry_price: num(f.entry_price), sl_price: num(f.sl_price), tp_price: num(f.tp_price),
     })
