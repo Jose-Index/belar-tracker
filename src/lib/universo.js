@@ -27,10 +27,12 @@ export const RATINGS = [
 ]
 const RATING_DESDE_MAX = { 1.5: ['FC'], 2.5: ['FC', 'C'], 3.5: ['FC', 'C', 'N'] }
 
-// Valores por defecto de la Tesis (30/09/2026): USA, las tres capitalizaciones, PER 10-35,
+// Valores por defecto de la Tesis (30/09/2026; PER y ATR 01/10/2026): USA, las tres capitalizaciones, PER futuro 8-25,
+// ATR % 1,5-5,5 (techo = regla 2×ATR con SL −11; suelo = sin recorrido para el +23,5),
 // todos los sectores, rating compra o mejor, resultados a ≤15 días fuera.
 export const FILTROS_DEFECTO = {
-  mercado: ['US'], cap: ['MG', 'M', 'P'], pe_min: 10, pe_max: 35, pe_na: false,
+  mercado: ['US'], cap: ['MG', 'M', 'P'], pe_campo: 'fwd', pe_min: 8, pe_max: 25, pe_na: false,
+  atr_on: true, atr_min: 1.5, atr_max: 5.5,
   sector: SECTORES.map(s => s[0]), rating: ['FC', 'C'], rating_na: true, earn_dias: 15,
   ma50: false, ma200: false, p3m: false, q: '', orden: 'cap_usd.desc',
 }
@@ -44,6 +46,7 @@ export function cargarFiltros() {
       j.rating = j.rating_max != null ? (RATING_DESDE_MAX[j.rating_max] || []) : FILTROS_DEFECTO.rating
     }
     delete j.rating_max
+    if (!j.pe_campo) { j.pe_campo = 'fwd'; j.pe_min = FILTROS_DEFECTO.pe_min; j.pe_max = FILTROS_DEFECTO.pe_max }   // decisión 01/10/2026
     return { ...FILTROS_DEFECTO, ...j }
   }
   catch { return { ...FILTROS_DEFECTO } }
@@ -62,6 +65,7 @@ export async function buscarUniverso(f, limite = 400) {
   if (f.pe_min !== '' && f.pe_min != null) p.set('pe_min', f.pe_min)
   if (f.pe_max !== '' && f.pe_max != null) p.set('pe_max', f.pe_max)
   if (f.pe_na) p.set('pe_na', '1')
+  if (f.pe_campo === 'fwd') p.set('pe_campo', 'fwd')
   if (f.sector?.length && f.sector.length < SECTORES.length) p.set('sector', f.sector.join(','))
   if (f.rating?.length && f.rating.length < RATINGS.length) { p.set('rating', f.rating.join(',')); if (f.rating_na) p.set('rating_na', '1') }
   if (f.earn_dias) p.set('earn_dias', f.earn_dias)
@@ -76,6 +80,16 @@ export async function buscarUniverso(f, limite = 400) {
   if (j.error) throw new Error(j.error)
   return j
 }
+
+// VIX (volatilidad del S&P 500) para el semáforo del Buscador: < 20 verde, 20-30 ámbar, > 30 rojo.
+// Informativo (01/10/2026); pasa a regla solo si el banco lo justifica.
+export async function vixActual() {
+  const r = await fetch('/api/quotes?symbols=' + encodeURIComponent('^VIX'))
+  const q = (await r.json()).quotes?.[0]
+  if (!q || q.error) throw new Error(q?.error || 'sin VIX')
+  return { v: q.price, prev: q.prev_close, at: q.quoted_at, estado: q.market_state }
+}
+export const nivelVix = v => v == null ? null : v < 20 ? 'verde' : v <= 30 ? 'ambar' : 'rojo'
 
 export async function estadoUniverso() {
   const r = await fetch('/api/universo?estado=1')
