@@ -1,6 +1,8 @@
 // Calendario global: eventos manuales (José/Belar en sesión), próximos 60 días. IA retirada 13/08/2026.
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { useCache } from '../lib/cache'
+import { useMovil } from '../lib/movil'
 import { tickersVigilados, purgarCalendario } from '../lib/ia'
 import './inicio.css'
 
@@ -8,21 +10,24 @@ const TIPO = { earnings: '📊', exdiv: '💰', fed: '🏛', bce: '🏛', cripto
 const fFecha = d => d ? d.slice(2).split('-').reverse().join('/') : '—'
 const DIAS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 
+async function loaderCalendario() {
+  const hoy = new Date().toISOString().slice(0, 10)
+  const lim = new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10)
+  // Universo: posiciones abiertas + repositorio (ENTRAR YA / RADAR). Cerradas fuera.
+  const vigilados = await tickersVigilados()
+  await purgarCalendario(vigilados)
+  const { data } = await supabase.from('calendar_events').select('*')
+    .gte('event_date', hoy).lte('event_date', lim).order('event_date')
+  return (data || []).filter(e => !e.ticker || vigilados.includes(e.ticker))
+}
+
 export default function Calendario() {
-  const [rows, setRows] = useState(null)
+  const { data: rows, recargar } = useCache('calendario', loaderCalendario, { ttl: 5 * 60e3, persist: true })
+  const cargar = () => recargar(true)
   const hoy = new Date().toISOString().slice(0, 10)
   const [nuevo, setNuevo] = useState({ event_date: hoy, ticker: '', event_type: 'otro', titulo: '', confirmacion: 'confirmado' })
-
-  async function cargar() {
-    const lim = new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10)
-    // Universo: posiciones abiertas + repositorio (ENTRAR YA / RADAR). Cerradas fuera.
-    const vigilados = await tickersVigilados()
-    await purgarCalendario(vigilados)
-    const { data } = await supabase.from('calendar_events').select('*')
-      .gte('event_date', hoy).lte('event_date', lim).order('event_date')
-    setRows((data || []).filter(e => !e.ticker || vigilados.includes(e.ticker)))
-  }
-  useEffect(() => { cargar() }, [])
+  const movil = useMovil()
+  const [formAbierto, setFormAbierto] = useState(false)   // móvil: el alta se pliega tras "+ Evento"
 
   async function alta(e) {
     e.preventDefault()
@@ -54,7 +59,8 @@ export default function Calendario() {
         {rows.filter(r => r.confirmacion === 'estimado').length} estimados</span></h1>
 
       <div className="card" style={{ maxWidth: 860 }}>
-        <form className="repo-alta num" onSubmit={alta}>
+        {movil && <button type="button" className="btn-sec" style={{ marginBottom: formAbierto ? 0 : 4 }} onClick={() => setFormAbierto(v => !v)}>{formAbierto ? 'cerrar' : '+ Evento'}</button>}
+        {(!movil || formAbierto) && <form className="repo-alta num" onSubmit={alta}>
           <input type="date" value={nuevo.event_date} onChange={e => setNuevo({ ...nuevo, event_date: e.target.value })} />
           <input placeholder="TICKER" value={nuevo.ticker} style={{ width: 90, textTransform: 'uppercase' }}
                  onChange={e => setNuevo({ ...nuevo, ticker: e.target.value })} />
@@ -69,7 +75,7 @@ export default function Calendario() {
             <option value="estimado">estimado</option>
           </select>
           <button className="btn-sec">+ Evento</button>
-        </form>
+        </form>}
 
         <div className="cal-lista">
           {[...porDia.entries()].map(([dia, evs]) => {
