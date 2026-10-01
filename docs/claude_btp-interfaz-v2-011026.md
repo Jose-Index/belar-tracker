@@ -27,7 +27,8 @@ Claves en uso: `inicio`, `posiciones`, `evolucion`, `historico:semanas`, `alerta
 - **Detalle de posición como hoja deslizante** desde abajo (fondo oscuro que cierra al tocarlo, cabecera pegada, scroll propio, bloqueo del scroll del fondo). Alta de posición y modales: hoja desde abajo.
 - **Buscador**: filtros plegados tras la primera búsqueda bajo una barra-resumen ("Filtros · US · Mega+Grande · PER 10–35 · rating ≤2 · sin result. <15d…") que los despliega; botón Buscar pegado al pie del panel de filtros; resultados como lista de dos líneas (símbolo + nombre / mercado · cap · PER · ★rating · fecha de resultados en rojo si ≤15 días · ⚠ perseguir; a la derecha 3M y distancia al máximo); selector de orden propio. **Ficha a pantalla completa** con cabecera pegada y botones "A la sombra" / "Entrada…" a todo el ancho.
 - **Alertas y Calendario**: el formulario de alta se pliega tras "+ Alerta" / "+ Evento"; los chips de cada evento bajan de línea.
-- Hook `useMovil()` (`src/lib/movil.js`, mismo corte que el CSS) y `useSinScroll(activo)`.
+- Hook `useMovil()` (`src/lib/movil.js`, mismo corte que el CSS), `useSinScroll(activo)` y `useArrastreCierre(onClose)`: la hoja de detalle, la Ficha y la hoja "Más" se cierran arrastrándolas hacia abajo (arranca solo con la hoja en lo alto de su scroll; umbral 90 px; por debajo vuelve a su sitio).
+- PWA: manifest e iconos desde el 19/09; el 01/10 se añaden `viewport-fit=cover` y las metas `apple-mobile-web-app-*` para que, añadida a la pantalla de inicio del iPhone, abra a pantalla completa con la barra inferior respetando el indicador de inicio.
 
 ## 3. Escritorio
 
@@ -41,7 +42,5 @@ Local con el mock (`.devmock/vite.dev.mjs`, puerto 5199): `.devmock/shot.mjs <ru
 
 ## Pendiente / ideas
 
-- Gestos: cerrar la hoja de detalle arrastrando hacia abajo.
 - Modo oscuro (los tokens existen en `tokens.css`; falta activarlo y repasar los colores fijos de fondos de estado).
 - Comparativa "vs cartera" en móvil (hoy oculta).
-- PWA instalable (manifest + icono) para abrir BTP desde la pantalla de inicio del iPhone.
