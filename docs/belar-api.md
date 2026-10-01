@@ -54,6 +54,21 @@ Body JSON: `{ "tabla", "accion", "datos", "filtro"?, "nota"? }`
 - `GET /api/history?symbol=X&range=3y&ohlc=1` → serie diaria de 3 años con máximos y mínimos (Ficha).
 - `universo` está en la lista blanca de `?que=tabla`.
 
+### Vigía BTP (01/10/2026) — `api/vigia.js`
+Vigila los niveles que el bróker no admite como orden: posiciones con `sl_type = 'ALERTA'` (se marca en el panel de
+detalle, casilla 🔔). Compara `sl_price` (suelo/SL) y `tp_price` (TP) con Yahoo (chart v8; usa el mínimo/máximo del día
+para no perder toques entre pasadas) y, solo con el mercado del símbolo abierto (cripto siempre):
+- cruce del nivel → alerta en el Radar (`autor: vigia`, severidad alta) + push ntfy (prioridad máxima);
+- precio a ≤2 % del nivel → alerta y push de aviso (una vez).
+Cada aviso se da una sola vez por posición, tipo y nivel (`app_state.vigia.disparos`); si el nivel cambia, se rearma.
+- `GET /api/vigia` pasada normal · `?dry=1` simula sin escribir ni notificar · `?test=1` manda un push de prueba.
+- Auth: `Bearer CRON_SECRET` | `Bearer BELAR_TOKEN` | sesión Supabase.
+- Lanzador: cron-job.org cada 5 minutos con cabecera `Authorization: Bearer <CRON_SECRET>` (el plan Hobby de Vercel solo permite un cron diario).
+- Push: variable `NTFY_TOPIC` en Vercel → Preview (canal privado de ntfy; app ntfy en el iPhone suscrita a ese canal). Sin ella, solo Radar.
+- Estado: `app_state.vigia = { last_run, last_ok, vigiladas, errores, disparos }`; la leyenda de Posiciones lo muestra y marca ¡PARADO! si en horario de mercado lleva >20 min sin pasada.
+- Unidades: el nivel se compara tal cual con el precio de Yahoo del símbolo canónico (Londres cotiza en peniques, GBp).
+- No sustituye a una orden real: hasta 5 min de retraso y cierre manual. Solo para lo que el bróker no admite.
+
 ## Uso desde Belar
 ```bash
 curl -s -H "Authorization: Bearer $BELAR_TOKEN" "https://btp-belar.vercel.app/api/belar-lectura?que=posiciones"
