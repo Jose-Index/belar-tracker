@@ -7,7 +7,6 @@ const fmt$ = v => v == null ? '—' : Number(v).toLocaleString('es-ES', { minimu
 
 // Elegibles en la propia pantalla de revisión (spec §8 + motivos de cierre del histórico)
 const CLASES_ALTA = { NUCLEO: 'NÚCLEO', MOMENTUM: 'MOMENTUM', TACTICA: 'TÁCTICA', DISRUPTIVA: 'DISRUPT.' }
-const FUENTES_ALTA = ['YO', 'BELAR', 'PRENSA', 'REDES']
 const MOTIVOS_CIERRE = ['xSL', 'manual', 'escalonada']
 const BROKERS_UI = [{ id: 'etoro', label: 'eToro' }, { id: 'xtb', label: 'XTB' }, { id: 'ibkr', label: 'IBKR' }]
 const HOY = () => new Date().toISOString().slice(0, 10)
@@ -56,7 +55,12 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
         // Sin fila en symbols no hay alias que valga: se compara el ticker de la
         // posición con las variantes del texto (quita el sufijo de mercado: MU.US → MU).
         const vars = new Set(textos.flatMap(variantes))
-        const pos = positions.find(p => p.broker === ex.broker && p.ticker.toUpperCase() === t)
+        // Mismo ticker varias veces en el mismo broker (BTC en XTB: Táctica y Combo MA200, 01/10/2026):
+        // cada lote va a la posición aún no vista con el invertido más cercano.
+        const mismos = positions.filter(p => p.broker === ex.broker && p.ticker.toUpperCase() === t && !vistos.has(p.id))
+        const cerca = p => r.invertido == null ? 0 : Math.abs(Number(p.invested) - r.invertido)
+        const pos = (mismos.length > 1 ? [...mismos].sort((x, y) => cerca(x) - cerca(y))[0] : mismos[0])
+          || positions.find(p => p.broker === ex.broker && p.ticker.toUpperCase() === t)
           || positions.find(p => p.broker === ex.broker && !canon && vars.has(p.ticker.toUpperCase()))
           || positions.find(p => p.broker === ex.broker && !canon && (
             (r.nombre && r.nombre.toUpperCase().includes(p.ticker.toUpperCase())) ||
@@ -250,10 +254,6 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
               <select className="diff-sel" value={n.clase} title="Clasificación de la nueva posición"
                 onChange={e => setCampo('nuevas', i, 'clase', e.target.value)}>
                 {Object.entries(CLASES_ALTA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
-              <select className="diff-sel" value={n.fuente} title="Origen de la idea"
-                onChange={e => setCampo('nuevas', i, 'fuente', e.target.value)}>
-                {FUENTES_ALTA.map(f => <option key={f} value={f}>{f}</option>)}
               </select>
             </>}
           </div>
