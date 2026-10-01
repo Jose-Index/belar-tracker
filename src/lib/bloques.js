@@ -4,8 +4,8 @@
 // Regla §7.3: un bloque a más de +5 puntos de su objetivo no recibe entradas nuevas.
 
 export const BLOQUES = [
-  { id: 'BTC',       label: 'BTC núcleo',          corto: 'BTC',        objetivo: 10, color: '#17202E',
-    ayuda: 'BTC eToro + VBTC.DE. Sin salida, horizonte 2036. Aportación eToro 110 €/mes. La táctica RSI-BTC 70/50 (VBTC.DE) también vive aquí, con stop.' },
+  { id: 'BTC',       label: 'BTC',                 corto: 'BTC',        objetivo: 10, color: '#17202E',
+    ayuda: 'Cuatro estrategias, cada posición etiquetada: Base (eToro, sin salida, horizonte 2036, 110 €/mes), Wallet (BTC propio), Combo MA200 v1 (VBTC.DE, entra y sale por la regla) y Táctica (VBTC.DE, con stop).' },
   { id: 'ORO',       label: 'ORO núcleo',          corto: 'ORO',        objetivo: 8,  color: '#B08D2F',
     ayuda: 'IGLN físico. Compras solo en retroceso: nunca a <5 % del máximo de 52 semanas ni tras +15 % en 3 meses. Sin SL, invalidación escrita.' },
   { id: 'NUCLEO',    label: 'NÚCLEO',              corto: 'NÚCLEO',     objetivo: 24, color: '#2E6BF6',
@@ -45,6 +45,32 @@ export function bloquePorDefecto(p) {
 }
 export const bloqueDe = p => (p?.bloque && BLOQUE_DE_ID[p.bloque]) ? p.bloque : bloquePorDefecto(p)
 
+// Estrategias dentro del bloque BTC (01/10/2026). Sin DDL: se guardan en `clase`, cuyo CHECK
+// solo admite NUCLEO/MOMENTUM/TACTICA/DISRUPTIVA → NUCLEO = Base, MOMENTUM = Combo MA200 v1,
+// TACTICA = Táctica. La Wallet no es una posición (vive en app_state.btc_wallet).
+export const BTC_ESTRATEGIAS = [
+  { clase: 'NUCLEO',   id: 'BASE',    label: 'Base' },
+  { clase: 'MOMENTUM', id: 'COMBO',   label: 'Combo MA200 v1' },
+  { clase: 'TACTICA',  id: 'TACTICA', label: 'Táctica' },
+]
+export const estrategiaBTC = p => {
+  if (bloqueDe(p) !== 'BTC') return null
+  return BTC_ESTRATEGIAS.find(e => e.clase === p?.clase) || (p?.broker === 'etoro' ? BTC_ESTRATEGIAS[0] : BTC_ESTRATEGIAS[2])
+}
+
+// Wallet BTC personal (app_state.btc_wallet). Desde el 01/10/2026 guarda las aportaciones
+// [{ fecha, btc, usd }]: la cantidad es su suma y el invertido la suma de los USD, así la wallet
+// tiene G/P y G/P %. Sin aportaciones se usa `qty` a secas y no hay coste (no entra en el G/P).
+export function walletDe(v) {
+  const aportes = Array.isArray(v?.aportaciones) ? v.aportaciones.filter(a => Number(a.btc) > 0) : []
+  if (aportes.length) {
+    const qty = Math.round(aportes.reduce((a, x) => a + Number(x.btc), 0) * 1e8) / 1e8
+    const invertido = Math.round(aportes.reduce((a, x) => a + (Number(x.usd) || 0), 0) * 100) / 100
+    return { qty, invertido: aportes.every(x => Number(x.usd) > 0) ? invertido : null, aportes }
+  }
+  return { qty: Number(v?.qty) || 0, invertido: null, aportes: [] }
+}
+
 // Semáforo de desvío en puntos porcentuales respecto al objetivo (§7.3)
 export const DESVIO_ROJO = 5
 export const DESVIO_AMBAR = 3
@@ -52,7 +78,7 @@ export const semaforoDesvio = pp => pp == null ? '' : Math.abs(pp) > DESVIO_ROJO
 
 // Pesos reales por bloque. Base = posiciones + liquidez de brókers + wallet BTC personal
 // (decisión de José del 30/09/2026: la wallet entra en la base y suma al bloque BTC núcleo).
-// wallet = { qty, usd } — usd ya valorado a precio de mercado; sin precio, usd = 0 y no cuenta.
+// wallet = { qty, usd, invertido? } — usd ya valorado a precio de mercado; sin precio, usd = 0 y no cuenta.
 export function pesosBloques(positions, liquidez, objetivos, wallet) {
   const val = p => Number(p.current_value ?? p.invested) || 0
   const totalPos = (positions || []).reduce((a, p) => a + val(p), 0)
@@ -62,10 +88,11 @@ export function pesosBloques(positions, liquidez, objetivos, wallet) {
   const obj = { ...Object.fromEntries(BLOQUES.map(b => [b.id, b.objetivo])), CAJA: CAJA.objetivo, ...(objetivos || {}) }
   const filas = BLOQUES.map(b => {
     const ps = (positions || []).filter(p => bloqueDe(p) === b.id)
-    const extra = b.id === 'BTC' ? walletUsd : 0            // la wallet suma al bloque BTC, sin coste conocido
+    const extra = b.id === 'BTC' ? walletUsd : 0            // la wallet suma al bloque BTC
+    const walletInv = b.id === 'BTC' && extra && Number(wallet?.invertido) > 0 ? Number(wallet.invertido) : 0
     const valor = ps.reduce((a, p) => a + val(p), 0) + extra
-    const invertido = ps.reduce((a, p) => a + (Number(p.invested) || 0), 0)
-    const gp = valor - extra - invertido                     // G/P solo de las posiciones de bróker
+    const invertido = ps.reduce((a, p) => a + (Number(p.invested) || 0), 0) + walletInv
+    const gp = valor - (walletInv ? 0 : extra) - invertido   // con coste de la wallet registrado, entra en el G/P
     const real = base ? valor / base * 100 : null
     const objetivo = Number(obj[b.id]) || 0
     const desvio = real == null ? null : real - objetivo
