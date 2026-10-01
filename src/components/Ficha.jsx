@@ -1,7 +1,7 @@
 // Ficha de un valor del Buscador: gráfica de línea (cierres) a 2 años por defecto con
 // MA50 y MA200, datos de la Tesis y dos acciones: Entrada (alta prellenada con SL −11 /
 // TP +23,5) y A la sombra (cartera sombra en el repositorio, con precio y fecha).
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts'
 import { supabase } from '../lib/supabase'
@@ -17,7 +17,20 @@ const pctClass = v => v == null ? '' : v > 0 ? 'up' : v < 0 ? 'down' : ''
 const fmtPx = v => v == null ? '—' : Number(v).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: v < 10 ? 3 : 2 })
 const fFecha = t => { const d = new Date(t); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getFullYear()).slice(2)}` }
 
-export default function Ficha({ valor: v, onClose }) {
+// Caché de series por símbolo (01/10/2026): al pasar de una ficha a otra se precargan la anterior y la
+// siguiente, así el paso es instantáneo.
+const cacheSerie = new Map()
+function serieDiaria(symbol) {
+  if (!cacheSerie.has(symbol)) {
+    cacheSerie.set(symbol, fetch(`/api/history?symbol=${encodeURIComponent(symbol)}&range=3y&ohlc=1`).then(r => r.json())
+      .then(j => j.points ? j : { points: [] }).catch(() => { cacheSerie.delete(symbol); return { points: [] } }))
+  }
+  return cacheSerie.get(symbol)
+}
+
+// Navegación (01/10/2026): lista = filas en el orden y filtro del Buscador; indice = posición actual.
+// ‹ › / flechas del teclado / deslizar en el móvil. Estrella ★ (tecla S). Freno visible de la Tesis.
+export default function Ficha({ valor: v, onClose, lista = null, indice = -1, onNav, estrella = null, onEstrella, contadores = null }) {
   const arrastre = useArrastreCierre(onClose)   // móvil: cerrar arrastrando hacia abajo
   const [vista, setVista] = useState(() => localStorage.getItem('btp-ficha-vista') || '2y')
   const [diaria, setDiaria] = useState(null)   // 3 años diarios con OHLC (para MA200 y ATR reales)
@@ -29,10 +42,37 @@ export default function Ficha({ valor: v, onClose }) {
   useEffect(() => {
     let vivo = true
     setDiaria(null); setSemanal(null); setMsg(null)
-    fetch(`/api/history?symbol=${encodeURIComponent(v.symbol)}&range=3y&ohlc=1`).then(r => r.json())
-      .then(j => { if (vivo) setDiaria(j.points ? j : { points: [] }) }).catch(() => vivo && setDiaria({ points: [] }))
+    serieDiaria(v.symbol).then(j => { if (vivo) setDiaria(j) })
+    // precarga de la anterior y la siguiente
+    if (lista && indice >= 0) [lista[indice + 1], lista[indice - 1]].forEach(x => x && serieDiaria(x.symbol))
     return () => { vivo = false }
   }, [v.symbol])
+
+  const hayLista = !!(lista && lista.length > 1 && indice >= 0 && onNav)
+  const ir = d => { if (!hayLista) return; const j = indice + d; if (j >= 0 && j < lista.length) onNav(j) }
+  // Teclado: ← → navegan, S marca/desmarca la estrella, Esc cierra
+  useEffect(() => {
+    const fn = e => {
+      if (/input|textarea|select/i.test(e.target?.tagName || '')) return
+      if (e.key === 'ArrowRight') { e.preventDefault(); ir(1) }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); ir(-1) }
+      else if ((e.key === 's' || e.key === 'S') && onEstrella) { e.preventDefault(); onEstrella(v) }
+      else if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', fn)
+    return () => window.removeEventListener('keydown', fn)
+  })
+  // Móvil: deslizar a izquierda/derecha sobre la gráfica
+  const toque = useRef(null)
+  const gestos = {
+    onTouchStart: e => { toque.current = { x: e.touches[0].clientX, y: e.touches[0].clientY } },
+    onTouchEnd: e => {
+      const t = toque.current; toque.current = null
+      if (!t) return
+      const dx = e.changedTouches[0].clientX - t.x, dy = e.changedTouches[0].clientY - t.y
+      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) { e.stopPropagation(); ir(dx < 0 ? 1 : -1) }
+    },
+  }
   useEffect(() => {
     if (vista !== '5y' || semanal) return
     let vivo = true
@@ -100,13 +140,24 @@ export default function Ficha({ valor: v, onClose }) {
       <div className="card modal ficha num" onClick={e => e.stopPropagation()} {...arrastre}>
         <div className="ficha-head">
           <div>
-            <h2>{v.symbol} <span className="nombre">{v.name}</span></h2>
+            <h2>
+              {onEstrella && <button className={'estrella' + (estrella ? ' on' : '')} onClick={() => onEstrella(v)}
+                title={estrella ? `Quitar estrella (★ desde ${estrella.fecha.slice(2).split('-').reverse().join('/')} a ${fmtPx(estrella.precio)})` : 'Marcar con estrella (tecla S): guarda fecha y precio'}>{estrella ? '★' : '☆'}</button>}
+              {v.symbol} <span className="nombre">{v.name}</span>
+            </h2>
             <div className="ficha-sub">
               {v.exchange_name || v.exchange} · {v.market}{v.adr ? ' (ADR)' : ''} · {SECTOR_ES[v.sector] || v.sector} · {capBucket(v.cap_usd)} {fmtCap(v.cap_usd)}
             </div>
           </div>
-          <button className="cerrar" onClick={onClose}>✕</button>
+          <div className="ficha-nav">
+            {hayLista && <span className="ficha-pos">{indice + 1} / {lista.length}</span>}
+            <button className="cerrar" onClick={onClose}>✕</button>
+          </div>
         </div>
+        {estrella && (
+          <p className="ficha-estrella">★ desde {estrella.fecha.slice(2).split('-').reverse().join('/')} a {fmtPx(estrella.precio)}
+            {precio && estrella.precio ? <> · <b className={pctClass(precio / estrella.precio - 1)}>{fmtPct((precio / estrella.precio - 1) * 100)}</b> desde la estrella</> : null}</p>
+        )}
 
         <div className="ficha-datos">
           <Dato l="Último cierre" v={`${fmtPx(precio)} ${v.currency || ''}`} s={calc?.ultT ? fFecha(calc.ultT) : ''} />
@@ -127,7 +178,9 @@ export default function Ficha({ valor: v, onClose }) {
           </p>
         )}
 
-        <div className="ficha-chart">
+        <div className="ficha-chart" {...gestos}>
+          {hayLista && <button className="ficha-flecha izq" disabled={indice <= 0} onClick={() => ir(-1)} aria-label="Anterior" title="Anterior (←)">‹</button>}
+          {hayLista && <button className="ficha-flecha der" disabled={indice >= lista.length - 1} onClick={() => ir(1)} aria-label="Siguiente" title="Siguiente (→)">›</button>}
           <div className="ficha-chart-head">
             <div className="periodos">
               {VISTAS.map(([id, l]) => <button key={id} className={vista === id ? 'on' : ''} onClick={() => setVista(id)}>{l}</button>)}
@@ -156,6 +209,12 @@ export default function Ficha({ valor: v, onClose }) {
         </div>
 
         <div className="ficha-pie">
+          {contadores && (
+            <span className={'ficha-freno' + (contadores.lineas >= 8 || contadores.entradasMes >= 4 ? ' lleno' : '')}
+                  title="Freno visible de la Tesis: máx. 8 líneas abiertas y 4 entradas nuevas al mes. No prohíbe: avisa.">
+              Tesis: {contadores.lineas}/8 líneas · {contadores.entradasMes}/4 entradas este mes
+            </span>
+          )}
           <span className="ficha-tesis">Tesis sobre el último cierre: entrada ≤ {fmtPx(precio * 1.005)} (cierre +0,5 %) · SL {fmtPx(sl)} · TP {fmtPx(tp)}</span>
           <div className="modal-botones" style={{ margin: 0 }}>
             <button className="btn-sec" onClick={aLaSombra} title="Registra la idea en la cartera sombra con precio y fecha, sin entrar">A la sombra</button>
