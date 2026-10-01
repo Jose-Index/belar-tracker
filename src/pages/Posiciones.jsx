@@ -10,7 +10,7 @@ import { useCache, useSondeo, cargar } from '../lib/cache'
 import { eventosProximos } from '../lib/ia'
 import { BLOQUES, BLOQUE_DE_ID, bloqueDe, bloquePorDefecto, pesosBloques, TESIS_SL, TESIS_TP, tesisSL, tesisTP } from '../lib/bloques'
 import IngestaIA from '../components/IngestaIA.jsx'
-import { useMovil, useSinScroll } from '../lib/movil'
+import { useMovil, useSinScroll, useArrastreCierre } from '../lib/movil'
 import './posiciones.css'
 
 // ─── Constantes de la spec ───────────────────────────────────────────────
@@ -705,6 +705,7 @@ function BarraTesis({ p, etiqueta = false }) {
 
 // ─── Panel de detalle: atributos editables + notas fechadas ─────────────
 function PanelDetalle({ p, onClose, onChange, onCerrar }) {
+  const arrastre = useArrastreCierre(onClose)   // móvil: cerrar la hoja arrastrando hacia abajo
   const [notas, setNotas] = useState([])
   const [nueva, setNueva] = useState('')
   const [serie, setSerie] = useState([])
@@ -775,7 +776,7 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
   }
 
   return (
-    <aside className="pos-panel card">
+    <aside className="pos-panel card" {...arrastre}>
       <div className="pos-panel-head">
         <h2>{p.ticker} <span className="broker">{p.broker}</span></h2>
         <button onClick={onClose}>✕</button>
