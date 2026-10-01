@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { walletDe } from './bloques'
 
 // ─── Operaciones de datos de Posiciones (RLS: solo José) ─────────────
 
@@ -14,14 +15,25 @@ export async function fetchPosiciones() {
     positions: pos.data || [],
     snapshots: snaps.data || [],
     liquidez: st.liquidez || { etoro: 0, xtb: 0, ibkr: 0 },
-    btcQty: Number(st.btc_wallet?.qty) || 0.014706,   // monedero BTC personal
+    btcQty: walletDe(st.btc_wallet).qty || 0.014706,  // monedero BTC personal
+    btcWallet: walletDe(st.btc_wallet),               // { qty, invertido, aportes }
     lastClose: st.last_week_close || null,
     error: pos.error?.message || null,
   }
 }
 
-export function guardarBtcWallet(qty) {
-  return supabase.from('app_state').upsert({ key: 'btc_wallet', value: { qty }, updated_at: new Date().toISOString() })
+// Guarda la cantidad del monedero SIN perder las aportaciones (si las hay, la cantidad es su suma).
+export async function guardarBtcWallet(qty) {
+  const { data } = await supabase.from('app_state').select('value').eq('key', 'btc_wallet').maybeSingle()
+  const prev = data?.value || {}
+  const value = Array.isArray(prev.aportaciones) && prev.aportaciones.length ? { ...prev, qty: walletDe(prev).qty } : { ...prev, qty }
+  return supabase.from('app_state').upsert({ key: 'btc_wallet', value, updated_at: new Date().toISOString() })
+}
+
+// Aportaciones de la wallet: [{ fecha: 'YYYY-MM-DD', btc, usd }]. qty se recalcula como su suma.
+export function guardarAportesWallet(aportaciones) {
+  const value = { aportaciones, qty: walletDe({ aportaciones }).qty }
+  return supabase.from('app_state').upsert({ key: 'btc_wallet', value, updated_at: new Date().toISOString() })
 }
 
 // Columnas de la Cartera v3 (30/09/2026): `bloque` y `tp_price` en positions.
