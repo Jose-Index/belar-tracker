@@ -280,3 +280,64 @@
 
 .pos-tabla tr.fila-wallet td { color: var(--texto-sec); }
 .pos-tabla tr.fila-wallet td.ticker { font-weight: 600; color: var(--texto); }
+
+/* ─── Interfaz v2 (01/10/2026): móvil ─── */
+/* Lista de tarjetas por bloque (sustituye a la tabla en móvil fuera del modo cierre) */
+.pos-lista { list-style: none; margin: 0; padding: 0; }
+.pos-lista li {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 10px 12px; border-bottom: 1px solid var(--borde); cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.pos-lista li:last-child { border-bottom: none; }
+.pos-lista li.sel { background: #EAF0FE; }
+.pos-lista li.fondo-OJO    { background: #FEF9F0; }
+.pos-lista li.fondo-DUDA   { background: #F2F6FE; }
+.pos-lista li.fondo-XSALIR { background: #FDF4F5; }
+.pos-lista .pl-izq { min-width: 0; flex: 1; display: grid; gap: 3px; }
+.pos-lista .pl-l1 { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.pos-lista .ticker { font-weight: 700; font-size: 14px; }
+.pos-lista .broker { font-family: var(--font-ui); color: var(--texto-neutro); font-size: 12px; }
+.pos-lista .pl-apal { font-size: 10.5px; color: var(--texto-sec); border: 1px solid var(--borde); border-radius: 4px; padding: 0 4px; }
+.pos-lista .pl-l2 { font-size: 11.5px; color: var(--texto-sec); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pos-lista .pl-der { flex: none; text-align: right; display: grid; gap: 1px; }
+.pos-lista .pl-valor { font-weight: 600; font-size: 14px; }
+.pos-lista .pl-gp { font-weight: 600; font-size: 12.5px; }
+.pos-lista .pl-gp i { font-style: normal; font-weight: 500; font-size: 11px; opacity: .8; margin-left: 3px; }
+.pos-lista .pl-peso { font-size: 10.5px; color: var(--texto-neutro); }
+.pos-lista li.fila-wallet { cursor: default; }
+.pos-lista li.fila-wallet .pl-valor { color: var(--texto-sec); }
+.pos-lista li.subtotal { cursor: default; background: var(--papel); border-top: 2px solid var(--borde); color: var(--texto-sec); font-weight: 600; font-size: 12px; }
+.pos-lista li.subtotal .pl-valor { color: var(--texto); }
+.pos-lista .barra-tesis .bt-pista { width: 72px; }
+.bloque-card.lista .bloque-cab { cursor: default; padding: 8px 12px; }
+.bloque-card.lista .bloque-chips { margin-left: auto; width: auto; }
+
+/* Fondo de la hoja de detalle: solo existe en móvil */
+.pos-panel-fondo { display: none; }
+
+@media (max-width: 900px) {
+  .pos-head h1, .pos-head h2 { margin-bottom: 6px; }
+  .pos-controls { gap: 6px; }
+  .pos-controls .sello { width: 100%; }
+  .pos-controls .btn-sec, .pos-controls .btn-cierre { font-size: 11px; padding: 7px 10px; }
+  .pos-fuente, .pos-leyenda { display: none; }
+  .bloques-tablas { gap: 10px; }
+  .bloque-card.lista .bloque-chips { font-size: 11px; gap: 8px; }
+  .bloque-card.lista .chip-peso { padding: 2px 7px; }
+
+  /* Detalle como hoja deslizante desde abajo */
+  .pos-panel-fondo { display: block; position: fixed; inset: 0; z-index: 44; background: rgba(13, 20, 32, .45); }
+  .pos-layout .pos-panel {
+    position: fixed; left: 0; right: 0; bottom: 0; top: auto; z-index: 45;
+    width: 100% !important; max-height: 88vh; max-height: 88dvh; overflow-y: auto;
+    border-radius: 16px 16px 0 0; border-bottom: none;
+    padding: 14px 16px calc(18px + env(safe-area-inset-bottom));
+    box-shadow: 0 -8px 30px rgba(13, 20, 32, .18); animation: subir .18s ease-out;
+  }
+  .pos-panel-head { position: sticky; top: -14px; margin: -14px -16px 0; padding: 12px 16px 8px; background: var(--superficie); z-index: 1; border-radius: 16px 16px 0 0; }
+  .pos-panel-head button { font-size: 18px; padding: 4px 8px; }
+  .modal-fondo { align-items: end; }
+  .modal { width: 100vw; max-height: 92vh; max-height: 92dvh; overflow-y: auto; border-radius: 16px 16px 0 0; padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+  .alta-grid { grid-template-columns: 1fr 1fr; }
+}
