@@ -1,5 +1,7 @@
 // BTP · /api/ia-capturas — extrae posiciones de capturas de pantalla de brokers.
-// POST { images: [{ data: base64, media_type }], modo?: 'cerradas' }
+// POST { images: [{ data: base64, media_type }], modo?: 'cerradas', conocidas?: [{ broker, ticker, invertido }] }
+// conocidas (01/10/2026): posiciones ya registradas; la lectura debe usar esos tickers exactos cuando el
+// "Invertido" coincide, en vez de inventar un nombre parecido a partir del texto de la captura.
 // modo ausente → posiciones abiertas: { extracciones: [{ broker, liquidez|null, posiciones: [...] }] }
 // modo 'cerradas' (13/08/2026) → pantallas de historial/posiciones cerradas:
 //   { extracciones: [{ broker, cierres: [{nombre, ticker, invertido, valor_cierre, gp, fecha_cierre, fecha_apertura, apalancamiento}] }] }
@@ -57,17 +59,26 @@ Reglas:
 - Si una cifra no se lee con certeza, null antes que inventarla.
 - CRÍTICO: transcribe cada importe dígito a dígito y reléelo antes de escribirlo. Ante ambigüedad visual, null.`
 
+// Lista de posiciones ya registradas para anclar los tickers a lo que existe de verdad.
+function textoConocidas(conocidas) {
+  if (!Array.isArray(conocidas) || !conocidas.length) return ''
+  const lineas = conocidas.slice(0, 80).map(c => `${c.broker} · ${c.ticker} · invertido ${Number(c.invertido).toFixed(2)}`)
+  return `\n\nPOSICIONES YA REGISTRADAS (broker · ticker · invertido en USD):\n${lineas.join('\n')}\n` +
+    `Regla de anclaje: si una fila de la captura tiene el MISMO "Invertido" (al céntimo) que una de estas posiciones del mismo broker, su ticker ES ese ticker exacto: devuélvelo tal cual aunque el texto de la pantalla te parezca otro (los nombres cortos se leen mal: "RR.L" no es "XRP", "MATX" no es "MTTR"). ` +
+    `Solo devuelve un ticker que no esté en la lista si su invertido no coincide con ninguno. No inventes posiciones nuevas por una lectura dudosa del nombre.`
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST' }); return }
   try {
-    const { images, modo } = req.body || {}
+    const { images, modo, conocidas } = req.body || {}
     if (!images?.length) { res.status(400).json({ error: 'images requerido' }); return }
     const content = [
       ...images.slice(0, 8).map(im => ({
         type: 'image',
         source: { type: 'base64', media_type: im.media_type || 'image/png', data: im.data },
       })),
-      { type: 'text', text: modo === 'cerradas' ? PROMPT_CERRADAS : PROMPT },
+      { type: 'text', text: modo === 'cerradas' ? PROMPT_CERRADAS : PROMPT + textoConocidas(conocidas) },
     ]
     const msg = await anthropic({ messages: [{ role: 'user', content }] })
     res.setHeader('Cache-Control', 'no-store')
