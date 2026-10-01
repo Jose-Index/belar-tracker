@@ -1,11 +1,12 @@
 // Gráfica Evolución del Portfolio — componente autónomo (se usa en Inicio y en Histórico).
 // Toggles: Desglose (por broker + BTC wallet), Rentabilidad (TWR base 100), $/€.
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   AreaChart, Area, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   ReferenceLine, CartesianGrid,
 } from 'recharts'
 import { supabase } from '../lib/supabase'
+import { useCache } from '../lib/cache'
 import { serieTWR, serieTWRDesglose } from '../lib/twr'
 
 export const BROKER_COLS = { etoro: '#2E6BF6', xtb: '#3BC9F5', ibkr: '#8A93A6', btc: '#17202E' }
@@ -19,25 +20,26 @@ const fFecha = d => d ? d.slice(2).split('-').reverse().join('/') : '—'
 // Geometría del área de trazado: eje Y 46px a la izquierda, margen derecho 8px
 const PLOT_L = 46, PLOT_R = 8
 
+async function loaderEvolucion() {
+  const [w, h, c] = await Promise.all([
+    supabase.from('weekly_snapshots').select('*').order('week_end'),
+    supabase.from('hitos').select('*').order('fecha_ini'),
+    supabase.from('contributions').select('fecha,broker,importe_eur,importe_usd'),
+  ])
+  return { weeks: w.data || [], hitos: h.data || [], contribs: c.data || [] }
+}
+
 export default function Evolucion() {
-  const [weeks, setWeeks] = useState(null)
-  const [hitos, setHitos] = useState([])
-  const [contribs, setContribs] = useState([])
+  // Datos compartidos y cacheados (lib/cache.js): la portada ya carga snapshots y aportaciones
+  const { data: ev, recargar } = useCache('evolucion', loaderEvolucion, { ttl: 5 * 60e3, persist: true })
+  const weeks = ev?.weeks || null, hitos = ev?.hitos || [], contribs = ev?.contribs || []
   const [divisa, setDivisa] = useState('$')
   const [neto, setNeto] = useState(false)
   const [desglose, setDesglose] = useState(false)
   const [gestor, setGestor] = useState(false)
   const [hover, setHover] = useState(null)   // hito con el ratón encima
 
-  async function cargar() {
-    const [w, h, c] = await Promise.all([
-      supabase.from('weekly_snapshots').select('*').order('week_end'),
-      supabase.from('hitos').select('*').order('fecha_ini'),
-      supabase.from('contributions').select('fecha,broker,importe_eur,importe_usd'),
-    ])
-    setWeeks(w.data || []); setHitos(h.data || []); setContribs(c.data || [])
-  }
-  useEffect(() => { cargar() }, [])
+  const cargar = () => recargar(true)
 
   // Serie $ y € honesta (EURUSD de cada momento, arrastrando el último conocido)
   const serie = useMemo(() => {
