@@ -26,7 +26,7 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
     if (!files?.length) return
     setEstado('procesando'); setErr(null); setAviso(null)
     try {
-      const ex = await extraerCapturas(files)
+      const ex = await extraerCapturas(files, positions.map(p => ({ broker: p.broker, ticker: p.ticker, invertido: Number(p.invested) })))
       setCrudo(ex); setBrokerSel('')
       setDiff(construirDiff(ex, positions, ''))
       setEstado('diff')
