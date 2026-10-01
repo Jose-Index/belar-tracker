@@ -153,11 +153,11 @@ export default function Inicio() {
         </div>
       </div>
 
-      <Bloques positions={positions} liquidez={liquidez} objetivos={objetivos} wallet={{ qty: btcQty, usd: btcUsd, precio: btcPrecio, invertido: data?.btcInv || null }} />
+      <Evolucion />
 
       <Posiciones embed onCambio={posicionesCambiaron} seleccionInicial={altaInicial} wallet={{ qty: btcQty, usd: btcUsd, precio: btcPrecio, invertido: data?.btcInv || null }} />
 
-      <Evolucion />
+      <Bloques positions={positions} liquidez={liquidez} objetivos={objetivos} wallet={{ qty: btcQty, usd: btcUsd, precio: btcPrecio, invertido: data?.btcInv || null }} />
 
       <div className="boxes cuentas num">
         {cuentas.map(c => (
