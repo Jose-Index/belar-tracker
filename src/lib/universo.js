@@ -16,21 +16,36 @@ export const SECTORES = [
   ['Energy', 'Energía'], ['Basic Materials', 'Materiales'], ['Real Estate', 'Inmobiliario'], ['Utilities', 'Utilities'],
 ]
 export const SECTOR_ES = Object.fromEntries(SECTORES)
+// Rating de analistas por tramos de la media de Yahoo (1 = compra fuerte … 5 = venta fuerte).
+// Selección independiente; ninguno o los cinco = cualquiera (01/10/2026).
 export const RATINGS = [
-  { id: 1.5, label: 'Compra fuerte' }, { id: 2.5, label: 'Compra o mejor' }, { id: 3.5, label: 'Mantener o mejor' }, { id: 5, label: 'Cualquiera' },
+  { id: 'FC', label: 'Fuerte compra', min: null, max: 1.5 },
+  { id: 'C', label: 'Compra', min: 1.5, max: 2.5 },
+  { id: 'N', label: 'Neutral', min: 2.5, max: 3.5 },
+  { id: 'V', label: 'Venta', min: 3.5, max: 4.5 },
+  { id: 'FV', label: 'Fuerte venta', min: 4.5, max: null },
 ]
+const RATING_DESDE_MAX = { 1.5: ['FC'], 2.5: ['FC', 'C'], 3.5: ['FC', 'C', 'N'] }
 
 // Valores por defecto de la Tesis (30/09/2026): USA, las tres capitalizaciones, PER 10-35,
 // todos los sectores, rating compra o mejor, resultados a ≤15 días fuera.
 export const FILTROS_DEFECTO = {
   mercado: ['US'], cap: ['MG', 'M', 'P'], pe_min: 10, pe_max: 35, pe_na: false,
-  sector: SECTORES.map(s => s[0]), rating_max: 2.5, rating_na: true, earn_dias: 15,
+  sector: SECTORES.map(s => s[0]), rating: ['FC', 'C'], rating_na: true, earn_dias: 15,
   ma50: false, ma200: false, p3m: false, q: '', orden: 'cap_usd.desc',
 }
 
 const KEY = 'btp-buscador-filtros'
 export function cargarFiltros() {
-  try { const j = JSON.parse(localStorage.getItem(KEY) || 'null'); return j ? { ...FILTROS_DEFECTO, ...j } : { ...FILTROS_DEFECTO } }
+  try {
+    const j = JSON.parse(localStorage.getItem(KEY) || 'null')
+    if (!j) return { ...FILTROS_DEFECTO }
+    if (!Array.isArray(j.rating)) {   // filtros guardados con el formato anterior (rating_max)
+      j.rating = j.rating_max != null ? (RATING_DESDE_MAX[j.rating_max] || []) : FILTROS_DEFECTO.rating
+    }
+    delete j.rating_max
+    return { ...FILTROS_DEFECTO, ...j }
+  }
   catch { return { ...FILTROS_DEFECTO } }
 }
 export function guardarFiltros(f) { try { localStorage.setItem(KEY, JSON.stringify(f)) } catch { /* sin storage */ } }
@@ -48,7 +63,7 @@ export async function buscarUniverso(f, limite = 400) {
   if (f.pe_max !== '' && f.pe_max != null) p.set('pe_max', f.pe_max)
   if (f.pe_na) p.set('pe_na', '1')
   if (f.sector?.length && f.sector.length < SECTORES.length) p.set('sector', f.sector.join(','))
-  if (f.rating_max != null && f.rating_max < 5) { p.set('rating_max', f.rating_max); if (f.rating_na) p.set('rating_na', '1') }
+  if (f.rating?.length && f.rating.length < RATINGS.length) { p.set('rating', f.rating.join(',')); if (f.rating_na) p.set('rating_na', '1') }
   if (f.earn_dias) p.set('earn_dias', f.earn_dias)
   if (f.ma50) p.set('ma50', '1')
   if (f.ma200) p.set('ma200', '1')
