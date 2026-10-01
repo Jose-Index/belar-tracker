@@ -2,7 +2,7 @@
 // Filtros en servidor (PostgREST) sobre la tabla `universo` que rellena /api/universo-refresh.
 // Sin auth: son datos públicos de mercado (como /api/quotes). Sin caché.
 //   mercado=US,EU,CN,JPKR,OTROS   cap=MG,M,P (MG ≥10 B$ · M 2-10 B$ · P <2 B$)
-//   pe_min=10&pe_max=35&pe_na=1   sector=Technology,Healthcare…   rating_max=2.5&rating_na=1
+//   pe_min=10&pe_max=35&pe_na=1   sector=Technology,Healthcare…   rating=FC,C&rating_na=1 (antes rating_max=2.5)
 //   earn_dias=15 (excluye resultados a ≤N días; 0 = no filtra)   ma50=1  ma200=1  p3m=1
 //   q=texto (símbolo o nombre)   orden=cap_usd.desc   limite=300 (máx. 1000)   estado=1 (solo estado del refresco)
 
@@ -49,7 +49,15 @@ export default async function handler(req, res) {
     }
     const sectores = csv(p.sector)
     if (sectores.length) f.push(`sector=in.(${sectores.map(lit).join(',')})`)
-    if (p.rating_max !== undefined && p.rating_max !== '') {
+    // rating=FC,C,N,V,FV — tramos independientes (01/10/2026)
+    const TRAMOS = { FC: 'rating.lte.1.5', C: 'and(rating.gt.1.5,rating.lte.2.5)', N: 'and(rating.gt.2.5,rating.lte.3.5)',
+                     V: 'and(rating.gt.3.5,rating.lte.4.5)', FV: 'rating.gt.4.5' }
+    const tramos = csv(p.rating).filter(t => TRAMOS[t])
+    if (tramos.length && tramos.length < 5) {
+      const conds = tramos.map(t => TRAMOS[t])
+      if (String(p.rating_na || '') === '1') conds.push('rating.is.null')
+      f.push(`or=(${conds.join(',')})`)
+    } else if (p.rating_max !== undefined && p.rating_max !== '') {
       const r = Number(p.rating_max)
       f.push(String(p.rating_na || '') === '1' ? `or=(rating.is.null,rating.lte.${r})` : `rating=lte.${r}`)
     }
