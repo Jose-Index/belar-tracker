@@ -35,9 +35,9 @@ const BROKERS = ['etoro', 'xtb', 'ibkr']
 const ORDEN_BROKER = { etoro: 0, xtb: 1, ibkr: 2 }   // orden de la casa, no alfabético
 const ORDENES = [
   { id: 'entrada', label: 'Entrada' }, { id: 'gp', label: 'G/P %' },
-  { id: 'peso', label: 'Peso' }, { id: 'estado', label: 'Estado' },
+  { id: 'peso', label: 'Peso' },
   { id: 'sem', label: 'vari/sem' }, { id: 'dia', label: '%/día' },
-  { id: 'broker', label: 'Broker' }, { id: 'clase', label: 'Clase' },
+  { id: 'broker', label: 'Broker' },
 ]
 
 const fmt$ = v => v == null ? '—' : Number(v).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -406,7 +406,7 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
               <div key={`a${i}`} className="pend-row">
                 <span className="badge-new">NEW</span>
                 <span className="t">{n.ticker} <i>{n.broker}</i></span>
-                <span>invertido ${fmt$(n.invested)} · abierta {n.entry_date ? n.entry_date.slice(2).split('-').reverse().join('/') : '—'} · {CLASES[n.clase] || n.clase} · fuente {n.fuente}</span>
+                <span>invertido ${fmt$(n.invested)} · abierta {n.entry_date ? n.entry_date.slice(2).split('-').reverse().join('/') : '—'} · fuente {n.fuente}</span>
                 <label>bloque
                   <select value={n.bloque || bloquePorDefecto(n)}
                     onChange={e => setPendAltas(p => p.map((x, j) => j === i ? { ...x, bloque: e.target.value } : x))}>
@@ -469,7 +469,6 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
             <span><i className="ev-dot">●</i> evento confirmado · <i className="ev-dot estimado">○</i> fecha estimada, puede desviarse (rojo si faltan &lt;3 días)</span>
             <span><i className="badge new">NEW</i> alta por captura IA</span>
             <span><b>FTE</b> origen de la idea: en blanco YO · B Belar · M mixta · P prensa · R redes</span>
-            <span>fondo <i className="lg-ojo">ámbar OJO</i> · <i className="lg-duda">azul ¿?</i> · <i className="lg-xsalir">rojo xSALIR</i></span>
             <span><b>TESIS</b> SL/TP en gris = calculados (−11/+23,5 sobre la entrada), aún no puestos en el ticket</span>
           </div>
         )}
@@ -519,13 +518,12 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
       {lista ? (
         <ul className="pos-lista num">
           {rows.map(p => (
-            <li key={p.id} onClick={() => onSel(p.id)} className={(selId === p.id ? 'sel ' : '') + 'fondo-' + p.estado}>
+            <li key={p.id} onClick={() => onSel(p.id)} className={selId === p.id ? 'sel' : ''}>
               <div className="pl-izq">
                 <div className="pl-l1">
                   <span className="ticker">{p.ticker}</span>
                   {p.evs.length > 0 && <span className={'ev-dot' + (p.evUrgente ? ' urgente' : '') + (p.evConfirmado ? '' : ' estimado')}>{p.evConfirmado ? '●' : '○'}</span>}
                   <span className="broker">{p.broker}</span>
-                  {p.estado && p.estado !== 'OK' && <span className={'chip chip-' + p.estado}>{ESTADOS[p.estado]?.label || p.estado}</span>}
                   {p.apalancamiento > 1 && <span className="pl-apal">x{Number(p.apalancamiento)}</span>}
                 </div>
                 <div className="pl-l2">
@@ -586,8 +584,6 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
                 <th title="Variación del activo respecto al cierre de la semana anterior (precio vivo Yahoo vs viernes previo)">vari/sem</th>
               </>
             )}
-            <th title="Tu valoración de la posición.">ESTADO</th>
-            <th className="tl" title="Clasificación: NÚCLEO, MOMENTUM, TÁCTICA, DISRUPTIVA">CLASE</th>
             <th title="Apalancamiento (x1 = sin apalancar; máximo de la casa x2)">APAL</th>
             <th title="Peso de la posición sobre posiciones + liquidez + wallet BTC">PESO</th>
             <th title="FUENTE de la idea: en blanco = YO · B = BELAR · M = MIXTA · P = PRENSA · R = REDES">FTE</th>
@@ -597,7 +593,7 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
         <tbody>
           {rows.map(p => (
             <tr key={p.id} onClick={() => onSel(p.id)}
-                className={(selId === p.id && !cierre ? 'sel ' : '') + 'fondo-' + p.estado}>
+                className={selId === p.id && !cierre ? 'sel' : ''}>
               <td className="tl ticker">
                 {p.ticker}
                 {p.ingest_badge === 'NEW' && <span className="badge new">NEW</span>}
@@ -636,10 +632,6 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
                   <td title={p.semFresco || ''}>{fmtPct(p.sem)}</td>
                 </>
               )}
-              <td>
-                <span className={'chip chip-' + p.estado}>{ESTADOS[p.estado]?.label || p.estado}</span>
-              </td>
-              <td className="tl clase" title={CLASE_AYUDA[p.clase] || ''}>{CLASES[p.clase] || p.clase}</td>
               <td>{p.apalancamiento > 1 ? 'x' + Number(p.apalancamiento) : ''}</td>
               <td>{p.peso == null ? '—' : p.peso.toFixed(1) + '%'}</td>
               <td className="fuente" title={'Fuente: ' + (p.fuente || 'YO')}>{p.fuente === 'YO' ? '' : (p.fuente || '').slice(0, 1)}</td>
@@ -658,8 +650,6 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
               <td className="col-clave col-fin">—</td>
               <td colSpan={2} className="tl calc">{wallet.qty} ₿ {wallet.precio ? '× $' + fmt$(wallet.precio) : '· sin precio'}</td>
               <td></td>
-              <td className="tl clase">NÚCLEO</td>
-              <td></td>
               <td>{wallet.peso == null ? '—' : wallet.peso.toFixed(1) + '%'}</td>
               <td className="fuente"></td>
               {cierre && <td></td>}
@@ -673,7 +663,7 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
             <td className="col-clave col-ini">{fmt$(val)}</td>
             <td className={'col-clave ' + pctClass(gp)}>{fmt$(gp)}</td>
             <td className={'col-clave col-fin ' + pctClass(gpPct)}>{fmtPct(gpPct)}</td>
-            <td colSpan={esTesis ? 7 : 5}></td>
+            <td colSpan={esTesis ? 5 : 3}></td>
             <td>{pesoSum.toFixed(1)}%</td>
             <td colSpan={cierre ? 2 : 1}></td>
           </tr>
@@ -813,19 +803,9 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
         </div>
       )}
       <div className="attr-selects">
-        <label>Estado
-          <select value={p.estado} onChange={e => setAttr('estado', e.target.value)}>
-            {Object.entries(ESTADOS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-          </select>
-        </label>
         <label title={BLOQUE_DE_ID[bloque]?.ayuda || ''}>Bloque
           <select value={bloque} onChange={e => setAttr('bloque', e.target.value)}>
             {BLOQUES.map(b => <option key={b.id} value={b.id} title={b.ayuda}>{b.corto}</option>)}
-          </select>
-        </label>
-        <label title={CLASE_AYUDA[p.clase] || ''}>Clase
-          <select value={p.clase} onChange={e => setAttr('clase', e.target.value)}>
-            {Object.entries(CLASES).map(([k, v]) => <option key={k} value={k} title={CLASE_AYUDA[k]}>{v}</option>)}
           </select>
         </label>
         <label>Fuente
@@ -910,7 +890,7 @@ export function AltaDialog({ inicial = {}, onClose, onDone }) {
     const { error } = await altaPosicion({
       ticker: f.ticker.trim().toUpperCase(), broker: f.broker, entry_date: f.entry_date,
       invested: inv, current_value: Number(f.current_value) || inv,
-      clase: f.clase, estado: f.estado, fuente: f.fuente, bloque: f.bloque,
+      clase: f.bloque === 'TESIS' ? 'TACTICA' : 'NUCLEO', estado: 'OK', fuente: f.fuente, bloque: f.bloque,
       apalancamiento: Number(f.apalancamiento) || 1,
       entry_price: num(f.entry_price), sl_price: num(f.sl_price), tp_price: num(f.tp_price),
     })
@@ -933,8 +913,6 @@ export function AltaDialog({ inicial = {}, onClose, onDone }) {
           <label>P. entrada<input placeholder="por acción" value={f.entry_price} onChange={e => set('entry_price', e.target.value)} onBlur={entradaBlur} /></label>
           <label>SL<input placeholder={f.bloque === 'TESIS' ? '−11 %' : 'opcional'} value={f.sl_price} onChange={e => set('sl_price', e.target.value)} /></label>
           <label>TP<input placeholder={f.bloque === 'TESIS' ? '+23,5 %' : 'opcional'} value={f.tp_price} onChange={e => set('tp_price', e.target.value)} /></label>
-          <label>Clase<select value={f.clase} onChange={e => set('clase', e.target.value)}>
-            {Object.entries(CLASES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
           <label>Fuente<select value={f.fuente} onChange={e => set('fuente', e.target.value)}>
             {FUENTES.map(x => <option key={x}>{x}</option>)}</select></label>
           <label>Apal.<input value={f.apalancamiento} onChange={e => set('apalancamiento', e.target.value)} /></label>
