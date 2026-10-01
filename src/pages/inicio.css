@@ -123,7 +123,13 @@
   .fuentes-grid { grid-template-columns: 1fr; }
   .calc-campos { grid-template-columns: 1fr; }
   .evo-head { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .evo-controles { width: 100%; overflow-x: auto; scrollbar-width: none; gap: 8px; }
+  .evo-controles::-webkit-scrollbar { display: none; }
+  .evo-controles > * { flex: none; }
+  .evo-controles .btn-sec, .divisa-toggle button { font-size: 12px; padding: 5px 10px; white-space: nowrap; }
   .cal-dia { flex-direction: column; gap: 2px; }
+  .cal-evento { flex-wrap: wrap; row-gap: 3px; }
+  .alerta-fila { padding: 10px; }
   .cal-fecha { width: auto; }
 }
 
@@ -201,3 +207,35 @@
 }
 
 .tabla-bloques .bq-wallet { font-family: var(--font-ui); font-weight: 500; font-size: 11px; color: var(--texto-neutro); margin-left: 4px; }
+
+/* ─── Interfaz v2 (01/10/2026): etiqueta corta de bloque solo en móvil ─── */
+.tabla-bloques .bq-corto { display: none; }
+
+@media (max-width: 900px) {
+  /* Orden de la portada en móvil: resumen → mercados (tira) → bloques → posiciones → evolución → cuentas */
+  .inicio { display: flex; flex-direction: column; }
+  .inicio > .boxes.resumen { order: 1; margin: 0 0 10px; }
+  .inicio > .mercados { order: 2; }
+  .inicio > .bloques { order: 3; }
+  .inicio > .pos-layout { order: 4; }
+  .inicio > .evo { order: 5; }
+  .inicio > .boxes.cuentas { order: 6; }
+
+  .boxes.resumen .box-total { grid-column: 1 / -1; }
+  .boxes.resumen .box-total .box-v { font-size: 24px; }
+  .box { padding: 10px 12px; }
+  .box-t { font-size: 10px; }
+  .box-s { font-size: 10.5px; line-height: 1.35; }
+
+  /* Bloques: sin donut, cuatro columnas, etiqueta corta */
+  .bloques-donut { display: none; }
+  .bloques-head h2 .hist-n { display: none; }
+  .bloques-aviso { font-size: 11px; }
+  .tabla-bloques .c-n, .tabla-bloques .c-gp, .tabla-bloques .c-usd, .tabla-bloques .bq-wallet, .tabla-bloques .bq-largo { display: none; }
+  .tabla-bloques .bq-corto { display: inline; }
+  .tabla-bloques { font-size: 12px; }
+  .tabla-bloques th, .tabla-bloques td { padding: 7px 6px; }
+  .tabla-bloques td.tl { white-space: nowrap; }
+
+  .evo-head h2, .historico h2 { font-size: 15.5px; }
+}
