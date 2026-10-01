@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase'
 import { serieTWRDesglose } from '../lib/twr'
 import { fetchQuotes, intervaloPrecios } from '../lib/quotes'
 import { useCache, useSondeo, invalidar } from '../lib/cache'
+import { walletDe } from '../lib/bloques'
 import Mercados from '../components/Mercados.jsx'
 import Bloques from '../components/Bloques.jsx'
 import Evolucion, { BROKER_COLS, BROKER_LBL } from '../components/Evolucion.jsx'
@@ -29,7 +30,7 @@ async function loaderInicio() {
   const estado = Object.fromEntries((st.data || []).map(r => [r.key, r.value]))
   return {
     weeks: w.data || [], positions: p.data || [], contribs: c.data || [],
-    liquidez: estado.liquidez || {}, btcQty: Number(estado.btc_wallet?.qty) || 0,
+    liquidez: estado.liquidez || {}, btcQty: walletDe(estado.btc_wallet).qty, btcInv: walletDe(estado.btc_wallet).invertido,
     objetivos: estado.bloques_objetivo || null,
   }
 }
@@ -152,9 +153,9 @@ export default function Inicio() {
         </div>
       </div>
 
-      <Bloques positions={positions} liquidez={liquidez} objetivos={objetivos} wallet={{ qty: btcQty, usd: btcUsd, precio: btcPrecio }} />
+      <Bloques positions={positions} liquidez={liquidez} objetivos={objetivos} wallet={{ qty: btcQty, usd: btcUsd, precio: btcPrecio, invertido: data?.btcInv || null }} />
 
-      <Posiciones embed onCambio={posicionesCambiaron} seleccionInicial={altaInicial} wallet={{ qty: btcQty, usd: btcUsd, precio: btcPrecio }} />
+      <Posiciones embed onCambio={posicionesCambiaron} seleccionInicial={altaInicial} wallet={{ qty: btcQty, usd: btcUsd, precio: btcPrecio, invertido: data?.btcInv || null }} />
 
       <Evolucion />
 
