@@ -390,3 +390,6 @@
 /* Tesis PUENTE (01/10/2026): entradas anteriores a la regla */
 .chip-puente { border-style: dashed; color: #8A5A00; border-color: #D9B36A; background: #FFF8E8; }
 .pos-leyenda .chip-puente { font-style: normal; margin: 0 4px 0 0; }
+
+/* SL/TP en todos los bloques (01/10/2026) */
+.pos-tabla td.na-sl { text-align: center; font-size: 11px; letter-spacing: .02em; }
