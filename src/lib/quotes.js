@@ -129,3 +129,7 @@ export async function aprenderAlias(ticker, textos) {
   if (data) sims.push(data)
   return data ? nuevos.length : 0
 }
+
+// Cadencia de refresco de precios: 60 s con algún mercado abierto, 5 min con todo cerrado
+export const intervaloPrecios = quotes =>
+  Object.values(quotes || {}).some(q => q?.market_state === 'open' || q?.market_state === 'pre' || q?.market_state === 'post') ? 60e3 : 5 * 60e3
