@@ -4,7 +4,7 @@
 //   mercado=US,EU,CN,JPKR,OTROS   cap=MG,M,P (MG ≥10 B$ · M 2-10 B$ · P <2 B$)
 //   pe_campo=fwd|ttm&pe_min=8&pe_max=25&pe_na=1   sector=Technology,Healthcare…   rating=FC,C&rating_na=1 (antes rating_max=2.5)
 //   earn_dias=15 (excluye resultados a ≤N días; 0 = no filtra)   ma50=1  ma200=1  p3m=1
-//   q=texto (símbolo o nombre)   orden=cap_usd.desc   limite=300 (máx. 1000)   estado=1 (solo estado del refresco)
+//   symbols=A,B (solo esos, ignora los demás filtros)   q=texto (símbolo o nombre)   orden=cap_usd.desc   limite=300 (máx. 1000)   estado=1 (solo estado del refresco)
 
 import { rest, contar, sinCache, ahora } from './_belar.js'
 
@@ -78,7 +78,10 @@ export default async function handler(req, res) {
     const mo = String(p.orden || '').match(/^([a-z0-9_]+)\.(asc|desc)$/)
     const orden = mo ? `${mo[1]}.${mo[2]}` : 'cap_usd.desc'
     const limite = Math.min(1000, Math.max(1, Number(p.limite) || 300))
-    const filas = await rest(`universo?select=*&${f.join('&')}&order=${orden}.nullslast&limit=${limite}`)
+    // symbols=A,B — solo esos valores, sin el resto de filtros (estrellas fuera del filtro, 01/10/2026)
+    const solo = csv(p.symbols)
+    const filtros = solo.length ? ['activo=eq.true', `symbol=in.(${solo.map(lit).join(',')})`] : f
+    const filas = await rest(`universo?select=*&${filtros.join('&')}&order=${orden}.nullslast&limit=${limite}`)
     res.status(200).json({ n: filas.length, limite, filas, served_at: ahora() })
   } catch (e) {
     res.status(500).json({ error: String(e.message || e), served_at: ahora() })
