@@ -8,7 +8,7 @@ import { supabase } from '../lib/supabase'
 import { fetchHistory } from '../lib/quotes'
 import { useArrastreCierre } from '../lib/movil'
 import { tesisSL, tesisTP } from '../lib/bloques'
-import { SECTOR_ES, fmtCap, capBucket, diasHasta } from '../lib/universo'
+import { SECTOR_ES, fmtCap, capBucket, diasHasta, nivelVix } from '../lib/universo'
 
 const VISTAS = [['3m', '3M'], ['6m', '6M'], ['1y', '1A'], ['2y', '2A'], ['5y', '5A']]
 const DIAS = { '3m': 92, '6m': 183, '1y': 366, '2y': 731 }
@@ -43,7 +43,20 @@ function serieDiaria(symbol) {
 
 // Navegación (01/10/2026): lista = filas en el orden y filtro del Buscador; indice = posición actual.
 // ‹ › / flechas del teclado / deslizar en el móvil. Estrella ★ (tecla S). Freno visible de la Tesis.
-export default function Ficha({ valor: v, onClose, lista = null, indice = -1, onNav, estrella = null, onEstrella, contadores = null }) {
+// Semáforo del VIX (informativo, 01/10/2026): < 20 verde, 20-30 ámbar, > 30 rojo
+export function ChipVix({ vix }) {
+  const nivel = nivelVix(vix.v)
+  const dif = vix.prev ? (vix.v / vix.prev - 1) * 100 : null
+  const cuando = new Date(vix.at).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' })
+  const fresc = vix.estado === 'open' ? 'RETRASADO ~15 min' : 'CIERRE'
+  return (
+    <span className={'chip-vix ' + nivel} title={`VIX ${vix.v.toFixed(2)} · ${fresc} ${cuando} (Madrid). Semáforo informativo: < 20 calma, 20-30 tensión, > 30 miedo. Con VIX alto, más gaps y más correlación: mira el Filtro Platt.`}>
+      VIX {vix.v.toLocaleString('es-ES', { maximumFractionDigits: 1 })}{dif != null ? <small> {dif >= 0 ? '+' : ''}{dif.toFixed(1)} %</small> : null}
+    </span>
+  )
+}
+
+export default function Ficha({ valor: v, onClose, lista = null, indice = -1, onNav, estrella = null, onEstrella, contadores = null, vix = null }) {
   const arrastre = useArrastreCierre(onClose)   // móvil: cerrar arrastrando hacia abajo
   const [vista, setVista] = useState(() => localStorage.getItem('btp-ficha-vista') || '2y')
   const [diaria, setDiaria] = useState(null)   // 3 años diarios con OHLC (para MA200 y ATR reales)
@@ -254,6 +267,7 @@ export default function Ficha({ valor: v, onClose, lista = null, indice = -1, on
               Tesis: {contadores.lineas}/8 líneas · {contadores.entradasMes}/4 entradas este mes
             </span>
           )}
+          {vix?.v != null && <ChipVix vix={vix} />}
           <span className="ficha-tesis">Tesis sobre el último cierre: entrada ≤ {fmtPx(precio * 1.005)} (cierre +0,5 %) · SL {fmtPx(sl)} · TP {fmtPx(tp)}</span>
           <div className="modal-botones" style={{ margin: 0 }}>
             <button className="btn-sec" onClick={aLaSombra} title="Registra la idea en la cartera sombra con precio y fecha, sin entrar">A la sombra</button>
