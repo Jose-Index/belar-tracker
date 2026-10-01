@@ -8,7 +8,7 @@ export async function fetchPosiciones() {
     supabase.from('positions').select('*').order('ticker'),
     supabase.from('position_snapshots').select('week_end,ticker,broker,value')
       .order('week_end', { ascending: false }).limit(150),
-    supabase.from('app_state').select('key,value').in('key', ['liquidez', 'last_week_close', 'btc_wallet', 'bloques_orden']),
+    supabase.from('app_state').select('key,value').in('key', ['liquidez', 'last_week_close', 'btc_wallet', 'bloques_orden', 'vigia']),
   ])
   const st = Object.fromEntries((state.data || []).map(r => [r.key, r.value]))
   return {
@@ -19,6 +19,7 @@ export async function fetchPosiciones() {
     btcWallet: walletDe(st.btc_wallet),               // { qty, invertido, aportes }
     lastClose: st.last_week_close || null,
     bloquesOrden: Array.isArray(st.bloques_orden?.orden) ? st.bloques_orden.orden : null,   // orden de las tablas por bloque
+    vigia: st.vigia ? { last_run: st.vigia.last_run, vigiladas: st.vigia.vigiladas, errores: st.vigia.errores || [] } : null,   // estado del Vigía (api/vigia)
     error: pos.error?.message || null,
   }
 }
