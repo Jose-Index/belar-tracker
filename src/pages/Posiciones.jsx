@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   fetchPosiciones, updatePosicion, altaPosicion, cerrarPosicion,
-  guardarLiquidez, guardarBtcWallet, cerrarSemana, fetchNotas, addNota, borrarNotaDB, fetchSeriePosicion,
+  guardarLiquidez, guardarBtcWallet, guardarAportesWallet, cerrarSemana, fetchNotas, addNota, borrarNotaDB, fetchSeriePosicion,
 } from '../lib/posiciones-db'
 import { exportBackup } from '../lib/backup'
 import { AreaChart, Area, YAxis, XAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import { getSimbolos, yahooDe, fetchQuotes, pctDia, pctSem, diasAbiertos, frescura, intervaloPrecios } from '../lib/quotes'
 import { useCache, useSondeo, cargar } from '../lib/cache'
 import { eventosProximos } from '../lib/ia'
-import { BLOQUES, BLOQUE_DE_ID, bloqueDe, bloquePorDefecto, pesosBloques, TESIS_SL, TESIS_TP, tesisSL, tesisTP } from '../lib/bloques'
+import { BLOQUES, BLOQUE_DE_ID, BTC_ESTRATEGIAS, estrategiaBTC, bloqueDe, bloquePorDefecto, pesosBloques, TESIS_SL, TESIS_TP, tesisSL, tesisTP } from '../lib/bloques'
 import IngestaIA from '../components/IngestaIA.jsx'
 import { useMovil, useSinScroll, useArrastreCierre } from '../lib/movil'
 import './posiciones.css'
@@ -30,7 +30,6 @@ const CLASE_AYUDA = {
   TACTICA: 'TÁCTICA — oportunidad de corto/medio plazo. SL técnico activo (−5/−8%, mínimo 2×ATR) sobre soporte claro.',
   DISRUPTIVA: 'DISRUPTIVA — smallcap especulativa. Sizing pequeño, SL muy amplio o sin SL: la invalidación es la tesis, no el precio.',
 }
-const FUENTES = ['YO', 'BELAR', 'MIXTA', 'PRENSA', 'REDES']
 const BROKERS = ['etoro', 'xtb', 'ibkr']
 const ORDEN_BROKER = { etoro: 0, xtb: 1, ibkr: 2 }   // orden de la casa, no alfabético
 const ORDENES = [
@@ -59,6 +58,7 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
   const [orden, setOrden] = useState(() => localStorage.getItem('btp-orden') || 'entrada')
   const [desc, setDesc] = useState(() => localStorage.getItem('btp-orden-desc') === '1')
   const [selId, setSelId] = useState(null)
+  const [walletAbierta, setWalletAbierta] = useState(false)   // panel de aportaciones de la wallet
   const [cierre, setCierre] = useState(false)   // MODO CIERRE SEMANA
   const [draft, setDraft] = useState({})        // {id: {invested?, current_value?, ingest_*}} en modo cierre
   const [pendCierres, setPendCierres] = useState([])  // [{pos, motivo}] pendientes de sellar
@@ -80,7 +80,7 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
   const [ingesta, setIngesta] = useState(false)  // ACTUALIZAR POR CAPTURA fuera del cierre
   const tablaRef = useRef(null)
   const movil = useMovil()
-  useSinScroll(movil && !!selId && !cierre)   // en móvil el detalle es una hoja: el fondo no se mueve
+  useSinScroll(movil && (!!selId || walletAbierta) && !cierre)   // en móvil el detalle es una hoja: el fondo no se mueve
 
   useEffect(() => { localStorage.setItem('btp-orden', orden) }, [orden])
   useEffect(() => { localStorage.setItem('btp-orden-desc', desc ? '1' : '0') }, [desc])
@@ -98,7 +98,11 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
   const wallet = useMemo(() => {
     const qty = Number(raw?.btcQty) || 0
     const precio = quotes['BTC-USD']?.price || walletProp?.precio || null
-    return { qty, precio, usd: qty && precio ? qty * precio : (Number(walletProp?.usd) || 0) }
+    const usd = qty && precio ? qty * precio : (Number(walletProp?.usd) || 0)
+    // Coste: suma en USD de las aportaciones (01/10/2026). Sin aportaciones, sin G/P.
+    const invertido = Number(raw?.btcWallet?.invertido) > 0 ? Number(raw.btcWallet.invertido) : null
+    const gp = invertido && usd ? usd - invertido : null
+    return { qty, precio, usd, invertido, gp, gpPct: gp == null ? null : gp / invertido * 100, aportes: raw?.btcWallet?.aportes || [] }
   }, [raw, quotes, walletProp])
 
   // ── Cálculo de derivados ──
@@ -220,7 +224,7 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
         entry_date: n.entry_date || new Date().toISOString().slice(0, 10),
         invested: n.invested, current_value: n.current_value,
         apalancamiento: n.apalancamiento || 1,
-        clase: n.clase, fuente: n.fuente, bloque: n.bloque || bloquePorDefecto(n),
+        clase: n.clase, fuente: n.fuente || 'YO', bloque: n.bloque || bloquePorDefecto(n),
         ingest_badge: 'NEW', ingest_source: `captura ${n.broker} ${n.stamp}`,
       })
     }
@@ -406,7 +410,7 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
               <div key={`a${i}`} className="pend-row">
                 <span className="badge-new">NEW</span>
                 <span className="t">{n.ticker} <i>{n.broker}</i></span>
-                <span>invertido ${fmt$(n.invested)} · abierta {n.entry_date ? n.entry_date.slice(2).split('-').reverse().join('/') : '—'} · fuente {n.fuente}</span>
+                <span>invertido ${fmt$(n.invested)} · abierta {n.entry_date ? n.entry_date.slice(2).split('-').reverse().join('/') : '—'}</span>
                 <label>bloque
                   <select value={n.bloque || bloquePorDefecto(n)}
                     onChange={e => setPendAltas(p => p.map((x, j) => j === i ? { ...x, bloque: e.target.value } : x))}>
@@ -454,7 +458,8 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
         <div className="bloques-tablas" ref={tablaRef}>
           {grupos.map(g => (
             <TablaBloque key={g.b.id} g={g} cierre={cierre} draft={draft} setDraft={setDraft} keyNav={keyNav} movil={movil}
-                         selId={selId} onSel={id => !cierre && setSelId(id)} onBorrar={borrarEnCierre} />
+                         selId={selId} onSel={id => !cierre && setSelId(id)} onBorrar={borrarEnCierre}
+                         onWallet={() => !cierre && (setSelId(null), setWalletAbierta(true))} />
           ))}
           {!grupos.length && <p className="placeholder">Sin posiciones abiertas.</p>}
         </div>
@@ -468,7 +473,6 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
           <div className="pos-leyenda num">
             <span><i className="ev-dot">●</i> evento confirmado · <i className="ev-dot estimado">○</i> fecha estimada, puede desviarse (rojo si faltan &lt;3 días)</span>
             <span><i className="badge new">NEW</i> alta por captura IA</span>
-            <span><b>FTE</b> origen de la idea: en blanco YO · B Belar · M mixta · P prensa · R redes</span>
             <span><b>TESIS</b> SL/TP en gris = calculados (−11/+23,5 sobre la entrada), aún no puestos en el ticket</span>
           </div>
         )}
@@ -481,18 +485,25 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
           <PanelDetalle p={sel} onClose={() => setSelId(null)} onChange={recargar} onCerrar={() => cerrarManual(sel)} />
         </>
       )}
+      {walletAbierta && !cierre && (
+        <>
+          <div className="pos-panel-fondo" onClick={() => setWalletAbierta(false)} aria-hidden="true" />
+          <PanelWallet wallet={wallet} onClose={() => setWalletAbierta(false)} onChange={recargar} />
+        </>
+      )}
       {alta && <AltaDialog inicial={alta} onClose={() => cerrarAlta()} onDone={() => { cerrarAlta(); recargar() }} />}
     </div>
   )
 }
 
 // ─── Una tabla por bloque, con cabecera de bloque y fila de subtotal ─────
-function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorrar, movil = false }) {
+function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorrar, onWallet, movil = false }) {
   const { b, peso, rows, wallet } = g
   const esTesis = b.id === 'TESIS'
-  const inv = rows.reduce((a, p) => a + Number(p.invested || 0), 0)
+  const wInv = wallet?.invertido && wallet?.usd ? wallet.invertido : 0   // wallet con coste: entra en el G/P
+  const inv = rows.reduce((a, p) => a + Number(p.invested || 0), 0) + wInv
   const val = rows.reduce((a, p) => a + p.valor, 0) + (wallet?.usd || 0)
-  const gp = val - (wallet?.usd || 0) - inv                 // G/P solo de las posiciones de bróker
+  const gp = val - (wInv ? 0 : (wallet?.usd || 0)) - inv
   const gpPct = inv ? gp / inv * 100 : null
   const pesoSum = rows.reduce((a, p) => a + (p.peso || 0), 0) + (wallet?.peso || 0)
   const fFecha = d => d ? d.slice(2).split('-').reverse().join('/') : '—'
@@ -522,6 +533,7 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
               <div className="pl-izq">
                 <div className="pl-l1">
                   <span className="ticker">{p.ticker}</span>
+                  {estrategiaBTC(p) && <span className="chip-estr">{estrategiaBTC(p).label}</span>}
                   {p.evs.length > 0 && <span className={'ev-dot' + (p.evUrgente ? ' urgente' : '') + (p.evConfirmado ? '' : ' estimado')}>{p.evConfirmado ? '●' : '○'}</span>}
                   <span className="broker">{p.broker}</span>
                   {p.apalancamiento > 1 && <span className="pl-apal">x{Number(p.apalancamiento)}</span>}
@@ -533,20 +545,21 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
                 </div>
               </div>
               <div className="pl-der">
-                <div className="pl-valor">{fmt$(p.valor)}</div>
-                <div className={'pl-gp ' + pctClass(p.gpPct)}>{fmtPct(p.gpPct)} <i>{fmt$(p.gp)}</i></div>
+                <div className={'pl-gpp ' + pctClass(p.gpPct)}>{fmtPct(p.gpPct)}</div>
+                <div className="pl-valor">{fmt$(p.valor)} <i className={pctClass(p.gp)}>{fmt$(p.gp)}</i></div>
                 <div className="pl-peso">{p.peso == null ? '' : p.peso.toFixed(1) + '% cartera'}</div>
               </div>
             </li>
           ))}
           {wallet && (
-            <li className="fila-wallet">
+            <li className="fila-wallet" onClick={onWallet}>
               <div className="pl-izq">
-                <div className="pl-l1"><span className="ticker">₿ wallet</span><span className="broker">wallet</span></div>
-                <div className="pl-l2">{wallet.qty} ₿ {wallet.precio ? '× $' + fmt$(wallet.precio) : '· sin precio'}</div>
+                <div className="pl-l1"><span className="ticker">BTC</span><span className="chip-estr">Wallet</span></div>
+                <div className="pl-l2">{wallet.qty} ₿ {wallet.precio ? '× $' + fmt$(wallet.precio) : '· sin precio'}{wallet.invertido ? ' · inv ' + fmt$(wallet.invertido) : ' · sin coste'}</div>
               </div>
               <div className="pl-der">
-                <div className="pl-valor">{wallet.precio ? fmt$(wallet.usd) : '—'}</div>
+                <div className={'pl-gpp ' + pctClass(wallet.gpPct)}>{wallet.gpPct == null ? '—' : fmtPct(wallet.gpPct)}</div>
+                <div className="pl-valor">{wallet.precio ? fmt$(wallet.usd) : '—'}{wallet.gp != null && <> <i className={pctClass(wallet.gp)}>{fmt$(wallet.gp)}</i></>}</div>
                 <div className="pl-peso">{wallet.peso == null ? '' : wallet.peso.toFixed(1) + '% cartera'}</div>
               </div>
             </li>
@@ -554,8 +567,8 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
           <li className="subtotal">
             <div className="pl-izq">Σ {b.corto} · inv {fmt$(inv)}</div>
             <div className="pl-der">
-              <div className="pl-valor">{fmt$(val)}</div>
-              <div className={'pl-gp ' + pctClass(gp)}>{fmtPct(gpPct)} <i>{fmt$(gp)}</i></div>
+              <div className={'pl-gpp ' + pctClass(gpPct)}>{fmtPct(gpPct)}</div>
+              <div className="pl-valor">{fmt$(val)} <i className={pctClass(gp)}>{fmt$(gp)}</i></div>
               <div className="pl-peso">{pesoSum.toFixed(1)}% cartera</div>
             </div>
           </li>
@@ -565,12 +578,12 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
         <thead>
           <tr>
             <th className="tl" title="Ticker. ● = evento próximo en calendario (rojo si quedan menos de 3 días). NEW/· = alta/actualización por captura IA.">ACTIVO</th>
+            <th className="col-gpp" title="Ganancia/pérdida abierta en % sobre invertido: el desempeño">G/P %</th>
             <th className="tl">BROKER</th>
             <th title="Fecha de entrada en la posición">ENTRADA</th>
             <th title="Capital invertido (USD)">INVERTIDO</th>
             <th className="col-clave col-ini" title="Valor actual (USD). Fuente única: tus capturas del cierre de semana.">VALOR</th>
-            <th className="col-clave" title="Ganancia/pérdida abierta en dólares">G/P $</th>
-            <th className="col-clave col-fin" title="Ganancia/pérdida abierta en % sobre invertido">G/P %</th>
+            <th className="col-clave col-fin" title="Ganancia/pérdida abierta en dólares">G/P $</th>
             {esTesis ? (
               <>
                 <th title="Precio de entrada (por acción). Se fija al alta o en el panel de detalle.">P.ENT</th>
@@ -586,7 +599,6 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
             )}
             <th title="Apalancamiento (x1 = sin apalancar; máximo de la casa x2)">APAL</th>
             <th title="Peso de la posición sobre posiciones + liquidez + wallet BTC">PESO</th>
-            <th title="FUENTE de la idea: en blanco = YO · B = BELAR · M = MIXTA · P = PRENSA · R = REDES">FTE</th>
             {cierre && <th></th>}
           </tr>
         </thead>
@@ -596,6 +608,7 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
                 className={selId === p.id && !cierre ? 'sel' : ''}>
               <td className="tl ticker">
                 {p.ticker}
+                {estrategiaBTC(p) && <span className="chip-estr">{estrategiaBTC(p).label}</span>}
                 {p.ingest_badge === 'NEW' && <span className="badge new">NEW</span>}
                 {p.ingest_badge === 'UPD' && <span className="badge upd">·</span>}
                 {p.evs.length > 0 && (
@@ -607,6 +620,7 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
                   </span>
                 )}
               </td>
+              <td className={'col-gpp ' + pctClass(p.gpPct)}>{fmtPct(p.gpPct)}</td>
               <td className="tl broker">{p.broker}</td>
               <td>{p.entry_date ? p.entry_date.slice(2).split('-').reverse().join('/') : '—'}</td>
               <td>{cierre
@@ -617,8 +631,7 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
                 ? <input data-col="val" value={draft[p.id]?.current_value ?? p.valor} onKeyDown={keyNav}
                     onChange={e => setDraft(d => ({ ...d, [p.id]: { ...d[p.id], current_value: e.target.value === '' ? '' : Number(e.target.value) } }))} />
                 : fmt$(p.valor)}</td>
-              <td className={'col-clave ' + pctClass(p.gp)}>{fmt$(p.gp)}</td>
-              <td className={'col-clave col-fin ' + pctClass(p.gpPct)}>{fmtPct(p.gpPct)}</td>
+              <td className={'col-clave col-fin ' + pctClass(p.gp)}>{fmt$(p.gp)}</td>
               {esTesis ? (
                 <>
                   <td className={p.entry_price ? '' : 'falta'} title={p.entry_price ? '' : 'Sin precio de entrada: ponlo en el panel de detalle'}>{p.entry_price ? fmtPx(p.entry_price) : '—'}</td>
@@ -634,38 +647,37 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
               )}
               <td>{p.apalancamiento > 1 ? 'x' + Number(p.apalancamiento) : ''}</td>
               <td>{p.peso == null ? '—' : p.peso.toFixed(1) + '%'}</td>
-              <td className="fuente" title={'Fuente: ' + (p.fuente || 'YO')}>{p.fuente === 'YO' ? '' : (p.fuente || '').slice(0, 1)}</td>
               {cierre && <td><button className="btn-borrar" title="Cerrar posición"
                 onClick={e => { e.stopPropagation(); onBorrar(p) }}>✕</button></td>}
             </tr>
           ))}
           {wallet && (
-            <tr className="fila-wallet" title="Monedero BTC personal: cantidad de app_state valorada al precio vivo de BTC-USD. Sin coste registrado: no entra en el G/P. Se edita en modo cierre de semana (₿ wallet).">
-              <td className="tl ticker">₿ wallet</td>
+            <tr className="fila-wallet" onClick={onWallet} title="Monedero BTC personal valorado al precio vivo de BTC-USD. Pulsa para ver y añadir aportaciones (fecha, BTC, USD): con ellas tiene coste y G/P.">
+              <td className="tl ticker">BTC<span className="chip-estr">Wallet</span></td>
+              <td className={'col-gpp ' + pctClass(wallet.gpPct)}>{wallet.gpPct == null ? '—' : fmtPct(wallet.gpPct)}</td>
               <td className="tl broker">wallet</td>
-              <td>—</td>
-              <td>—</td>
+              <td>{wallet.aportes?.length ? wallet.aportes.length + ' aport.' : '—'}</td>
+              <td>{wallet.invertido ? fmt$(wallet.invertido) : '—'}</td>
               <td className="col-clave col-ini">{wallet.precio ? fmt$(wallet.usd) : '—'}</td>
-              <td className="col-clave">—</td>
-              <td className="col-clave col-fin">—</td>
+              <td className={'col-clave col-fin ' + pctClass(wallet.gp)}>{wallet.gp == null ? '—' : fmt$(wallet.gp)}</td>
               <td colSpan={2} className="tl calc">{wallet.qty} ₿ {wallet.precio ? '× $' + fmt$(wallet.precio) : '· sin precio'}</td>
               <td></td>
               <td>{wallet.peso == null ? '—' : wallet.peso.toFixed(1) + '%'}</td>
-              <td className="fuente"></td>
               {cierre && <td></td>}
             </tr>
           )}
         </tbody>
         <tfoot>
           <tr className="subtotal">
-            <td className="tl" colSpan={3}>Σ {b.corto}</td>
+            <td className="tl">Σ {b.corto}</td>
+            <td className={'col-gpp ' + pctClass(gpPct)}>{fmtPct(gpPct)}</td>
+            <td colSpan={2}></td>
             <td>{fmt$(inv)}</td>
             <td className="col-clave col-ini">{fmt$(val)}</td>
-            <td className={'col-clave ' + pctClass(gp)}>{fmt$(gp)}</td>
-            <td className={'col-clave col-fin ' + pctClass(gpPct)}>{fmtPct(gpPct)}</td>
+            <td className={'col-clave col-fin ' + pctClass(gp)}>{fmt$(gp)}</td>
             <td colSpan={esTesis ? 5 : 3}></td>
             <td>{pesoSum.toFixed(1)}%</td>
-            <td colSpan={cierre ? 2 : 1}></td>
+            {cierre && <td></td>}
           </tr>
         </tfoot>
       </table>
@@ -768,7 +780,7 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
   return (
     <aside className="pos-panel card" {...arrastre}>
       <div className="pos-panel-head">
-        <h2>{p.ticker} <span className="broker">{p.broker}</span></h2>
+        <h2>{p.ticker} <span className="broker">{p.broker}</span>{estrategiaBTC(p) && <span className="chip-estr">{estrategiaBTC(p).label}</span>}</h2>
         <button onClick={onClose}>✕</button>
       </div>
       <dl className="num">
@@ -808,11 +820,13 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
             {BLOQUES.map(b => <option key={b.id} value={b.id} title={b.ayuda}>{b.corto}</option>)}
           </select>
         </label>
-        <label>Fuente
-          <select value={p.fuente} onChange={e => setAttr('fuente', e.target.value)}>
-            {FUENTES.map(f => <option key={f}>{f}</option>)}
-          </select>
-        </label>
+        {bloque === 'BTC' && (
+          <label title="Estrategia BTC de esta posición">Estrategia
+            <select value={estrategiaBTC(p)?.clase} onChange={e => setAttr('clase', e.target.value)}>
+              {BTC_ESTRATEGIAS.map(x => <option key={x.clase} value={x.clase}>{x.label}</option>)}
+            </select>
+          </label>
+        )}
       </div>
 
       <div className="precios-ticket num">
@@ -863,12 +877,76 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
   )
 }
 
+// ─── Wallet BTC: aportaciones (fecha, BTC, USD) → cantidad, coste y G/P ─────
+function PanelWallet({ wallet, onClose, onChange }) {
+  const arrastre = useArrastreCierre(onClose)
+  const [lista, setLista] = useState(() => (wallet.aportes || []).map(a => ({ ...a })))
+  const [n, setN] = useState({ fecha: new Date().toISOString().slice(0, 10), btc: '', usd: '' })
+  const [msg, setMsg] = useState(null)
+  const num = v => Number(String(v).replace(',', '.'))
+  const qty = lista.reduce((a, x) => a + num(x.btc || 0), 0)
+  const inv = lista.reduce((a, x) => a + num(x.usd || 0), 0)
+  const valor = wallet.precio ? qty * wallet.precio : null
+  const gp = valor != null && inv ? valor - inv : null
+
+  async function guardar(nueva) {
+    const limpia = nueva.map(a => ({ fecha: a.fecha, btc: num(a.btc), usd: Math.round(num(a.usd) * 100) / 100 }))
+      .filter(a => a.btc > 0).sort((a, b) => a.fecha.localeCompare(b.fecha))
+    const { error } = await guardarAportesWallet(limpia)
+    if (error) { setMsg('No se pudo guardar: ' + error.message); return }
+    setLista(limpia); setMsg(null); onChange()
+  }
+  function añadir(e) {
+    e.preventDefault()
+    if (!(num(n.btc) > 0) || !(num(n.usd) > 0) || !n.fecha) { setMsg('Fecha, BTC y USD son obligatorios.'); return }
+    guardar([...lista, n]); setN({ ...n, btc: '', usd: '' })
+  }
+  function quitar(i) {
+    if (!confirm('¿Quitar esta aportación?')) return
+    guardar(lista.filter((_, j) => j !== i))
+  }
+
+  return (
+    <aside className="pos-panel card" {...arrastre}>
+      <div className="pos-panel-head">
+        <h2>BTC <span className="broker">wallet</span><span className="chip-estr">Wallet</span></h2>
+        <button onClick={onClose}>✕</button>
+      </div>
+      <dl className="num">
+        <div><dt>Cantidad</dt><dd>{(Math.round(qty * 1e8) / 1e8) || wallet.qty} ₿{wallet.precio ? ' × $' + fmt$(wallet.precio) : ''}</dd></div>
+        <div><dt>Invertido</dt><dd>{inv ? '$' + fmt$(inv) : 'sin aportaciones registradas'}</dd></div>
+        <div><dt>Valor</dt><dd>{valor != null ? '$' + fmt$(valor) : '—'} {gp != null && <span className={pctClass(gp)}>({fmtPct(gp / inv * 100)} · ${fmt$(gp)})</span>}</dd></div>
+        {inv > 0 && qty > 0 && <div><dt>Precio medio</dt><dd>${fmt$(inv / qty)} por ₿</dd></div>}
+      </dl>
+      <h3>Aportaciones</h3>
+      <ul className="notas num">
+        {lista.map((a, i) => (
+          <li key={i}>
+            <span className="nota-fecha">{a.fecha.slice(2).split('-').reverse().join('/')}</span>
+            <span className="nota-txt">{a.btc} ₿ · ${fmt$(a.usd)} <i className="calc">(${fmt$(a.usd / a.btc)}/₿)</i></span>
+            <a className="borrar-x nota-x" title="Quitar aportación" onClick={() => quitar(i)}>✕</a>
+          </li>
+        ))}
+        {!lista.length && <li className="sin-notas">Sin aportaciones: la wallet cuenta en el valor del bloque, pero sin coste ni G/P.</li>}
+      </ul>
+      <form onSubmit={añadir} className="wallet-form num">
+        <input type="date" value={n.fecha} onChange={e => setN({ ...n, fecha: e.target.value })} />
+        <input inputMode="decimal" placeholder="BTC" value={n.btc} onChange={e => setN({ ...n, btc: e.target.value })} />
+        <input inputMode="decimal" placeholder="USD pagados" value={n.usd} onChange={e => setN({ ...n, usd: e.target.value })} />
+        <button>+</button>
+      </form>
+      <p className="hist-n">USD pagados = coste total de la compra con comisiones. Si compraste en euros, el equivalente en dólares de ese día.</p>
+      {msg && <p className="auth-err" style={{ fontSize: 12 }}>{msg}</p>}
+    </aside>
+  )
+}
+
 // ─── Alta de posición (permitida siempre, modo OFF incluido) ────────────
 // `inicial`: prellenado (desde el Buscador: ticker, precio de entrada, SL/TP de la Tesis).
 export function AltaDialog({ inicial = {}, onClose, onDone }) {
   const [f, setF] = useState({
     ticker: '', broker: 'xtb', entry_date: new Date().toISOString().slice(0, 10),
-    invested: '', current_value: '', clase: 'TACTICA', estado: 'OK', fuente: 'YO',
+    invested: '', current_value: '', clase: 'TACTICA', estado: 'OK', fuente: 'YO', estrBtc: 'TACTICA',
     apalancamiento: 1, entry_price: '', sl_price: '', tp_price: '', bloque: 'TESIS',
     ...Object.fromEntries(Object.entries(inicial || {}).filter(([, v]) => v != null)),
   })
@@ -890,7 +968,7 @@ export function AltaDialog({ inicial = {}, onClose, onDone }) {
     const { error } = await altaPosicion({
       ticker: f.ticker.trim().toUpperCase(), broker: f.broker, entry_date: f.entry_date,
       invested: inv, current_value: Number(f.current_value) || inv,
-      clase: f.bloque === 'TESIS' ? 'TACTICA' : 'NUCLEO', estado: 'OK', fuente: f.fuente, bloque: f.bloque,
+      clase: f.bloque === 'BTC' ? f.estrBtc : f.bloque === 'TESIS' ? 'TACTICA' : 'NUCLEO', estado: 'OK', fuente: 'YO', bloque: f.bloque,
       apalancamiento: Number(f.apalancamiento) || 1,
       entry_price: num(f.entry_price), sl_price: num(f.sl_price), tp_price: num(f.tp_price),
     })
@@ -913,8 +991,8 @@ export function AltaDialog({ inicial = {}, onClose, onDone }) {
           <label>P. entrada<input placeholder="por acción" value={f.entry_price} onChange={e => set('entry_price', e.target.value)} onBlur={entradaBlur} /></label>
           <label>SL<input placeholder={f.bloque === 'TESIS' ? '−11 %' : 'opcional'} value={f.sl_price} onChange={e => set('sl_price', e.target.value)} /></label>
           <label>TP<input placeholder={f.bloque === 'TESIS' ? '+23,5 %' : 'opcional'} value={f.tp_price} onChange={e => set('tp_price', e.target.value)} /></label>
-          <label>Fuente<select value={f.fuente} onChange={e => set('fuente', e.target.value)}>
-            {FUENTES.map(x => <option key={x}>{x}</option>)}</select></label>
+          {f.bloque === 'BTC' && <label>Estrategia<select value={f.estrBtc} onChange={e => set('estrBtc', e.target.value)}>
+            {BTC_ESTRATEGIAS.map(x => <option key={x.clase} value={x.clase}>{x.label}</option>)}</select></label>}
           <label>Apal.<input value={f.apalancamiento} onChange={e => set('apalancamiento', e.target.value)} /></label>
         </div>
         {f.bloque === 'TESIS' && <p className="alta-nota">Tesis JOSE −11/+23,5: SL y TP se ponen en el mismo ticket, en el acto de la compra, y no se tocan. Máx. 8 líneas, ticket ≤4 % (small caps 2 %).</p>}
