@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from 'recharts'
 import { supabase } from '../lib/supabase'
 import { fetchHistory } from '../lib/quotes'
+import { useArrastreCierre } from '../lib/movil'
 import { tesisSL, tesisTP } from '../lib/bloques'
 import { SECTOR_ES, fmtCap, capBucket, diasHasta } from '../lib/universo'
 
@@ -17,6 +18,7 @@ const fmtPx = v => v == null ? '—' : Number(v).toLocaleString('es-ES', { minim
 const fFecha = t => { const d = new Date(t); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getFullYear()).slice(2)}` }
 
 export default function Ficha({ valor: v, onClose }) {
+  const arrastre = useArrastreCierre(onClose)   // móvil: cerrar arrastrando hacia abajo
   const [vista, setVista] = useState(() => localStorage.getItem('btp-ficha-vista') || '2y')
   const [diaria, setDiaria] = useState(null)   // 3 años diarios con OHLC (para MA200 y ATR reales)
   const [semanal, setSemanal] = useState(null)  // 5 años semanales
@@ -95,7 +97,7 @@ export default function Ficha({ valor: v, onClose }) {
 
   return (
     <div className="modal-fondo" onClick={onClose}>
-      <div className="card modal ficha num" onClick={e => e.stopPropagation()}>
+      <div className="card modal ficha num" onClick={e => e.stopPropagation()} {...arrastre}>
         <div className="ficha-head">
           <div>
             <h2>{v.symbol} <span className="nombre">{v.name}</span></h2>
