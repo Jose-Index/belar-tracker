@@ -14,8 +14,10 @@ export const BLOQUES = [
     ayuda: 'BRK.B 7 % (contado, IBKR) + UN solo copy trader de eToro 3 %. Sin SL. Sustitución si 12 meses seguidos por detrás del S&P.' },
   { id: 'OMERCADOS', label: 'O/MERCADOS',          corto: 'O/MERCADOS', objetivo: 10, color: '#3BC9F5',
     ayuda: 'Grandes corporaciones no USA aguantadas meses (Samsung, SoftBank, Kawasaki), EWY. China ≤5 %. Francia excluida. Salida −20/−25 % o revisión semestral.' },
-  { id: 'TESIS',     label: 'Tesis JOSE −11/+23,5', corto: 'TESIS',     objetivo: 30, color: '#0F2A6B',
+  { id: 'TESIS',     label: 'Tesis JOSE −11/+23,5', corto: 'TESIS',     objetivo: 25, color: '#0F2A6B',
     ayuda: 'Renta variable táctica. Máx. 8 líneas, ticket ≤4 % (small caps 2 %), hasta 4 entradas al mes, decisión en vista de 2 años. SL −11 / TP +23,5 fijos en el ticket, no se tocan.' },
+  { id: 'SATELITE',  label: 'SATÉLITE',            corto: 'SATÉLITE',   objetivo: 5,  color: '#F07D2E',
+    ayuda: 'Estrategia libre (01/10/2026): disruptivas/loterías declaradas el día de compra y cohetes ascendidos desde la Tesis SOLO en ganancia (≥ +23,5). Peso 5 %, techo 8 %, máx. 4 líneas. Invalidación escrita por línea: ascendidas, suelo fijo +10 % sobre entrada puesto una vez (no sube); loterías, pérdida máxima asumida. Revisión semestral.' },
 ]
 export const CAJA = { id: 'CAJA', label: 'Caja', corto: 'CAJA', objetivo: 8, color: '#C7D0E0',
   ayuda: '8 % mientras se construye el NÚCLEO; después 5 %.' }
