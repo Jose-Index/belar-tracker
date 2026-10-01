@@ -63,6 +63,17 @@ export default function Buscador() {
     const { error } = await guardarEstrellas(nuevo)
     if (error) { setErr('No se pudo guardar la estrella: ' + error.message); cargar('buscador:estrellas', leerEstrellas, { forzar: true }) }
   }
+  // Borrar todas las estrellas (01/10/2026): doble pulsación, la segunda en menos de 4 s
+  const [confirmaBorrar, setConfirmaBorrar] = useState(false)
+  async function borrarEstrellas() {
+    if (!confirmaBorrar) { setConfirmaBorrar(true); setTimeout(() => setConfirmaBorrar(false), 4000); return }
+    setConfirmaBorrar(false)
+    const antes = estrellas
+    fijar('buscador:estrellas', {})
+    const { error } = await guardarEstrellas({})
+    if (error) { setErr('No se pudieron borrar las estrellas: ' + error.message); fijar('buscador:estrellas', antes) }
+    setSoloEstrellas(false)
+  }
   const desdeEstrella = r => { const e = estrellas[r.symbol]; return e?.precio && r.price ? (r.price / e.precio - 1) * 100 : null }
 
   useEffect(() => { guardarFiltros(f) }, [f])
@@ -348,6 +359,12 @@ export default function Buscador() {
         <div className="busc-estrellas num">
           <button type="button" className={'chip-solo' + (soloEstrellas ? ' on' : '')} onClick={() => setSoloEstrellas(v => !v)}
                   title="Muestra solo los valores marcados con estrella (dentro de este filtro)">★ Solo estrellas</button>
+          {Object.keys(estrellas).length > 0 && (
+            <button type="button" className={'chip-borrar' + (confirmaBorrar ? ' confirma' : '')} onClick={borrarEstrellas}
+                    title="Quita todas las estrellas (se pierden su fecha y su precio de marca)">
+              {confirmaBorrar ? `¿Seguro? Pulsa otra vez para borrar ${Object.keys(estrellas).length}` : 'Borrar todas'}
+            </button>
+          )}
           <span className="hist-n">{Object.keys(estrellas).length} con estrella{filasVista && filasVista.some(r => r.fuera) ? ` · ${filasVista.filter(r => r.fuera).length} fuera del filtro (atenuadas)` : ''} · en la ficha: ‹ › o flechas para pasar, S para la estrella</span>
         </div>
       )}
