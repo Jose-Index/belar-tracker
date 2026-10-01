@@ -32,7 +32,7 @@ const RATING_DESDE_MAX = { 1.5: ['FC'], 2.5: ['FC', 'C'], 3.5: ['FC', 'C', 'N'] 
 // todos los sectores, rating compra o mejor, resultados a ≤15 días fuera.
 export const FILTROS_DEFECTO = {
   mercado: ['US'], cap: ['MG', 'M', 'P'], pe_campo: 'fwd', pe_min: 8, pe_max: 25, pe_na: false,
-  atr_on: true, atr_min: 1.5, atr_max: 5.5,
+  atr_on: true, atr_min: 1.5, atr_max: 5.5, sin_perseguir: false,
   sector: SECTORES.map(s => s[0]), rating: ['FC', 'C'], rating_na: true, earn_dias: 15,
   ma50: false, ma200: false, p3m: false, q: '', orden: 'cap_usd.desc',
 }
