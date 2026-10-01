@@ -91,6 +91,15 @@ export async function vixActual() {
 }
 export const nivelVix = v => v == null ? null : v < 20 ? 'verde' : v <= 30 ? 'ambar' : 'rojo'
 
+// Valores concretos sin filtros (estrellas que la búsqueda deja fuera: siguen visibles hasta quitar la estrella)
+export async function valoresUniverso(symbols) {
+  if (!symbols.length) return []
+  const r = await fetch('/api/universo?symbols=' + encodeURIComponent(symbols.join(',')) + '&limite=1000')
+  const j = await r.json()
+  if (j.error) throw new Error(j.error)
+  return j.filas || []
+}
+
 export async function estadoUniverso() {
   const r = await fetch('/api/universo?estado=1')
   return r.json()
