@@ -119,3 +119,25 @@
   .ficha-pie .modal-botones { width: 100%; }
   .ficha-pie .modal-botones button { flex: 1; }
 }
+
+/* ─── Estrellas y navegación de fichas (01/10/2026) ─── */
+.estrella { cursor: pointer; color: #B8C0CC; font-size: 15px; line-height: 1; user-select: none; }
+.estrella.on { color: #E8A317; }
+button.estrella { border: none; background: none; padding: 0 6px 0 0; font-size: 20px; vertical-align: -1px; }
+.estrella-td { cursor: pointer; white-space: nowrap; text-align: left !important; }
+.estrella-td .desde-est, .busc-lista .desde-est { font-style: normal; font-size: 10.5px; margin-left: 4px; }
+.busc-estrellas { display: flex; align-items: center; gap: 10px; margin: 10px 0 6px; flex-wrap: wrap; }
+.chip-solo { font: 600 12px var(--font-ui); border: 1px solid var(--borde); border-radius: 14px; padding: 4px 12px; background: var(--superficie); color: var(--texto-sec); cursor: pointer; }
+.chip-solo.on { background: #FFF4D6; border-color: #E8A317; color: #8A5A00; }
+.ficha-nav { display: flex; align-items: center; gap: 10px; }
+.ficha-pos { font: 600 12px var(--font-datos); color: var(--texto-sec); }
+.ficha-estrella { font-size: 12px; color: #8A5A00; margin: 4px 0 0; }
+.ficha-chart { position: relative; }
+.ficha-flecha { position: absolute; top: 50%; transform: translateY(-50%); z-index: 2; width: 34px; height: 54px; border-radius: 8px;
+  border: 1px solid var(--borde); background: rgba(255,255,255,.88); font-size: 26px; line-height: 1; color: var(--texto); cursor: pointer; }
+.ficha-flecha.izq { left: -6px; } .ficha-flecha.der { right: -6px; }
+.ficha-flecha:disabled { opacity: .25; cursor: default; }
+.ficha-flecha:hover:not(:disabled) { border-color: var(--azul-belar); color: var(--azul-belar); }
+.ficha-freno { font: 600 11.5px var(--font-ui); color: var(--texto-sec); border: 1px solid var(--borde); border-radius: 12px; padding: 3px 10px; }
+.ficha-freno.lleno { color: var(--baja); border-color: var(--baja); }
+@media (max-width: 900px) { .ficha-flecha { width: 28px; height: 46px; font-size: 22px; } .ficha-flecha.izq { left: -4px; } .ficha-flecha.der { right: -4px; } }
