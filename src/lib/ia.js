@@ -21,11 +21,13 @@ export function leerImagen(file) {
   })
 }
 
-export async function extraerCapturas(files) {
+// conocidas: posiciones ya registradas [{broker, ticker, invertido}] para que la lectura use los
+// tickers reales en vez de inventar nombres parecidos (RR.L leído como "XRP", 01/10/2026).
+export async function extraerCapturas(files, conocidas = []) {
   const images = await Promise.all([...files].map(leerImagen))
   const r = await fetch('/api/ia-capturas', {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ images }),
+    body: JSON.stringify({ images, conocidas }),
   })
   const j = await r.json()
   if (j.error) throw new Error(j.error)
