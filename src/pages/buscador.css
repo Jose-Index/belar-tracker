@@ -153,3 +153,10 @@ button.estrella { border: none; background: none; padding: 0 6px 0 0; font-size:
 
 /* 01/10/2026: la distancia al máximo de 52 s no es una pérdida: gris neutro */
 .tabla-busc td.neutro, .busc-lista .neutro { color: var(--texto-sec); }
+
+/* 01/10/2026: semáforo del VIX (informativo) */
+.chip-vix { font: 600 11.5px var(--font-ui); border: 1px solid currentColor; border-radius: 12px; padding: 3px 10px; white-space: nowrap; }
+.chip-vix small { font-weight: 500; opacity: .8; }
+.chip-vix.verde { color: #16A34A; }
+.chip-vix.ambar { color: #C2780A; }
+.chip-vix.rojo { color: #E5484D; background: rgba(229,72,77,.07); }
