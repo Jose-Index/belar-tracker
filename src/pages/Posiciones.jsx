@@ -345,6 +345,9 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
       await updatePosicion(u.pos.id, patch); nUpd++
     }
     for (const c of cierres) await cerrarPosicion(c.pos, c.motivo || 'manual')
+    // Liquidez leída en la captura (01/10/2026: antes se descartaba entre cierres de semana y el total no cuadraba).
+    const liqLeida = Object.fromEntries(Object.entries(d.liq || {}).filter(([, v]) => v != null && Number.isFinite(Number(v))).map(([k, v]) => [k, Number(v)]))
+    if (Object.keys(liqLeida).length) await guardarLiquidez({ ...(raw.liquidez || {}), ...liqLeida })
     for (const n of d.nuevas) {
       if (!n.sel) continue
       const inv = n.invertido ?? n.valor
@@ -360,7 +363,8 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
       }); nAltas++
     }
     setBusy(false); setIngesta(false)
-    setMsg(`Actualización por captura · ${nUpd} actualizadas · ${nAltas} altas · ${cierres.length} cierres · la semana NO queda sellada`)
+    const liqTxt = Object.entries(liqLeida).map(([k, v]) => `${k} $${fmt$(v)}`).join(', ')
+    setMsg(`Actualización por captura · ${nUpd} actualizadas · ${nAltas} altas · ${cierres.length} cierres · liquidez ${liqTxt || 'no leída (pon el saldo en modo cierre)'} · la semana NO queda sellada`)
     recargar()
   }
 
