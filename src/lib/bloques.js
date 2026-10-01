@@ -10,7 +10,7 @@ export const BLOQUES = [
     ayuda: 'IGLN físico. Compras solo en retroceso: nunca a <5 % del máximo de 52 semanas ni tras +15 % en 3 meses. Sin SL, invalidación escrita.' },
   { id: 'NUCLEO',    label: 'NÚCLEO',              corto: 'NÚCLEO',     objetivo: 24, color: '#2E6BF6',
     ayuda: '16 % ETF S&P 500 UCITS de acumulación (CSPX) con la aportación IBKR + 8 % en 3-5 convicciones (NVDA, GOOGL, MU…) con invalidación escrita. ETF sin salida; convicciones −25 % estructural, revisión semestral.' },
-  { id: 'DELEGADA',  label: 'GESTIÓN DELEGADA',    corto: 'DELEGADA',   objetivo: 10, color: '#7C5CFF',
+  { id: 'DELEGADA',  label: 'COPY TRADING',         corto: 'COPY',   objetivo: 10, color: '#7C5CFF',
     ayuda: 'BRK.B 7 % (contado, IBKR) + UN solo copy trader de eToro 3 %. Sin SL. Sustitución si 12 meses seguidos por detrás del S&P.' },
   { id: 'OMERCADOS', label: 'O/MERCADOS',          corto: 'O/MERCADOS', objetivo: 10, color: '#3BC9F5',
     ayuda: 'Grandes corporaciones no USA aguantadas meses (Samsung, SoftBank, Kawasaki), EWY. China ≤5 %. Francia excluida. Salida −20/−25 % o revisión semestral.' },
