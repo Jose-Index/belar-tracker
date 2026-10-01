@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   MERCADOS, CAPS, SECTORES, SECTOR_ES, RATINGS, FILTROS_DEFECTO, cargarFiltros, guardarFiltros,
   buscarUniverso, estadoUniverso, seriesUniverso, refrescarUniverso, universoViejo, fmtCap, capBucket, diasHasta,
+  leerEstrellas, guardarEstrellas, contadoresTesis,
 } from '../lib/universo'
 import Ficha from '../components/Ficha.jsx'
 import { useMovil } from '../lib/movil'
@@ -48,6 +49,20 @@ export default function Buscador() {
   const refrescando = useRef(false)
   const movil = useMovil()
   const [plegado, setPlegado] = useState(false)   // móvil: filtros plegados tras buscar
+  // Estrellas (app_state.buscador_estrellas) y filtro "Solo ★" (01/10/2026)
+  const { data: estrellasCache } = useCache('buscador:estrellas', leerEstrellas, { ttl: 60e3, persist: true })
+  const estrellas = estrellasCache || {}
+  const [soloEstrellas, setSoloEstrellas] = useState(false)
+  const { data: contadores } = useCache('buscador:contadores', contadoresTesis, { ttl: 60e3 })
+  async function alternarEstrella(r) {
+    const nuevo = { ...estrellas }
+    if (nuevo[r.symbol]) delete nuevo[r.symbol]
+    else nuevo[r.symbol] = { fecha: new Date().toISOString().slice(0, 10), precio: r.price, moneda: r.currency || null, nombre: r.name || null }
+    fijar('buscador:estrellas', nuevo)                 // pinta al instante
+    const { error } = await guardarEstrellas(nuevo)
+    if (error) { setErr('No se pudo guardar la estrella: ' + error.message); cargar('buscador:estrellas', leerEstrellas, { forzar: true }) }
+  }
+  const desdeEstrella = r => { const e = estrellas[r.symbol]; return e?.precio && r.price ? (r.price / e.precio - 1) * 100 : null }
 
   useEffect(() => { guardarFiltros(f) }, [f])
   const set = (k, v) => setF(x => ({ ...x, [k]: v }))
@@ -128,7 +143,8 @@ export default function Buscador() {
     })
     const { col, desc } = orden
     const v = r => r[col]
-    return [...conSerie].sort((a, b) => {
+    const base = soloEstrellas ? conSerie.filter(r => estrellas[r.symbol]) : conSerie
+    return [...base].sort((a, b) => {
       const x = v(a), y = v(b)
       if (x == null && y == null) return 0
       if (x == null) return 1
@@ -136,7 +152,7 @@ export default function Buscador() {
       const c = typeof x === 'string' ? x.localeCompare(y) : x - y
       return desc ? -c : c
     })
-  }, [filas, series, orden])
+  }, [filas, series, orden, soloEstrellas, estrellas])
 
   const ordenar = col => setOrden(o => o.col === col ? { col, desc: !o.desc } : { col, desc: !['symbol', 'market', 'sector', 'earnings_date', 'rating'].includes(col) })
   const total = estado?.total || 0
@@ -222,6 +238,13 @@ export default function Buscador() {
 
       {err && <p className="auth-err">{err}</p>}
 
+      {filasVista && (
+        <div className="busc-estrellas num">
+          <button type="button" className={'chip-solo' + (soloEstrellas ? ' on' : '')} onClick={() => setSoloEstrellas(v => !v)}
+                  title="Muestra solo los valores marcados con estrella (dentro de este filtro)">★ Solo estrellas</button>
+          <span className="hist-n">{Object.keys(estrellas).length} con estrella{soloEstrellas && filas ? ` · ${Object.keys(estrellas).filter(s => !filas.some(r => r.symbol === s)).length} fuera de este filtro` : ''} · en la ficha: ‹ › o flechas para pasar, S para la estrella</span>
+        </div>
+      )}
       {movil && filasVista && (
         <div className="busc-orden num">
           <span>{filasVista.length} valores · orden</span>
@@ -240,7 +263,11 @@ export default function Buscador() {
               return (
                 <li key={r.symbol} onClick={() => setSel(r)}>
                   <div className="bl-izq">
-                    <div className="bl-l1"><b>{r.symbol}</b><span className="nombre">{r.name}</span></div>
+                    <div className="bl-l1">
+                      <span className={'estrella' + (estrellas[r.symbol] ? ' on' : '')} onClick={e => { e.stopPropagation(); alternarEstrella(r) }}>{estrellas[r.symbol] ? '★' : '☆'}</span>
+                      <b>{r.symbol}</b><span className="nombre">{r.name}</span>
+                      {desdeEstrella(r) != null && <span className={'desde-est ' + pctClass(desdeEstrella(r))}>{fmtPct(desdeEstrella(r))}</span>}
+                    </div>
                     <div className="bl-l2">
                       {r.market}{r.adr ? ' ADR' : ''} · {fmtCap(r.cap_usd)} · PER {r.pe_trailing == null ? 'n/a' : fmtNum(r.pe_trailing, 0)}
                       {r.rating != null ? <> · <span className={'rat r' + Math.round(r.rating)} title="rating analistas">★{r.rating.toFixed(1)}</span></> : null}
@@ -261,6 +288,7 @@ export default function Buscador() {
           <table className="pos-tabla num tabla-busc">
             <thead>
               <tr>
+                <th title="Estrella: marca/desmarca (guarda fecha y precio). La cifra es la variación desde la estrella.">★</th>
                 {COLS.map(c => (
                   <th key={c.id} className={(c.tl ? 'tl ' : '') + (orden.col === c.id ? 'ord' : '')} title={c.t || ''} onClick={() => ordenar(c.id)}>
                     {c.l}{orden.col === c.id ? (orden.desc ? ' ↓' : ' ↑') : ''}
@@ -275,6 +303,11 @@ export default function Buscador() {
                 const earnCerca = dias != null && dias >= 0 && dias <= 15
                 return (
                   <tr key={r.symbol} onClick={() => setSel(r)} className={sel?.symbol === r.symbol ? 'sel' : ''}>
+                    <td className="estrella-td" onClick={e => { e.stopPropagation(); alternarEstrella(r) }}
+                        title={estrellas[r.symbol] ? `★ desde ${estrellas[r.symbol].fecha.slice(2).split('-').reverse().join('/')} a ${estrellas[r.symbol].precio}` : 'Marcar con estrella'}>
+                      <span className={'estrella' + (estrellas[r.symbol] ? ' on' : '')}>{estrellas[r.symbol] ? '★' : '☆'}</span>
+                      {desdeEstrella(r) != null && <i className={'desde-est ' + pctClass(desdeEstrella(r))}>{fmtPct(desdeEstrella(r))}</i>}
+                    </td>
                     <td className="tl ticker"><b>{r.symbol}</b> <span className="nombre">{r.name}</span></td>
                     <td className="tl merc">{r.market}{r.adr ? <i title={'ADR · empresa de ' + r.adr}> ADR</i> : ''}</td>
                     <td className="tl sector">{SECTOR_ES[r.sector] || r.sector}</td>
@@ -299,7 +332,7 @@ export default function Buscador() {
                   </tr>
                 )
               })}
-              {!filasVista.length && <tr><td colSpan={COLS.length + 1} className="tl" style={{ color: 'var(--texto-neutro)' }}>Sin resultados con estos filtros{total ? '' : ' (el universo está vacío: pulsa Actualizar)'}.</td></tr>}
+              {!filasVista.length && <tr><td colSpan={COLS.length + 2} className="tl" style={{ color: 'var(--texto-neutro)' }}>Sin resultados con estos filtros{total ? '' : ' (el universo está vacío: pulsa Actualizar)'}.</td></tr>}
             </tbody>
           </table>
         )}
@@ -308,7 +341,12 @@ export default function Buscador() {
         {filasVista ? `${filasVista.length} valores` : ''} · fuente Yahoo Finance (cierre diario) · 1M/3M/6M y ⚠ se calculan al vuelo para los valores en pantalla · PER n/a = sin beneficios · rating 1 compra fuerte → 5 venta
       </p>
 
-      {sel && <Ficha valor={sel} onClose={() => setSel(null)} />}
+      {sel && (() => {
+        const lista = filasVista || []
+        const i = lista.findIndex(r => r.symbol === sel.symbol)
+        return <Ficha valor={sel} onClose={() => setSel(null)} lista={lista} indice={i} onNav={j => setSel(lista[j])}
+                      estrella={estrellas[sel.symbol] || null} onEstrella={alternarEstrella} contadores={contadores || null} />
+      })()}
     </div>
   )
 }
