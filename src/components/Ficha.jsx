@@ -14,6 +14,19 @@ const VISTAS = [['3m', '3M'], ['6m', '6M'], ['1y', '1A'], ['2y', '2A'], ['5y', '
 const DIAS = { '3m': 92, '6m': 183, '1y': 366, '2y': 731 }
 const fmtPct = (v, d = 1) => v == null ? '—' : (v > 0 ? '+' : '') + Number(v).toFixed(d) + '%'
 const pctClass = v => v == null ? '' : v > 0 ? 'up' : v < 0 ? 'down' : ''
+const fmtPctEje = x => (x > 0.05 ? '+' : '') + (Math.abs(x) < 0.05 ? '0' : x.toLocaleString('es-ES', { maximumFractionDigits: Math.abs(x) < 10 && x % 1 ? 1 : 0 })) + ' %'
+// Etiqueta del último cierre sobre el eje de precio (derecha)
+function EtiquetaPrecio({ viewBox, texto }) {
+  if (!viewBox) return null
+  const x = viewBox.x + viewBox.width, y = viewBox.y
+  const w = texto.length * 7 + 10
+  return (
+    <g>
+      <rect x={x + 2} y={y - 9} width={w} height={18} rx={3} fill="#2E6BF6" />
+      <text x={x + 7} y={y + 4} fontSize={11} fontFamily="JetBrains Mono" fill="#fff">{texto}</text>
+    </g>
+  )
+}
 const fmtPx = v => v == null ? '—' : Number(v).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: v < 10 ? 3 : 2 })
 const fFecha = t => { const d = new Date(t); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getFullYear()).slice(2)}` }
 
@@ -125,6 +138,24 @@ export default function Ficha({ valor: v, onClose, lista = null, indice = -1, on
   const precio = calc?.ult ?? v.price
   const sl = tesisSL(precio), tp = tesisTP(precio)
 
+  // Ejes (opción A, 01/10/2026): precio a la derecha con etiqueta del último cierre; % a la izquierda
+  // relativo al último cierre (0 % = hoy), así SL −11 y TP +23,5 caen sobre sus marcas.
+  const ejes = useMemo(() => {
+    if (serieVista.length < 2 || !precio) return null
+    const vals = serieVista.flatMap(p => [p.v, p.ma50, p.ma200]).filter(x => x != null)
+    if (vista !== '5y') vals.push(sl, tp)
+    vals.push(precio)
+    let lo = Math.min(...vals), hi = Math.max(...vals)
+    const pad = (hi - lo) * 0.04 || hi * 0.02
+    lo -= pad; hi += pad
+    const pLo = (lo / precio - 1) * 100, pHi = (hi / precio - 1) * 100
+    const rango = pHi - pLo
+    const paso = [2, 5, 10, 20, 25, 50, 100, 200, 500].find(x => rango / x <= 7) || 1000
+    const ticksPct = []
+    for (let k = Math.ceil(pLo / paso) * paso; k <= pHi; k += paso) ticksPct.push(precio * (1 + k / 100))
+    return { dominio: [lo, hi], ticksPct }
+  }, [serieVista, precio, sl, tp, vista])
+
   async function aLaSombra() {
     const nota = `sombra · ${fmtPx(precio)} ${v.currency || ''} · ${new Date().toLocaleDateString('es-ES')} · Buscador`
     const { error } = await supabase.from('repositorio').insert({ ticker: v.symbol, estado: 'SOMBRA', nota })
@@ -194,19 +225,23 @@ export default function Ficha({ valor: v, onClose, lista = null, indice = -1, on
           </div>
           {!diaria ? <p className="placeholder" style={{ padding: 30 }}>Cargando serie…</p> : serieVista.length < 2 ? <p className="placeholder" style={{ padding: 30 }}>Sin serie para {v.symbol}.</p> : (
             <ResponsiveContainer width="100%" height={360}>
-              <LineChart data={serieVista} margin={{ top: 10, right: 12, left: 0, bottom: 0 }}>
-                <CartesianGrid stroke="#E3E8F0" vertical={false} />
+              <LineChart data={serieVista} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
+                <CartesianGrid stroke="#E3E8F0" vertical={false} yAxisId="pct" />
                 <XAxis dataKey="t" type="number" scale="time" domain={['dataMin', 'dataMax']} tickFormatter={fFecha}
                        tick={{ fontSize: 11, fontFamily: 'JetBrains Mono' }} minTickGap={70} />
-                <YAxis domain={vista === '5y' ? ['auto', 'auto'] : [d => Math.min(d, sl) * 0.99, d => Math.max(d, tp) * 1.01]}
-                       tickFormatter={x => fmtPx(x)} tick={{ fontSize: 11, fontFamily: 'JetBrains Mono' }} width={64} />
+                <YAxis yAxisId="pct" orientation="left" type="number" domain={ejes?.dominio || ['auto', 'auto']} allowDataOverflow
+                       ticks={ejes?.ticksPct} tickFormatter={x => fmtPctEje((x / precio - 1) * 100)}
+                       tick={{ fontSize: 11, fontFamily: 'JetBrains Mono', fill: '#8A93A6' }} width={48} />
+                <YAxis yAxisId="px" orientation="right" type="number" domain={ejes?.dominio || ['auto', 'auto']} allowDataOverflow
+                       tickFormatter={x => fmtPx(x)} tick={{ fontSize: 11, fontFamily: 'JetBrains Mono' }} width={68} />
                 <Tooltip labelFormatter={fFecha} isAnimationActive={false} animationDuration={0} wrapperClassName="tip-recharts"
-                         formatter={(x, k) => [fmtPx(x), k === 'v' ? 'cierre' : k === 'ma50' ? 'MA50' : 'MA200']} />
-                {vista !== '5y' && <ReferenceLine y={sl} stroke="#E5484D" strokeDasharray="4 3" label={{ value: 'SL −11', fontSize: 10, fill: '#E5484D', position: 'insideBottomLeft' }} />}
-                {vista !== '5y' && <ReferenceLine y={tp} stroke="#16A34A" strokeDasharray="4 3" label={{ value: 'TP +23,5', fontSize: 10, fill: '#16A34A', position: 'insideTopLeft' }} />}
-                <Line type="monotone" dataKey="v" stroke="#2E6BF6" strokeWidth={1.8} dot={false} isAnimationActive={false} />
-                {vista !== '5y' && <Line type="monotone" dataKey="ma50" stroke="#F0A020" strokeWidth={1.2} dot={false} connectNulls isAnimationActive={false} />}
-                {vista !== '5y' && <Line type="monotone" dataKey="ma200" stroke="#8A93A6" strokeWidth={1.2} dot={false} connectNulls isAnimationActive={false} />}
+                         formatter={(x, k) => [`${fmtPx(x)} (${fmtPctEje((x / precio - 1) * 100)} vs hoy)`, k === 'v' ? 'cierre' : k === 'ma50' ? 'MA50' : 'MA200']} />
+                {vista !== '5y' && <ReferenceLine yAxisId="px" y={sl} stroke="#E5484D" strokeDasharray="4 3" label={{ value: 'SL −11', fontSize: 10, fill: '#E5484D', position: 'insideBottomLeft' }} />}
+                {vista !== '5y' && <ReferenceLine yAxisId="px" y={tp} stroke="#16A34A" strokeDasharray="4 3" label={{ value: 'TP +23,5', fontSize: 10, fill: '#16A34A', position: 'insideTopLeft' }} />}
+                <ReferenceLine yAxisId="px" y={precio} stroke="#2E6BF6" strokeOpacity={0.35} strokeDasharray="2 3" label={<EtiquetaPrecio texto={fmtPx(precio)} />} />
+                <Line yAxisId="px" type="monotone" dataKey="v" stroke="#2E6BF6" strokeWidth={1.8} dot={false} isAnimationActive={false} />
+                {vista !== '5y' && <Line yAxisId="px" type="monotone" dataKey="ma50" stroke="#F0A020" strokeWidth={1.2} dot={false} connectNulls isAnimationActive={false} />}
+                {vista !== '5y' && <Line yAxisId="px" type="monotone" dataKey="ma200" stroke="#8A93A6" strokeWidth={1.2} dot={false} connectNulls isAnimationActive={false} />}
               </LineChart>
             </ResponsiveContainer>
           )}
