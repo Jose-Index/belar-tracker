@@ -136,6 +136,15 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
         sem: pctSem(q),
         semFresco: q ? frescura(q) : null,
         precioVivo: q?.price ?? null,
+        // Precio de referencia para la distancia al SL: el vivo si es coherente con la entrada y el G/P de la
+        // captura; si no (p. ej. VBTC.DE cotizado como BTC-USD), el estimado por entrada × (1 + retorno).
+        ...(() => {
+          const est = entry && ret != null ? entry * (1 + ret / 100) : null
+          const live = q?.price ?? null
+          const px = live && (est == null || (live / est > 0.6 && live / est < 1.6)) ? live : est
+          const sl = p.sl_price != null ? Number(p.sl_price) : null
+          return { precioRef: px, aSLpct: px && sl ? (px / sl - 1) * 100 : null }
+        })(),
         peso: base ? val / base * 100 : null,
         bloqueEf: bloqueDe(p),
         ret, apal,
@@ -623,7 +632,7 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
                 <div className="pl-l2">
                   {esTesis
                     ? <BarraTesis p={p} etiqueta />
-                    : <>{fFecha(p.entry_date)} · inv {fmt$(p.invested)}</>}
+                    : <>{fFecha(p.entry_date)} · inv {fmt$(p.invested)}{p.sl_price != null ? ` · SL ${fmtPx(p.sl_price)}${p.aSLpct != null ? ` (a ${p.aSLpct.toFixed(1)} %)` : ''}` : sinSL(p) ? ' · sin SL por regla' : ''}</>}
                 </div>
               </div>
               <div className="pl-der">
@@ -676,6 +685,9 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
               </>
             ) : (
               <>
+                <th title="Stop loss / suelo / pérdida máxima declarada. Raya gris = el bloque no lleva SL por regla (pasa el ratón).">SL</th>
+                <th title="Take profit. Raya gris = no aplica en este bloque.">TP</th>
+                <th title="Distancia del precio al SL, en %: el margen que queda antes de que salte.">a SL</th>
                 <th title="Rendimiento medio diario de la posición: G/P% ÷ días desde la entrada">%/día</th>
                 <th title="Variación del activo respecto al cierre de la semana anterior (precio vivo Yahoo vs viernes previo)">vari/sem</th>
               </>
@@ -726,6 +738,13 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
                 </>
               ) : (
                 <>
+                  {sinSL(p)
+                    ? <td colSpan={3} className="calc na-sl" title={sinSL(p)}>— sin SL por regla —</td>
+                    : <>
+                        <td title={p.sl_type === 'ALERTA' ? 'Vigilado por el Vigía BTP (el bróker no admite la orden)' : p.sl_price != null ? 'SL / suelo puesto' : 'Sin SL'}>{p.sl_price != null ? fmtPx(p.sl_price) : <span className="falta">—</span>}</td>
+                        <td>{p.tp_price != null ? fmtPx(p.tp_price) : <span className="calc">—</span>}</td>
+                        <td className={p.aSLpct == null ? 'calc' : p.aSLpct < 5 ? 'down' : ''} title={p.precioRef ? `Precio de referencia ${fmtPx(p.precioRef)}` : ''}>{p.aSLpct == null ? '—' : p.aSLpct.toFixed(1) + ' %'}</td>
+                      </>}
                   <td title={p.diasAbiertos ? `${p.diasAbiertos} días abiertos` : ''}>{fmtPct(p.dia)}</td>
                   <td title={p.semFresco || ''}>{fmtPct(p.sem)}</td>
                 </>
@@ -745,6 +764,7 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
               <td>{wallet.invertido ? fmt$(wallet.invertido) : '—'}</td>
               <td className="col-clave col-ini">{wallet.precio ? fmt$(wallet.usd) : '—'}</td>
               <td className={'col-clave col-fin ' + pctClass(wallet.gp)}>{wallet.gp == null ? '—' : fmt$(wallet.gp)}</td>
+              <td colSpan={3} className="calc na-sl" title="Wallet: sin SL. Pérdida no gestionada por orden: es BTC propio, horizonte 2036.">— sin SL —</td>
               <td colSpan={2} className="tl calc">{wallet.qty} ₿ {wallet.precio ? '× $' + fmt$(wallet.precio) : '· sin precio'}</td>
               <td></td>
               <td>{wallet.peso == null ? '—' : wallet.peso.toFixed(1) + '%'}</td>
@@ -763,7 +783,7 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
             <td>{fmt$(inv)}</td>
             <td className="col-clave col-ini">{fmt$(val)}</td>
             <td className={'col-clave col-fin ' + pctClass(gp)}>{fmt$(gp)}</td>
-            <td colSpan={esTesis ? 5 : 3}></td>
+            <td colSpan={esTesis ? 5 : 6}></td>
             <td>{pesoSum.toFixed(1)}%</td>
             {cierre && <td></td>}
           </tr>
@@ -772,6 +792,17 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
       )}
     </div>
   )
+}
+
+// Bloques/estrategias que por regla no llevan SL (§9.2): devuelve el motivo, o null si sí debe llevarlo
+const ETF_NUCLEO = /^(CSPX|SXR8|VUAA|IUSA)/i
+function sinSL(p) {
+  const bq = bloqueDe(p)
+  if (bq === 'ORO') return 'ORO: sin SL por regla; sale por invalidación escrita'
+  if (bq === 'DELEGADA') return 'COPY TRADING: sin SL por regla; sustitución si 12 meses seguidos por detrás del S&P'
+  if (bq === 'BTC' && estrategiaBTC(p)?.id === 'BASE') return 'BTC Base: sin SL, horizonte 2036'
+  if (bq === 'NUCLEO' && ETF_NUCLEO.test(p.ticker || '')) return 'ETF del NÚCLEO: sin salida'
+  return null
 }
 
 // Vigía: texto con los niveles vigilados y la distancia del precio vivo a cada uno
