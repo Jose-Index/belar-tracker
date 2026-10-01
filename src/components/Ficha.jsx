@@ -150,7 +150,13 @@ export default function Ficha({ valor: v, onClose, lista = null, indice = -1, on
             </div>
           </div>
           <div className="ficha-nav">
-            {hayLista && <span className="ficha-pos">{indice + 1} / {lista.length}</span>}
+            {hayLista && (
+              <span className="ficha-pasar">
+                <button disabled={indice <= 0} onClick={() => ir(-1)} aria-label="Anterior" title="Anterior (←)">‹</button>
+                <span className="ficha-pos">{indice + 1} / {lista.length}</span>
+                <button disabled={indice >= lista.length - 1} onClick={() => ir(1)} aria-label="Siguiente" title="Siguiente (→)">›</button>
+              </span>
+            )}
             <button className="cerrar" onClick={onClose}>✕</button>
           </div>
         </div>
@@ -179,8 +185,6 @@ export default function Ficha({ valor: v, onClose, lista = null, indice = -1, on
         )}
 
         <div className="ficha-chart" {...gestos}>
-          {hayLista && <button className="ficha-flecha izq" disabled={indice <= 0} onClick={() => ir(-1)} aria-label="Anterior" title="Anterior (←)">‹</button>}
-          {hayLista && <button className="ficha-flecha der" disabled={indice >= lista.length - 1} onClick={() => ir(1)} aria-label="Siguiente" title="Siguiente (→)">›</button>}
           <div className="ficha-chart-head">
             <div className="periodos">
               {VISTAS.map(([id, l]) => <button key={id} className={vista === id ? 'on' : ''} onClick={() => setVista(id)}>{l}</button>)}
