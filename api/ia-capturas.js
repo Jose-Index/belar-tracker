@@ -23,7 +23,7 @@ Reglas:
 - invertido = lo que costó abrir la posición; valor = lo que vale AHORA. En USD (moneda operativa). Usa punto decimal. NO los intercambies: por broker,
   · IBKR: invertido = "Cost Basis" / "Coste base"; valor = "Mkt Value" / "Market Value" / "Valor de mercado". "Avg Price" es precio por acción, NO es el invertido.
   · XTB: invertido = "Valor de apertura"; valor = "Valor".
-  · eToro: invertido = "Invertido"; valor = "Valor".
+  · eToro: invertido = "Invertido"; valor = "Valor" o "Valor Neto". La vista web "Mi Portafolio" tiene además las columnas "Precio", "Corto" y "Comprar", que son PRECIOS POR UNIDAD (botones de venta/compra): NUNCA los uses como invertido ni como valor, aunque sean las últimas columnas de la fila. Lee "Invertido" (segunda columna) y "Valor Neto" (justo antes de "Corto"). Comprobación: en eToro invertido y valor son importes en dólares del mismo orden de magnitud (cientos o miles); si te salen dos números casi iguales entre sí y muy distintos de "Invertido", has leído precios.
   Comprobación obligatoria antes de responder: invertido + gp = valor. Si te sale al revés, es que los has puesto cambiados; corrígelo.
 - gp = la columna G/P $ / Beneficio neto / PyG no realizadas SI está visible, CON SU SIGNO (negativo si la posición pierde); si no, null. Debe cumplirse invertido + gp = valor. Si no te cuadra, revisa qué columna es cada cosa antes de responder; nunca devuelvas gp con el signo cambiado.
 - ticker: el símbolo si aparece; si solo hay nombre comercial, tu mejor conversión a ticker (p.ej. "NVIDIA Corp"→"NVDA"). CopyTraders de eToro: usa el nombre del trader tal cual.
