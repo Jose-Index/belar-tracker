@@ -13,6 +13,7 @@ const PERMITIDAS = {
   position_notes: ['insert'],
   repositorio: ['insert', 'update', 'upsert'],
   verdict_history: ['insert'],
+  symbols: ['insert', 'update'],      // símbolo canónico → yahoo_symbol (01/10/2026: DIA → DIA.MC, PRU.ASX → PRU.AX)
   app_state: ['update', 'upsert'],   // claves de estado (btc_wallet, liquidez, bloques_objetivo…): upsert por `key` (30/09/2026)
 }
 
