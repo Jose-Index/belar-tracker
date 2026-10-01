@@ -216,9 +216,9 @@
   .inicio { display: flex; flex-direction: column; }
   .inicio > .boxes.resumen { order: 1; margin: 0 0 10px; }
   .inicio > .mercados { order: 2; }
-  .inicio > .bloques { order: 3; }
+  .inicio > .evo { order: 3; }
   .inicio > .pos-layout { order: 4; }
-  .inicio > .evo { order: 5; }
+  .inicio > .bloques { order: 5; }
   .inicio > .boxes.cuentas { order: 6; }
 
   .boxes.resumen .box-total { grid-column: 1 / -1; }
