@@ -386,3 +386,7 @@
 .vigia-toggle input { width: 15px; height: 15px; }
 .vigia-info { font-size: 11.5px; color: var(--texto-sec); margin: 0 0 8px 22px; }
 .vigia-parado { color: var(--baja); font-weight: 600; }
+
+/* Tesis PUENTE (01/10/2026): entradas anteriores a la regla */
+.chip-puente { border-style: dashed; color: #8A5A00; border-color: #D9B36A; background: #FFF8E8; }
+.pos-leyenda .chip-puente { font-style: normal; margin: 0 4px 0 0; }
