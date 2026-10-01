@@ -31,7 +31,7 @@ const COLS = [
   { id: 'perf_1m', l: '1M' }, { id: 'perf_3m', l: '3M' }, { id: 'perf_6m', l: '6M' }, { id: 'perf_1y', l: '1A', t: 'Variación 52 semanas' },
   { id: 'dist_ma50', l: 'vs MA50', t: 'Precio sobre la media de 50 sesiones' },
   { id: 'dist_ma200', l: 'vs MA200', t: 'Precio sobre la media de 200 sesiones' },
-  { id: 'dist_high52', l: 'a MÁX52', t: 'Distancia al máximo de 52 semanas' },
+  { id: 'dist_high52', l: 'vs MÁX52', t: 'Distancia al máximo de 52 semanas: siempre ≤ 0 (0 % = en máximos). No es una pérdida: se muestra en gris neutro' },
 ]
 
 export default function Buscador() {
@@ -277,7 +277,7 @@ export default function Buscador() {
                   </div>
                   <div className="bl-der">
                     <div className={'bl-3m ' + pctClass(r.perf_3m)}>{fmtPct(r.perf_3m)}<i>3M</i></div>
-                    <div className={'bl-sec ' + pctClass(r.dist_high52)}>{fmtPct(r.dist_high52)}<i>a máx</i></div>
+                    <div className="bl-sec neutro">{fmtPct(r.dist_high52)}<i>vs máx</i></div>
                   </div>
                 </li>
               )
@@ -324,7 +324,7 @@ export default function Buscador() {
                     <td className={pctClass(r.perf_1y)}>{fmtPct(r.perf_1y)}</td>
                     <td className={pctClass(r.dist_ma50)}>{fmtPct(r.dist_ma50)}</td>
                     <td className={pctClass(r.dist_ma200)}>{fmtPct(r.dist_ma200)}</td>
-                    <td className={pctClass(r.dist_high52)}>{fmtPct(r.dist_high52)}</td>
+                    <td className="neutro">{fmtPct(r.dist_high52)}</td>
                     <td className="flags">
                       {r.perseguir && <span className="warn" title="No perseguir: +8 % en 3 sesiones o más de 2×ATR sobre la MA20">⚠</span>}
                       {r.cap_usd != null && r.cap_usd < 300e6 && <span title="Micro cap: fuera del universo de la Tesis">µ</span>}
