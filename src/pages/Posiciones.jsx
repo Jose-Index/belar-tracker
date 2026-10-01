@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   fetchPosiciones, updatePosicion, altaPosicion, cerrarPosicion,
-  guardarLiquidez, guardarBtcWallet, guardarAportesWallet, cerrarSemana, fetchNotas, addNota, borrarNotaDB, fetchSeriePosicion,
+  guardarLiquidez, guardarBtcWallet, guardarAportesWallet, guardarOrdenBloques, fetchSnapsBloques, cerrarSemana, fetchNotas, addNota, borrarNotaDB, fetchSeriePosicion,
 } from '../lib/posiciones-db'
 import { exportBackup } from '../lib/backup'
 import { AreaChart, Area, YAxis, XAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import { getSimbolos, yahooDe, fetchQuotes, pctDia, pctSem, diasAbiertos, frescura, intervaloPrecios } from '../lib/quotes'
-import { useCache, useSondeo, cargar } from '../lib/cache'
+import { useCache, useSondeo, cargar, fijar } from '../lib/cache'
 import { eventosProximos } from '../lib/ia'
-import { BLOQUES, BLOQUE_DE_ID, BTC_ESTRATEGIAS, estrategiaBTC, bloqueDe, bloquePorDefecto, pesosBloques, TESIS_SL, TESIS_TP, tesisSL, tesisTP } from '../lib/bloques'
+import { BLOQUES, BLOQUE_IDS, BLOQUE_DE_ID, BTC_ESTRATEGIAS, estrategiaBTC, bloqueDe, bloquePorDefecto, pesosBloques, TESIS_SL, TESIS_TP, tesisSL, tesisTP } from '../lib/bloques'
 import IngestaIA from '../components/IngestaIA.jsx'
 import { useMovil, useSinScroll, useArrastreCierre } from '../lib/movil'
 import './posiciones.css'
@@ -49,8 +49,8 @@ const pctClass = v => v == null ? '' : v > 0 ? 'up' : v < 0 ? 'down' : ''
 // las posiciones han cambiado (para recalcular boxes y bloques).
 // Posiciones + símbolos + eventos de calendario en una carga, cacheada y compartida (lib/cache.js)
 async function loaderPosiciones() {
-  const [data, simbolos, eventos] = await Promise.all([fetchPosiciones(), getSimbolos(), eventosProximos()])
-  return { ...data, simbolos, eventos }
+  const [data, simbolos, eventos, snapsBloque] = await Promise.all([fetchPosiciones(), getSimbolos(), eventosProximos(), fetchSnapsBloques().catch(() => [])])
+  return { ...data, simbolos, eventos, snapsBloque }
 }
 
 export default function Posiciones({ embed = false, onCambio, seleccionInicial = null, wallet: walletProp = null }) {
@@ -59,6 +59,8 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
   const [desc, setDesc] = useState(() => localStorage.getItem('btp-orden-desc') === '1')
   const [selId, setSelId] = useState(null)
   const [walletAbierta, setWalletAbierta] = useState(false)   // panel de aportaciones de la wallet
+  const [ordenBq, setOrdenBq] = useState(null)                // orden de bloques mientras se arrastra / tras soltar
+  const [arrastrando, setArrastrando] = useState(null)        // id del bloque que se está moviendo
   const [cierre, setCierre] = useState(false)   // MODO CIERRE SEMANA
   const [draft, setDraft] = useState({})        // {id: {invested?, current_value?, ingest_*}} en modo cierre
   const [pendCierres, setPendCierres] = useState([])  // [{pos, motivo}] pendientes de sellar
@@ -147,6 +149,23 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
     })
   }, [raw, quotes, simbolos, eventos, wallet])
 
+  // Gráfica de cada bloque: G/P % agregado por cierre semanal (Σ valor ÷ Σ invertido − 1) de las posiciones
+  // que estaban en el bloque esa semana. Las cerradas se asignan por su bloque por defecto.
+  const seriesBloque = useMemo(() => {
+    if (!raw?.snapsBloque?.length) return {}
+    const bloqueDeClave = new Map((raw.positions || []).map(p => [p.ticker + '|' + p.broker, bloqueDe(p)]))
+    const acc = {}
+    for (const s of raw.snapsBloque) {
+      const inv = Number(s.invested), val = Number(s.value)
+      if (!(inv > 0) || !Number.isFinite(val)) continue
+      const bq = bloqueDeClave.get(s.ticker + '|' + s.broker) || bloquePorDefecto({ ticker: s.ticker })
+      const k = (acc[bq] ||= {}); const w = (k[s.week_end] ||= { inv: 0, val: 0 })
+      w.inv += inv; w.val += val
+    }
+    return Object.fromEntries(Object.entries(acc).map(([bq, sem]) => [bq,
+      Object.entries(sem).sort(([a], [b]) => a.localeCompare(b)).map(([fecha, w]) => ({ fecha, pct: (w.val / w.inv - 1) * 100 }))]))
+  }, [raw])
+
   const sorted = useMemo(() => {
     if (!rows) return null
     // Orden natural de cada criterio (asc = el que tiene sentido leer primero).
@@ -168,11 +187,41 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
   const grupos = useMemo(() => {
     if (!sorted || !raw) return null
     const w = pesosBloques(raw.positions, raw.liquidez, null, wallet)
-    return BLOQUES.map(b => ({
+    const orden = ordenBq || raw.bloquesOrden || BLOQUE_IDS
+    const pos = id => { const i = orden.indexOf(id); return i < 0 ? 99 + BLOQUE_IDS.indexOf(id) : i }
+    return [...BLOQUES].sort((a, b) => pos(a.id) - pos(b.id)).map(b => ({
       b, peso: w.filas.find(f => f.id === b.id), rows: sorted.filter(r => r.bloqueEf === b.id),
       wallet: b.id === 'BTC' && wallet.qty > 0 ? { ...wallet, peso: w.base ? wallet.usd / w.base * 100 : null } : null,
+      serie: seriesBloque[b.id] || [],
     })).filter(g => g.rows.length || g.wallet)
-  }, [sorted, raw, wallet])
+  }, [sorted, raw, wallet, ordenBq, seriesBloque])
+
+  // Arrastrar y soltar bloques (ratón y dedo): se agarra el asa ⠿ de la cabecera; al soltar se guarda el orden.
+  function empezarArrastre(id, e) {
+    e.preventDefault(); e.stopPropagation()
+    const cont = tablaRef.current; if (!cont) return
+    let orden = grupos.map(g => g.b.id)
+    setArrastrando(id); setOrdenBq(orden)
+    const mover = ev => {
+      const y = ev.clientY
+      if (y < 70) window.scrollBy(0, -18); else if (y > window.innerHeight - 70) window.scrollBy(0, 18)   // auto-scroll en los bordes
+      const cards = [...cont.querySelectorAll('[data-bq]')]
+      const otros = cards.filter(c => c.dataset.bq !== id)
+      let idx = otros.findIndex(c => { const r = c.getBoundingClientRect(); return y < r.top + r.height / 2 })
+      if (idx < 0) idx = otros.length
+      const nuevo = otros.map(c => c.dataset.bq); nuevo.splice(idx, 0, id)
+      if (nuevo.join() !== orden.join()) { orden = nuevo; setOrdenBq(nuevo) }
+    }
+    const soltar = async () => {
+      window.removeEventListener('pointermove', mover); window.removeEventListener('pointerup', soltar); window.removeEventListener('pointercancel', soltar)
+      setArrastrando(null)
+      const completo = [...orden, ...BLOQUE_IDS.filter(x => !orden.includes(x))]
+      const { error } = await guardarOrdenBloques(completo)
+      if (error) setMsg('No se pudo guardar el orden de bloques: ' + error.message)
+      else fijar('posiciones', { ...raw, bloquesOrden: completo })
+    }
+    window.addEventListener('pointermove', mover); window.addEventListener('pointerup', soltar); window.addEventListener('pointercancel', soltar)
+  }
 
   const sel = sorted?.find(p => p.id === selId) || null
 
@@ -459,6 +508,7 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
           {grupos.map(g => (
             <TablaBloque key={g.b.id} g={g} cierre={cierre} draft={draft} setDraft={setDraft} keyNav={keyNav} movil={movil}
                          selId={selId} onSel={id => !cierre && setSelId(id)} onBorrar={borrarEnCierre}
+                         arrastrando={arrastrando === g.b.id} onAsa={e => empezarArrastre(g.b.id, e)}
                          onWallet={() => !cierre && (setSelId(null), setWalletAbierta(true))} />
           ))}
           {!grupos.length && <p className="placeholder">Sin posiciones abiertas.</p>}
@@ -497,8 +547,8 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
 }
 
 // ─── Una tabla por bloque, con cabecera de bloque y fila de subtotal ─────
-function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorrar, onWallet, movil = false }) {
-  const { b, peso, rows, wallet } = g
+function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorrar, onWallet, onAsa, arrastrando = false, movil = false }) {
+  const { b, peso, rows, wallet, serie } = g
   const esTesis = b.id === 'TESIS'
   const wInv = wallet?.invertido && wallet?.usd ? wallet.invertido : 0   // wallet con coste: entra en el G/P
   const inv = rows.reduce((a, p) => a + Number(p.invested || 0), 0) + wInv
@@ -512,8 +562,9 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
   const lista = movil && !cierre
 
   return (
-    <div className={'card pos-tabla-wrap bloque-card' + (lista ? ' lista' : '')}>
+    <div className={'card pos-tabla-wrap bloque-card' + (lista ? ' lista' : '') + (arrastrando ? ' arrastrando' : '')} data-bq={b.id}>
       <div className="bloque-cab" title={b.ayuda}>
+        <span className="bq-asa" onPointerDown={onAsa} title="Arrastra para cambiar el orden de los bloques" aria-label="Mover bloque">⠿</span>
         <span className="bq-dot" style={{ background: b.color }} />
         <span className="bloque-nombre">{lista ? b.corto : b.label}</span>
         <span className="bloque-n num">{rows.length + (wallet ? 1 : 0)}</span>
@@ -564,6 +615,7 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
               </div>
             </li>
           )}
+          {serie?.length > 1 && <li className="fila-serie"><SerieBloque serie={serie} /></li>}
           <li className="subtotal">
             <div className="pl-izq">Σ {b.corto} · inv {fmt$(inv)}</div>
             <div className="pl-der">
@@ -666,6 +718,9 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
               {cierre && <td></td>}
             </tr>
           )}
+          {serie?.length > 1 && !cierre && (
+            <tr className="fila-serie"><td colSpan={99}><SerieBloque serie={serie} /></td></tr>
+          )}
         </tbody>
         <tfoot>
           <tr className="subtotal">
@@ -682,6 +737,31 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
         </tfoot>
       </table>
       )}
+    </div>
+  )
+}
+
+// Gráfica de bloque: G/P % agregado por cierre semanal, con la línea del cero
+function SerieBloque({ serie }) {
+  const ult = serie[serie.length - 1]
+  const fF = d => d?.slice(2).split('-').reverse().join('/')
+  const color = ult.pct >= 0 ? '#16A34A' : '#E5484D'
+  return (
+    <div className="serie-bloque num">
+      <div className="sb-txt">
+        <span>G/P % del bloque por cierre semanal · desde {fF(serie[0].fecha)}</span>
+        <b className={pctClass(ult.pct)}>{fmtPct(ult.pct)} <i>al {fF(ult.fecha)}</i></b>
+      </div>
+      <ResponsiveContainer width="100%" height={64}>
+        <AreaChart data={serie} margin={{ top: 4, right: 2, left: 2, bottom: 0 }}>
+          <XAxis dataKey="fecha" hide />
+          <YAxis domain={['auto', 'auto']} hide />
+          <ReferenceLine y={0} stroke="#9AA6B8" strokeDasharray="3 3" />
+          <Tooltip labelFormatter={fF} isAnimationActive={false} animationDuration={0} wrapperClassName="tip-recharts"
+                   formatter={v => [fmtPct(v), 'G/P %']} />
+          <Area type="monotone" dataKey="pct" stroke={color} strokeWidth={1.6} fill={color} fillOpacity={0.08} isAnimationActive={false} />
+        </AreaChart>
+      </ResponsiveContainer>
     </div>
   )
 }
@@ -781,7 +861,7 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
     <aside className="pos-panel card" {...arrastre}>
       <div className="pos-panel-head">
         <h2>{p.ticker} <span className="broker">{p.broker}</span>{estrategiaBTC(p) && <span className="chip-estr">{estrategiaBTC(p).label}</span>}</h2>
-        <button onClick={onClose}>✕</button>
+        <button className="btn-cerrar-posicion" onClick={onCerrar} title="Cierra la posición y la pasa al histórico (pide confirmación)">Cerrar posición</button>
       </div>
       <dl className="num">
         <div><dt>Entrada</dt><dd>{p.entry_date || '—'} · ${fmt$(p.invested)}</dd></div>
@@ -872,7 +952,7 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
         {!notas.length && <li className="sin-notas">Sin notas.</li>}
       </ul>
 
-      <button className="btn-cerrar-pos" onClick={onCerrar}>Cerrar posición…</button>
+      <button className="btn-cerrar-cajon" onClick={onClose}>Cerrar</button>
     </aside>
   )
 }
