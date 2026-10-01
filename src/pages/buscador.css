@@ -221,3 +221,8 @@ button.estrella { border: none; background: none; padding: 0 6px 0 0; font-size:
 }
 .f-fila > .check { display: inline-flex; align-items: center; gap: 5px; font: 500 12px var(--font-ui); color: var(--texto-sec); cursor: pointer; white-space: nowrap; }
 .f-fila > .check input { accent-color: var(--azul-belar); }
+
+/* Estrellas fuera del filtro (01/10/2026): visibles y atenuadas hasta quitar la estrella */
+.tabla-busc tr.fuera td:not(.estrella-td):not(.ticker), .tabla-busc tr.fuera .ticker .nombre,
+.busc-lista li.fuera .bl-izq .nombre, .busc-lista li.fuera .bl-l2, .busc-lista li.fuera .bl-der { opacity: .5; }
+.tag-fuera { margin-left: 8px; font: 500 10.5px var(--font-ui); color: var(--texto-neutro); border: 1px dashed var(--borde); border-radius: 10px; padding: 1px 7px; white-space: nowrap; }
