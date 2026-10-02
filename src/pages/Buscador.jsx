@@ -6,9 +6,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   MERCADOS, CAPS, SECTORES, SECTOR_ES, RATINGS, FILTROS_DEFECTO, cargarFiltros, guardarFiltros,
   buscarUniverso, estadoUniverso, seriesUniverso, refrescarUniverso, universoViejo, fmtCap, capBucket, diasHasta,
-  leerEstrellas, guardarEstrellas, contadoresTesis, vixActual, valoresUniverso,
+  leerEstrellas, guardarEstrellas, contadoresTesis, vixActual, valoresUniverso, TIPOS, correlacionCartera, nivelCorr, fmtCorr,
 } from '../lib/universo'
 import Ficha, { ChipVix } from '../components/Ficha.jsx'
+import BuscadorActivos from '../components/BuscadorActivos.jsx'
 import { useMovil } from '../lib/movil'
 import { useCache, cargar, fijar } from '../lib/cache'
 import './buscador.css'
@@ -32,10 +33,16 @@ const COLS = [
   { id: 'dist_ma50', l: 'vs MA50', t: 'Precio sobre la media de 50 sesiones' },
   { id: 'dist_ma200', l: 'vs MA200', t: 'Precio sobre la media de 200 sesiones' },
   { id: 'dist_high52', l: 'vs MÁX52', t: 'Distancia al máximo de 52 semanas: siempre ≤ 0 (0 % = en máximos). No es una pérdida: se muestra en gris neutro' },
+  { id: 'corr', l: 'CORR. CART.', t: 'Correlación semanal (1 año) con tu cartera abierta, ponderada por importe. < 0,15 diversifica; > 0,35 se parece a lo que ya tienes' },
 ]
 
 export default function Buscador() {
   const [f, setF] = useState(cargarFiltros)
+  // Tipo de activo (02/10/2026): Acciones (Tesis) · ETF · Índices · Cripto
+  const [tipo, setTipoEstado] = useState(() => { try { return localStorage.getItem('btp-buscador-tipo') || 'ACC' } catch { return 'ACC' } })
+  const setTipo = t => { setTipoEstado(t); try { localStorage.setItem('btp-buscador-tipo', t) } catch { /* sin storage */ } }
+  const [corrs, setCorrs] = useState({})      // symbol → correlación con la cartera
+  const corrPedidas = useRef(new Set())
   const [filas, setFilas] = useState(null)
   const [cargando, setCargando] = useState(false)
   const [err, setErr] = useState(null)
@@ -199,7 +206,7 @@ export default function Buscador() {
   const filasVista = useMemo(() => {
     if (!filas) return null
     const conSerie = filas.map(r => {
-      const x = { ...r, ...(series[r.symbol] || {}) }
+      const x = { ...r, ...(series[r.symbol] || {}), corr: corrs[r.symbol] ?? null }
       // Regla "no perseguir" (Tesis §3.3): +8 % en 3 sesiones o más de 2×ATR sobre la MA20
       x.perseguir = (x.perf_3d != null && x.perf_3d > 8) || (x.dist_ma20_atr != null && x.dist_ma20_atr > 2)
       return x
@@ -225,24 +232,37 @@ export default function Buscador() {
       const c = typeof x === 'string' ? x.localeCompare(y) : x - y
       return desc ? -c : c
     })
-  }, [filas, series, orden, soloEstrellas, estrellas, f.atr_on, f.atr_min, f.atr_max, f.sin_perseguir])
+  }, [filas, series, corrs, orden, soloEstrellas, estrellas, f.atr_on, f.atr_min, f.atr_max, f.sin_perseguir])
   const atrPendientes = f.atr_on && filasVista ? filasVista.filter(r => r.atr_pct == null).length : 0
 
-  const ordenar = col => setOrden(o => o.col === col ? { col, desc: !o.desc } : { col, desc: !['symbol', 'market', 'sector', 'earnings_date', 'rating'].includes(col) })
+  const ordenar = col => setOrden(o => o.col === col ? { col, desc: !o.desc } : { col, desc: !['symbol', 'market', 'sector', 'earnings_date', 'rating', 'corr'].includes(col) })
+
+  // Correlación con la cartera de las filas de la búsqueda (02/10/2026), por tandas de 150
+  useEffect(() => {
+    if (!filas?.length) return
+    const faltan = filas.map(r => r.symbol).filter(s => !corrPedidas.current.has(s))
+    if (!faltan.length) return
+    faltan.forEach(s => corrPedidas.current.add(s))
+    correlacionCartera(faltan).then(c => setCorrs(prev => ({ ...prev, ...c }))).catch(() => {})
+  }, [filas])
   const total = estado?.total || 0
 
   return (
     <div className="buscador">
       <div className="pos-head">
-        <h1>Buscador <span className="hist-n">Tesis JOSE −11/+23,5 · datos de cierre, sin tiempo real</span></h1>
+        <h1>Buscador <span className="hist-n">{tipo === 'ACC' ? 'Tesis JOSE −11/+23,5 · ' : ''}datos de cierre, sin tiempo real</span></h1>
         <div className="pos-controls num">
           {vix?.v != null && <ChipVix vix={vix} />}
-          <span className="sello">
+          {tipo === 'ACC' && <><span className="sello">
             {estado ? `universo ${total.toLocaleString('es-ES')} valores · ${estado.estado?.fin ? 'refrescado ' + fHora(estado.estado.fin) : 'sin refrescar'}` : 'universo…'}
           </span>
-          <button className="btn-sec" onClick={() => refrescar(true)} disabled={!!refrescando.current} title="Vuelve a leer el universo entero de Yahoo (2-3 minutos)">Actualizar</button>
+          <button className="btn-sec" onClick={() => refrescar(true)} disabled={!!refrescando.current} title="Vuelve a leer el universo entero de Yahoo (2-3 minutos)">Actualizar</button></>}
         </div>
       </div>
+      <div className="tipos-activo" role="tablist">
+        {TIPOS.map(t => <button key={t.id} role="tab" aria-selected={tipo === t.id} className={tipo === t.id ? 'on' : ''} onClick={() => setTipo(t.id)}>{t.label}</button>)}
+      </div>
+      {tipo !== 'ACC' ? <BuscadorActivos tipo={tipo} estrellas={estrellas} onEstrella={alternarEstrella} vix={vix} /> : <>
       {refresco && <p className="pos-msg num">{refresco}</p>}
 
       {movil && (
@@ -395,6 +415,7 @@ export default function Buscador() {
                       {r.market}{r.adr ? ' ADR' : ''} · {fmtCap(r.cap_usd)} · PER {r.pe_trailing == null ? 'n/a' : fmtNum(r.pe_trailing, 0)}
                       {r.rating != null ? <> · <span className={'rat r' + Math.round(r.rating)} title="rating analistas">★{r.rating.toFixed(1)}</span></> : null}
                       {r.earnings_date ? <> · <span className={earnCerca ? 'earn-cerca' : ''} title="próximos resultados">{fFecha(r.earnings_date)}{r.earnings_estimada ? '~' : ''}</span></> : null}
+                      {r.corr != null && <> · <span className={'corr ' + nivelCorr(r.corr)} title="correlación con tu cartera">corr {fmtCorr(r.corr)}</span></>}
                       {r.perseguir && <span className="warn" title="No perseguir"> ⚠</span>}
                     </div>
                   </div>
@@ -448,6 +469,7 @@ export default function Buscador() {
                     <td className={pctClass(r.dist_ma50)}>{fmtPct(r.dist_ma50)}</td>
                     <td className={pctClass(r.dist_ma200)}>{fmtPct(r.dist_ma200)}</td>
                     <td className="neutro">{fmtPct(r.dist_high52)}</td>
+                    <td><span className={'corr ' + nivelCorr(r.corr)}>{fmtCorr(r.corr)}</span></td>
                     <td className="flags">
                       {r.perseguir && <span className="warn" title="No perseguir: +8 % en 3 sesiones o más de 2×ATR sobre la MA20">⚠</span>}
                       {r.cap_usd != null && r.cap_usd < 300e6 && <span title="Micro cap: fuera del universo de la Tesis">µ</span>}
@@ -470,6 +492,7 @@ export default function Buscador() {
         return <Ficha valor={sel} onClose={() => setSel(null)} lista={lista} indice={i} onNav={j => setSel(lista[j])}
                       estrella={estrellas[sel.symbol] || null} onEstrella={alternarEstrella} contadores={contadores || null} vix={vix || null} />
       })()}
+      </>}
     </div>
   )
 }
