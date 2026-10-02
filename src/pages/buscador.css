@@ -229,3 +229,16 @@ button.estrella { border: none; background: none; padding: 0 6px 0 0; font-size:
 .chip-borrar { font: 500 12px var(--font-ui); border: 1px solid var(--borde); border-radius: 14px; padding: 4px 12px; background: var(--superficie); color: var(--texto-neutro); cursor: pointer; }
 .chip-borrar:hover { color: var(--baja); border-color: var(--baja); }
 .chip-borrar.confirma { color: #fff; background: var(--baja); border-color: var(--baja); font-weight: 600; }
+
+/* 02/10/2026: tipos de activo y correlación con la cartera */
+.tipos-activo { display: inline-flex; gap: 0; margin: 0 0 12px; border: 1px solid var(--borde); border-radius: 10px; overflow: hidden; background: var(--superficie); }
+.tipos-activo button { font: 600 12.5px var(--font-ui); padding: 7px 16px; border: 0; background: transparent; color: var(--texto-sec); cursor: pointer; }
+.tipos-activo button + button { border-left: 1px solid var(--borde); }
+.tipos-activo button.on { background: var(--azul-belar); color: #fff; }
+.corr { font-weight: 600; }
+.corr.corr-baja, .dato.corr-baja .d-v { color: #16A34A; }
+.corr.corr-media, .dato.corr-media .d-v { color: #C2780A; }
+.corr.corr-alta, .dato.corr-alta .d-v { color: #E5484D; }
+.activos-filtros { gap: 10px; }
+.activos-ayuda { margin: 0; font-size: 12px; color: var(--texto-sec); }
+.pos-fuente a { cursor: pointer; color: var(--azul-belar); }
