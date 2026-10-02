@@ -100,6 +100,35 @@ export async function valoresUniverso(symbols) {
   return j.filas || []
 }
 
+// Tipos de activo del Buscador (02/10/2026). Acciones = Tesis; el resto, listas seleccionadas sin entrada de Tesis.
+export const TIPOS = [
+  { id: 'ACC', label: 'Acciones' }, { id: 'ETF', label: 'ETF' }, { id: 'INDICE', label: 'Índices' }, { id: 'CRIPTO', label: 'Cripto' },
+]
+export async function fetchActivos(tipo, forzar = false) {
+  const r = await fetch(`/api/activos?tipo=${tipo}${forzar ? '&forzar=1' : ''}`)
+  const j = await r.json()
+  if (j.error) throw new Error(j.error)
+  return j
+}
+// Correlación semanal (1 año) con la cartera abierta, ponderada por importe. { symbol: -1…1 }
+export async function correlacionCartera(symbols) {
+  const out = {}
+  if (!symbols.length) return out
+  const t = await jwt()
+  for (let i = 0; i < symbols.length; i += 150) {
+    const r = await fetch('/api/correlacion', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + t },
+      body: JSON.stringify({ symbols: symbols.slice(i, i + 150) }),
+    })
+    const j = await r.json().catch(() => ({}))
+    Object.assign(out, j.corr || {})
+  }
+  return out
+}
+// < 0,15 diversifica · 0,15-0,35 algo · > 0,35 se parece a lo que ya tienes
+export const nivelCorr = c => c == null ? '' : c < 0.15 ? 'corr-baja' : c <= 0.35 ? 'corr-media' : 'corr-alta'
+export const fmtCorr = c => c == null ? '—' : c.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
 export async function estadoUniverso() {
   const r = await fetch('/api/universo?estado=1')
   return r.json()
