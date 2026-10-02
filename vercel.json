@@ -6,7 +6,9 @@
   "functions": {
     "api/universo-refresh.js": { "maxDuration": 60 },
     "api/universo-series.js": { "maxDuration": 30 },
-    "api/vigia.js": { "maxDuration": 30 }
+    "api/vigia.js": { "maxDuration": 30 },
+    "api/activos.js": { "maxDuration": 60 },
+    "api/correlacion.js": { "maxDuration": 60 }
   },
   "crons": [
     { "path": "/api/universo-refresh", "schedule": "40 21 * * 1-5" }
