@@ -1,5 +1,5 @@
 // BTP · api/_activos.js — listas seleccionadas del Buscador para ETF, índices y cripto (02/10/2026).
-// Seleccionadas por Belar y ampliables a mano: una entrada por línea. Validadas contra Yahoo el 02/10/2026.
+// Seleccionadas por Belar y ampliables a mano: una entrada por línea. Validadas contra Yahoo el 02/10/2026 (China: 04/10/2026).
 // ETF: [símbolo, categoría, UCITS (1/0), acumulación (1/0), qué replica]. Los no UCITS (EE. UU.) van como referencia:
 // un minorista europeo no puede comprarlos (PRIIPs/KID), salvo como CFD.
 export const ETF = [
@@ -31,6 +31,9 @@ export const ETF = [
   ["CSKR.L", "País/Región", 1, 1, "MSCI Korea"],
   ["SJPA.L", "País/Región", 1, 1, "MSCI Japan"],
   ["CNYA.L", "País/Región", 1, 1, "MSCI China A"],
+  ["XCS6.DE", "País/Región", 1, 1, "MSCI China"],
+  ["HMCH.L", "País/Región", 1, 0, "MSCI China"],
+  ["KWEB.L", "País/Región", 1, 1, "China internet (KraneShares)"],
   ["NDIA.L", "País/Región", 1, 1, "MSCI India"],
   ["IBZL.L", "País/Región", 1, 0, "MSCI Brazil"],
   ["LTAM.L", "País/Región", 1, 0, "MSCI EM Latin America"],
@@ -75,6 +78,8 @@ export const ETF = [
   ["EWY", "País/Región", 0, 0, "MSCI Korea (EE. UU.)"],
   ["EWJ", "País/Región", 0, 0, "MSCI Japan (EE. UU.)"],
   ["FXI", "País/Región", 0, 0, "China large cap (EE. UU.)"],
+  ["MCHI", "País/Región", 0, 0, "MSCI China (EE. UU.)"],
+  ["KWEB", "País/Región", 0, 0, "China internet (EE. UU.)"],
   ["EWZ", "País/Región", 0, 0, "MSCI Brazil (EE. UU.)"],
   ["GLD", "Oro y materias primas", 0, 0, "Oro (EE. UU.)"],
   ["XLE", "Sector", 0, 0, "Energía (EE. UU.)"],
@@ -102,6 +107,7 @@ export const INDICE = [
   ["^N225", "Asia", "SJPA.L"],
   ["^KS11", "Asia", "CSKR.L"],
   ["^HSI", "Asia", null],
+  ["^HSCE", "Asia", null],
   ["000001.SS", "Asia", "CNYA.L"],
   ["^TWII", "Asia", null],
   ["^BSESN", "Asia", "NDIA.L"],
