@@ -59,6 +59,32 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
         // cada lote va a la posición aún no vista con el invertido más cercano.
         const mismos = positions.filter(p => p.broker === ex.broker && p.ticker.toUpperCase() === t && !vistos.has(p.id))
         const cerca = p => r.invertido == null ? 0 : Math.abs(Number(p.invested) - r.invertido)
+        // Varios lotes del mismo valor y la captura los trae AGRUPADOS en una sola fila
+        // (XTB enseña "Micron" con el total si no se despliega, 04/10/2026): el invertido
+        // leído es la suma de los lotes. Cada lote conserva su invertido y el valor se
+        // reparte por acciones (invertido / precio de entrada; sin precio, por invertido).
+        if (mismos.length > 1) {
+          const suma = mismos.reduce((a, p) => a + Number(p.invested), 0)
+          const esSuma = x => x != null && Math.abs(x - suma) <= Math.max(1, suma * 0.005)
+          const algunLote = x => x != null && mismos.some(p => Math.abs(Number(p.invested) - x) < 0.01)
+          let { invertido: invR, valor: valR } = r
+          if (!esSuma(invR) && esSuma(valR) && !algunLote(invR)) { const tmp = invR; invR = valR; valR = tmp }
+          if (esSuma(invR) && !algunLote(invR)) {
+            const acc = p => Number(p.entry_price) > 0 ? Number(p.invested) / Number(p.entry_price) : Number(p.invested)
+            const tot = mismos.reduce((a, p) => a + acc(p), 0)
+            let resto = valR
+            mismos.forEach((p, i) => {
+              vistos.add(p.id)
+              let v = null
+              if (valR != null) {
+                v = i === mismos.length - 1 ? Math.round(resto * 100) / 100 : Math.round(valR * acc(p) / tot * 100) / 100
+                resto -= v
+              }
+              updates.push({ pos: p, invertido: Number(p.invested), valor: v, sel: true, curado: false, permutado: false, dudosa: false, textos, canon: !!canon, repartido: mismos.length })
+            })
+            continue
+          }
+        }
         const pos = (mismos.length > 1 ? [...mismos].sort((x, y) => cerca(x) - cerca(y))[0] : mismos[0])
           || positions.find(p => p.broker === ex.broker && p.ticker.toUpperCase() === t)
           || positions.find(p => p.broker === ex.broker && !canon && vars.has(p.ticker.toUpperCase()))
@@ -214,6 +240,7 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
               <span className="warn">invertido {fmt$(u.pos.invested)} → <b>{fmt$(u.invertido)}</b></span>}
             <a className="btn-permutar" title="Intercambiar invertido y valor en esta fila"
                onClick={e => { e.preventDefault(); permutar('updates', i) }}>⇄</a>
+            {u.repartido && <span className="warn" title="La captura traía todos los lotes de este valor juntos: el valor se ha repartido entre ellos por número de acciones">lote · reparto de {u.repartido}</span>}
             {u.dudosa && <span className="down" title="Los importes de esta fila no cuadran con lo que hay en BTP y no se puede decidir solo: compruébalos en la captura">⚠ revisar</span>}
           </label>
         ))}
