@@ -83,3 +83,8 @@ BROKER A-Z / ENTRADA / CLASE / ESTADO (orden de urgencia) / %semana / %día / PE
 - Fila 2 (composición): mini-boxes por broker (invertido/valor/liquidez/G/P %) · split BTC: valor ex-monedero / solo monedero (con cantidad en BTC).
 - Fila 3 (año en curso): Aportado (año/total) · Resultado del año en % vs S&P 500 e IBEX.
 - Años cerrados: TABLA (no boxes) — año / aportado / valor cierre / rentabilidad % / vs S&P / vs IBEX / EURUSD cierre.
+
+## Lotes: una fila por entrada (04/10/2026)
+- Regla de José: cualquier activo con más de una entrada va en BTP con un apunte por entrada (fecha, precio, invertido propios), igual que BTC en XTB. MU en XTB separado el 04/10: lote 27/07 (0,92 acc. a 873,87, 803,96 $) y lote 04/08 (0,1006 acc. a 894,65, 90,00 $).
+- Ingesta: si la captura trae los lotes desplegados, cada fila va a la posición con el invertido más cercano. Si los trae agrupados en una sola fila cuyo invertido es la suma de los lotes (±0,5 %), el valor se reparte entre ellos por número de acciones (invertido / entry_price; sin entry_price, por invertido) y la revisión lo marca "lote · reparto de N". Por eso cada lote debe llevar entry_price.
+- Cierre de semana: position_snapshots tiene clave (week_end, ticker, broker); los lotes del mismo valor y bróker se suman en una fila (arreglo del error "ON CONFLICT DO UPDATE command cannot affect row a second time", 04/10/2026).
