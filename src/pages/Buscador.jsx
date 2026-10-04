@@ -84,6 +84,22 @@ export default function Buscador() {
   const desdeEstrella = r => { const e = estrellas[r.symbol]; return e?.precio && r.price ? (r.price / e.precio - 1) * 100 : null }
 
   useEffect(() => { guardarFiltros(f) }, [f])
+  // Interruptor "Sin filtros" (04/10/2026): para buscar un valor concreto en todo el universo.
+  // Los filtros guardados no se tocan: se ignoran mientras está activo y vuelven al apagarlo.
+  const [libre, setLibre] = useState(() => { try { return localStorage.getItem('btp-buscador-libre') === '1' } catch { return false } })
+  const fEf = useMemo(() => libre ? {
+    ...FILTROS_DEFECTO, q: f.q, orden: f.orden, mercado: MERCADOS.map(m => m.id), cap: [], pe_min: '', pe_max: '', pe_na: true,
+    sector: SECTORES.map(x => x[0]), rating: [], rating_na: true, earn_dias: 0, ma50: false, ma200: false, p3m: false,
+    atr_on: false, sin_perseguir: false,
+  } : f, [libre, f])
+  const alternarLibre = () => fijarLibre(!libre)
+  // Relanza la búsqueda tras cambiar de modo (interruptor o "Filtros por defecto"), ya con el estado nuevo pintado
+  const [relanzar, setRelanzar] = useState(0)
+  const primeraLibre = useRef(true)
+  useEffect(() => { if (primeraLibre.current) { primeraLibre.current = false; return } buscar() }, [libre, relanzar])
+  const fijarLibre = n => { setLibre(n); try { localStorage.setItem('btp-buscador-libre', n ? '1' : '0') } catch { /* sin storage */ } }
+  // "Filtros por defecto" (04/10/2026): solo EE. UU. y los estándares de la Tesis; apaga "Sin filtros"; conserva el texto buscado
+  const porDefecto = () => { setF(x => ({ ...FILTROS_DEFECTO, q: x.q })); fijarLibre(false); setRelanzar(n => n + 1) }
   const set = (k, v) => setF(x => ({ ...x, [k]: v }))
   const ratingTodos = !f.rating?.length || f.rating.length >= RATINGS.length
   const alternarRating = id => setF(x => {
@@ -137,7 +153,7 @@ export default function Buscador() {
   async function buscar() {
     setCargando(true); setErr(null)
     try {
-      const j = await buscarUniverso(f)
+      const j = await buscarUniverso(fEf)
       setFilas(j.filas)
       fijar('universo:busqueda', { n: j.filas?.length || 0 })   // marca de frescura para la cabecera
       setPlegado(true)
@@ -146,7 +162,7 @@ export default function Buscador() {
   }
 
   // Resumen de los filtros activos (cabecera plegada en móvil)
-  const resumenFiltros = [
+  const resumenFiltros = libre ? `sin filtros${f.q ? ` · "${f.q}"` : ''}` : [
     f.mercado.length === MERCADOS.length ? 'todos los mercados' : f.mercado.join('/'),
     f.cap.length ? f.cap.map(c => CAPS.find(x => x.id === c)?.label || c).join('/') : null,
     (f.pe_min || f.pe_max) ? `PER ${f.pe_campo === 'fwd' ? 'fut. ' : ''}${f.pe_min || '0'}–${f.pe_max || '∞'}` : null,
@@ -216,14 +232,14 @@ export default function Buscador() {
     let base = conSerie.filter(r => !r.fuera || estrellas[r.symbol])     // fuera de filtro: solo mientras tenga estrella
     if (soloEstrellas) base = base.filter(r => estrellas[r.symbol])
     // Filtros en cliente (ATR, perseguir): las estrellas no se ocultan, se marcan "fuera de filtro" (01/10/2026)
-    const lo = Number(f.atr_min) || 0, hi = Number(f.atr_max) || Infinity
+    const lo = Number(fEf.atr_min) || 0, hi = Number(fEf.atr_max) || Infinity
     base = base.map(r => {
       if (!estrellas[r.symbol] || r.fuera) return r
-      const sale = (f.sin_perseguir && r.perseguir) || (f.atr_on && r.atr_pct != null && (r.atr_pct < lo || r.atr_pct > hi))
+      const sale = (fEf.sin_perseguir && r.perseguir) || (fEf.atr_on && r.atr_pct != null && (r.atr_pct < lo || r.atr_pct > hi))
       return sale ? { ...r, fuera: true } : r
     })
-    if (f.sin_perseguir) base = base.filter(r => r.fuera || !r.perseguir)
-    if (f.atr_on) base = base.filter(r => r.fuera || r.atr_pct == null || (r.atr_pct >= lo && r.atr_pct <= hi))
+    if (fEf.sin_perseguir) base = base.filter(r => r.fuera || !r.perseguir)
+    if (fEf.atr_on) base = base.filter(r => r.fuera || r.atr_pct == null || (r.atr_pct >= lo && r.atr_pct <= hi))
     return [...base].sort((a, b) => {
       const x = v(a), y = v(b)
       if (x == null && y == null) return 0
@@ -232,8 +248,8 @@ export default function Buscador() {
       const c = typeof x === 'string' ? x.localeCompare(y) : x - y
       return desc ? -c : c
     })
-  }, [filas, series, corrs, orden, soloEstrellas, estrellas, f.atr_on, f.atr_min, f.atr_max, f.sin_perseguir])
-  const atrPendientes = f.atr_on && filasVista ? filasVista.filter(r => r.atr_pct == null).length : 0
+  }, [filas, series, corrs, orden, soloEstrellas, estrellas, fEf.atr_on, fEf.atr_min, fEf.atr_max, fEf.sin_perseguir])
+  const atrPendientes = fEf.atr_on && filasVista ? filasVista.filter(r => r.atr_pct == null).length : 0
 
   const ordenar = col => setOrden(o => o.col === col ? { col, desc: !o.desc } : { col, desc: !['symbol', 'market', 'sector', 'earnings_date', 'rating', 'corr'].includes(col) })
 
@@ -272,8 +288,8 @@ export default function Buscador() {
           <span className="fr-flecha" aria-hidden="true">{plegado ? '▾' : '▴'}</span>
         </button>
       )}
-      <div className={'card filtros num' + (movil && plegado ? ' plegado' : '')}>
-        <div className="f-grupos">
+      <div className={'card filtros num' + (movil && plegado ? ' plegado' : '') + (libre ? ' libre' : '')}>
+        <div className="f-grupos" title={libre ? 'Filtros en pausa: apaga "Sin filtros" para usarlos' : undefined}>
           <section className={'f-grupo' + (cerrados.universo ? ' cerrado' : '')}>
             <h3 onClick={() => alternarGrupo('universo')}>Qué universo{grupoCambiado('universo') && <i className="f-dot" />}</h3>
             <div className="f-fila">
@@ -365,10 +381,15 @@ export default function Buscador() {
         <div className="filtro acciones">
           <input className="f-q" placeholder="símbolo o nombre" value={f.q} onChange={e => set('q', e.target.value)} onKeyDown={e => e.key === 'Enter' && buscar()} />
           <button className="btn-primario" onClick={buscar} disabled={cargando}>{cargando ? 'Buscando…' : 'Buscar'}</button>
-          <button className="btn-escape" onClick={() => setF({ ...FILTROS_DEFECTO })} disabled={!nCambiados}>valores por defecto</button>
+          <button type="button" role="switch" aria-checked={libre} className={'f-libre' + (libre ? ' on' : '')} onClick={alternarLibre}
+                  title="Ignora todos los filtros (mercado, tamaño, PER, rating, resultados, ATR…) para buscar un valor concreto en todo el universo. Tus filtros se conservan.">
+            <span className="f-libre-pista" aria-hidden="true"><span /></span> Sin filtros
+          </button>
+          <button type="button" className="btn-sec f-defecto" onClick={porDefecto} disabled={!nCambiados && !libre}
+                  title="Solo EE. UU. y los filtros estándar de la Tesis: PER futuro 8–25, ATR 1,5–5,5 %, rating Fuerte compra / Compra, sin resultados a menos de 15 días">Filtros por defecto</button>
           <span className="f-estado">
             {filasVista ? `${filasVista.length} valores` : ''}
-            {nCambiados ? <> · {nCambiados} {nCambiados === 1 ? 'filtro cambiado' : 'filtros cambiados'} <i className="f-dot" /></> : ' · filtros por defecto'}
+            {libre ? ' · sin filtros: todo el universo' : nCambiados ? <> · {nCambiados} {nCambiados === 1 ? 'filtro cambiado' : 'filtros cambiados'} <i className="f-dot" /></> : ' · filtros por defecto'}
           </span>
         </div>
       </div>
