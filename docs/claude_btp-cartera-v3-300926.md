@@ -96,6 +96,20 @@ incluidos) · **Resultados a ≤15 días excluidos** (conmutable, N editable) ·
 3M positivo · 11 sectores en casillas · texto libre por símbolo o nombre. Los filtros se recuerdan en el
 navegador. Tabla ordenable por cualquier columna (hasta 400 filas).
 
+**04/10/2026 — Sin filtros / Filtros por defecto.** Junto al botón Buscar hay un interruptor **Sin filtros**
+que ignora todos los filtros (todos los mercados, sin tamaño, PER, rating, resultados, tendencia, ATR ni
+"perseguir") para encontrar un valor concreto en todo el universo; los filtros guardados no se tocan y el
+grupo de filtros se atenúa mientras está activo (estado recordado en `localStorage` `btp-buscador-libre`).
+Al lado, **Filtros por defecto** restablece `FILTROS_DEFECTO` (solo EE. UU., PER futuro 8-25, ATR 1,5-5,5,
+Fuerte compra / Compra, sin resultados a <15 días), apaga Sin filtros, conserva el texto y relanza la búsqueda.
+Sustituye al antiguo enlace "valores por defecto".
+
+**04/10/2026 — ETF / Índices / Cripto con buscador de texto** (`src/components/BuscadorActivos.jsx`):
+campo de búsqueda por símbolo, nombre, qué replica, categoría o ETF UCITS (sin acentos, varias palabras =
+todas). Con texto se busca en toda la lista: categoría, "solo UCITS" y "solo acumulación" quedan en pausa.
+Altas en `api/_activos.js`: ETF XCS6.DE (MSCI China, Acc), HMCH.L (MSCI China, Dist), KWEB.L (China
+internet KraneShares UCITS), MCHI y KWEB (EE. UU., referencia); índice ^HSCE (Hang Seng China Enterprises).
+
 ### Ficha (src/components/Ficha.jsx)
 Gráfica de **línea de cierres a 2 años por defecto** (3M / 6M / 1A / 2A / 5A), con MA50 y MA200 calculadas
 sobre 3 años de serie diaria (`/api/history?range=3y&ohlc=1`), líneas SL −11 y TP +23,5 sobre el último
