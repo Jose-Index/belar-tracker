@@ -11,6 +11,9 @@ const fmtPct = (v, d = 1) => v == null ? '—' : (v > 0 ? '+' : '') + Number(v).
 const pctClass = v => v == null ? '' : v > 0 ? 'up' : v < 0 ? 'down' : ''
 const fmtPx = v => v == null ? '—' : Number(v).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: v < 10 ? 3 : 2 })
 
+// Texto sin acentos ni mayúsculas, para comparar
+const norm = t => String(t ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+
 const AYUDA = {
   ETF: 'Vehículos para los bloques NÚCLEO, O/MERCADOS y ORO. Sin entrada de Tesis: los ETF operados como táctica están vetados (20 % de acierto).',
   INDICE: 'Contexto de mercado: no se operan. Cada índice indica el ETF UCITS con el que se replica.',
@@ -25,7 +28,10 @@ export default function BuscadorActivos({ tipo, estrellas, onEstrella, vix }) {
   const [orden, setOrden] = useState({ col: 'corr', desc: false })
   const [corrs, setCorrs] = useState({})
   const [sel, setSel] = useState(null)
-  useEffect(() => { setCat('TODAS'); setSel(null) }, [tipo])
+  // Buscador de texto (04/10/2026): símbolo, nombre, qué replica, categoría o ETF UCITS.
+  // Con texto se busca en toda la lista: categoría, "solo UCITS" y "solo acumulación" no ocultan resultados.
+  const [q, setQ] = useState('')
+  useEffect(() => { setCat('TODAS'); setSel(null); setQ('') }, [tipo])
 
   const filas = data?.filas || null
   useEffect(() => {
@@ -39,9 +45,15 @@ export default function BuscadorActivos({ tipo, estrellas, onEstrella, vix }) {
   const vista = useMemo(() => {
     if (!filas) return null
     let b = filas.map(r => ({ ...r, corr: corrs[r.symbol] ?? null }))
-    if (cat !== 'TODAS') b = b.filter(r => r.categoria === cat)
-    if (tipo === 'ETF' && soloUcits) b = b.filter(r => r.ucits)
-    if (tipo === 'ETF' && soloAcc) b = b.filter(r => r.acumulacion)
+    const t = norm(q).trim()
+    if (t) {
+      const palabras = t.split(/\s+/)
+      b = b.filter(r => { const h = norm([r.symbol, r.name, r.replica, r.categoria, r.etf_ucits].join(' ')); return palabras.every(w => h.includes(w)) })
+    } else {
+      if (cat !== 'TODAS') b = b.filter(r => r.categoria === cat)
+      if (tipo === 'ETF' && soloUcits) b = b.filter(r => r.ucits)
+      if (tipo === 'ETF' && soloAcc) b = b.filter(r => r.acumulacion)
+    }
     const { col, desc } = orden
     return [...b].sort((a, c) => {
       const x = a[col], y = c[col]
@@ -51,7 +63,7 @@ export default function BuscadorActivos({ tipo, estrellas, onEstrella, vix }) {
       const r = typeof x === 'string' ? x.localeCompare(y) : x - y
       return desc ? -r : r
     })
-  }, [filas, corrs, cat, soloUcits, soloAcc, orden, tipo])
+  }, [filas, corrs, cat, soloUcits, soloAcc, orden, tipo, q])
 
   const COLS = [
     { id: 'name', l: 'VALOR', tl: true },
@@ -70,7 +82,13 @@ export default function BuscadorActivos({ tipo, estrellas, onEstrella, vix }) {
   return (
     <>
       <div className="card filtros num activos-filtros">
-        <div className="f-fila">
+        <div className="activos-q">
+          <input className="f-q" type="search" placeholder={tipo === 'INDICE' ? 'índice, región o ETF (p. ej. Hang Seng, Asia)' : tipo === 'CRIPTO' ? 'símbolo o nombre' : 'símbolo, nombre o qué replica (p. ej. China, oro, KWEB)'}
+                 value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => e.key === 'Escape' && setQ('')} />
+          {q && <button type="button" className="btn-sec" onClick={() => setQ('')}>Borrar</button>}
+          {q && <span className="activos-ayuda">buscando en toda la lista: los filtros de abajo no ocultan resultados</span>}
+        </div>
+        <div className={'f-fila' + (q ? ' f-pausa' : '')}>
           <span className="f-l">{tipo === 'INDICE' ? 'Región' : 'Categoría'}</span>
           <div className="chips">
             <button className={cat === 'TODAS' ? 'on' : ''} onClick={() => setCat('TODAS')}>Todas</button>
@@ -78,7 +96,7 @@ export default function BuscadorActivos({ tipo, estrellas, onEstrella, vix }) {
           </div>
         </div>
         {tipo === 'ETF' && (
-          <div className="f-fila">
+          <div className={'f-fila' + (q ? ' f-pausa' : '')}>
             <span className="f-l">Vehículo</span>
             <div className="chips">
               <label className="check" title="Solo ETF europeos (UCITS): los americanos no se pueden comprar como minorista europeo, salvo por CFD"><input type="checkbox" checked={soloUcits} onChange={e => setSoloUcits(e.target.checked)} /> solo UCITS</label>
@@ -125,7 +143,7 @@ export default function BuscadorActivos({ tipo, estrellas, onEstrella, vix }) {
                   <td><span className={'corr ' + nivelCorr(r.corr)}>{fmtCorr(r.corr)}</span></td>
                 </tr>
               ))}
-              {!vista.length && <tr><td colSpan={COLS.length + 1} className="tl" style={{ color: 'var(--texto-neutro)' }}>Sin resultados con estos filtros.</td></tr>}
+              {!vista.length && <tr><td colSpan={COLS.length + 1} className="tl" style={{ color: 'var(--texto-neutro)' }}>{q ? `Sin resultados para "${q}" en la lista. Si falta un ETF o índice, pídeselo a Belar: la lista es ampliable.` : 'Sin resultados con estos filtros.'}</td></tr>}
             </tbody>
           </table>
         )}
