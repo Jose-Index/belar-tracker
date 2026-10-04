@@ -158,10 +158,19 @@ export async function cerrarSemana(positions, liquidez, btcQty = 0) {
   if (e1) return { error: e1 }
   if (btcQty > 0 && btcUsd === 0) console.warn('BTC wallet sin precio: total sin monedero')
 
-  const rows = positions.map(p => ({
-    week_end, ticker: p.ticker, broker: p.broker,
-    value: p.current_value ?? p.invested, invested: p.invested,
-  }))
+  // Una fila por ticker+broker: si hay dos posiciones del mismo valor en el mismo
+  // bróker (BTC en XTB, 04/10/2026), se suman. Sin esto Postgres rechaza el upsert
+  // ("ON CONFLICT DO UPDATE command cannot affect row a second time").
+  const agregadas = new Map()
+  for (const p of positions) {
+    const k = p.ticker + '|' + p.broker
+    const v = Number(p.current_value ?? p.invested) || 0
+    const inv = Number(p.invested) || 0
+    const a = agregadas.get(k)
+    if (a) { a.value = Math.round((a.value + v) * 100) / 100; a.invested = Math.round((a.invested + inv) * 100) / 100 }
+    else agregadas.set(k, { week_end, ticker: p.ticker, broker: p.broker, value: v, invested: inv })
+  }
+  const rows = [...agregadas.values()]
   const { error: e2 } = await supabase.from('position_snapshots')
     .upsert(rows, { onConflict: 'week_end,ticker,broker' })
   if (e2) return { error: e2 }
