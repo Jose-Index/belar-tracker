@@ -242,3 +242,19 @@ button.estrella { border: none; background: none; padding: 0 6px 0 0; font-size:
 .activos-filtros { gap: 10px; }
 .activos-ayuda { margin: 0; font-size: 12px; color: var(--texto-sec); }
 .pos-fuente a { cursor: pointer; color: var(--azul-belar); }
+
+/* Sin filtros / Filtros por defecto (04/10/2026) */
+.f-libre { display: inline-flex; align-items: center; gap: 8px; font: 600 12px var(--font-ui); color: var(--texto-sec); background: none; border: 1px solid var(--borde); border-radius: 999px; padding: 5px 12px 5px 6px; cursor: pointer; white-space: nowrap; }
+.f-libre-pista { width: 30px; height: 18px; border-radius: 999px; background: var(--borde); position: relative; transition: background .15s; flex: none; }
+.f-libre-pista span { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: left .15s; }
+.f-libre.on { color: var(--azul-belar); border-color: var(--azul-belar); }
+.f-libre.on .f-libre-pista { background: var(--azul-belar); }
+.f-libre.on .f-libre-pista span { left: 14px; }
+.f-defecto { white-space: nowrap; }
+.f-defecto:disabled { opacity: .4; cursor: default; }
+.filtros.libre .f-grupos { opacity: .35; pointer-events: none; filter: grayscale(1); }
+/* Buscador de texto en ETF / Índices / Cripto */
+.activos-q { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.activos-q .f-q { width: 260px; }
+@media (max-width: 900px) { .activos-q .f-q { width: 100%; } .f-libre, .f-defecto { flex: 1; justify-content: center; } }
+.f-pausa { opacity: .4; }
