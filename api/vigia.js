@@ -15,7 +15,9 @@
 // Estado en app_state.vigia = { last_run, last_ok, vigiladas, errores, disparos: { "<id>:<tipo>": { nivel, at, precio } } }.
 // Un disparo es de una sola vez por posición, tipo y nivel: si cambias el nivel, se rearma.
 // Unidades: el nivel se compara tal cual con el precio de Yahoo del símbolo canónico (tabla symbols);
-// ponlo en la misma moneda/unidad que muestra Yahoo (ojo: Londres cotiza en peniques, GBp).
+// ponlo en la moneda de cotización. Londres: Yahoo da peniques (GBp) y BTP guarda los niveles en £ (como XTB):
+// el precio GBp se pasa a £ antes de comparar (05/10/2026).
+// Las alertas se escriben con autor 'belar' (la tabla alerts solo admite 'app' y 'belar'; el sufijo "(Vigía BTP)" las distingue).
 
 import { autorizarUsuario, rest } from './_belar.js'
 import { H } from './_yahoo.js'
@@ -34,11 +36,12 @@ async function cotizacion(symbol) {
   const p = meta.currentTradingPeriod?.regular
   const cripto = meta.instrumentType === 'CRYPTOCURRENCY' || /-USD$/.test(symbol)
   const abierto = cripto || (p && now >= p.start && now < p.end)
+  const k = meta.currency === 'GBp' || meta.currency === 'GBX' ? 0.01 : 1   // peniques → £
   return {
-    precio: meta.regularMarketPrice,
-    minimo: meta.regularMarketDayLow ?? meta.regularMarketPrice,
-    maximo: meta.regularMarketDayHigh ?? meta.regularMarketPrice,
-    moneda: meta.currency, abierto, at: (meta.regularMarketTime || now) * 1000,
+    precio: meta.regularMarketPrice * k,
+    minimo: (meta.regularMarketDayLow ?? meta.regularMarketPrice) * k,
+    maximo: (meta.regularMarketDayHigh ?? meta.regularMarketPrice) * k,
+    moneda: k === 1 ? meta.currency : 'GBP', abierto, at: (meta.regularMarketTime || now) * 1000,
   }
 }
 
@@ -111,9 +114,12 @@ export default async function handler(req, res) {
   let enviados = 0
   if (!dry) {
     for (const e of eventos) {
-      await rest('alerts', { method: 'POST', prefer: 'return=minimal',
-        body: { autor: 'vigia', severidad: e.sev, ticker: e.ticker, titulo: e.titulo, detalle: e.txt + ' (Vigía BTP)', activa: true } })
-      if (await push(topic, { titulo: e.titulo, mensaje: e.txt, prioridad: e.prioridad, tags: e.tags })) enviados++
+      try {
+        await rest('alerts', { method: 'POST', prefer: 'return=minimal',
+          body: { autor: 'belar', severidad: e.sev, ticker: e.ticker, titulo: e.titulo, detalle: e.txt + ' (Vigía BTP)', activa: true } })
+      } catch (x) { errores.push(`Radar ${e.ticker}: ${String(x.message).slice(0, 160)}`) }
+      try { if (await push(topic, { titulo: e.titulo, mensaje: e.txt, prioridad: e.prioridad, tags: e.tags })) enviados++ }
+      catch (x) { errores.push(`push ${e.ticker}: ${x.message}`) }
     }
     // Disparos de posiciones que ya no se vigilan: fuera, para que no crezca sin fin
     const ids = new Set((pos || []).map(p => String(p.id)))
