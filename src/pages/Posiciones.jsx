@@ -2,13 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   fetchPosiciones, updatePosicion, altaPosicion, cerrarPosicion,
   guardarLiquidez, guardarBtcWallet, guardarAportesWallet, guardarOrdenBloques, fetchSnapsBloques, cerrarSemana, fetchNotas, addNota, borrarNotaDB, fetchSeriePosicion,
+  fetchCierresBloques, fechaLocalISO,
 } from '../lib/posiciones-db'
+import { precioEnUnidadNivel, distanciaSLpct } from '../lib/riesgo'
 import { exportBackup } from '../lib/backup'
 import { AreaChart, Area, YAxis, XAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import { getSimbolos, yahooDe, fetchQuotes, pctDia, pctSem, diasAbiertos, frescura, intervaloPrecios } from '../lib/quotes'
 import { useCache, useSondeo, cargar, fijar } from '../lib/cache'
 import { eventosProximos } from '../lib/ia'
-import { BLOQUES, BLOQUE_IDS, BLOQUE_DE_ID, BTC_ESTRATEGIAS, estrategiaBTC, esPuente, bloqueDe, bloquePorDefecto, pesosBloques, TESIS_SL, TESIS_TP, tesisSL, tesisTP } from '../lib/bloques'
+import { BLOQUES, BLOQUE_IDS, BLOQUE_DE_ID, BTC_ESTRATEGIAS, estrategiaBTC, esPuente, bloqueDe, bloquePorDefecto, pesosBloques, TESIS_SL, TESIS_TP, tesisSL, tesisTP, serieTWRBloques, tesisNiveles } from '../lib/bloques'
 import IngestaIA from '../components/IngestaIA.jsx'
 import { useMovil, useSinScroll, useArrastreCierre } from '../lib/movil'
 import './posiciones.css'
@@ -44,13 +46,16 @@ const fmtPx = v => v == null ? '—' : Number(v).toLocaleString('es-ES', { minim
 const fmtPct = v => v == null ? '—' : (v > 0 ? '+' : '') + v.toFixed(2) + '%'
 const fmtPP = v => v == null ? '—' : (v > 0 ? '+' : '') + v.toFixed(1)
 const pctClass = v => v == null ? '' : v > 0 ? 'up' : v < 0 ? 'down' : ''
+// Números tecleados: admiten coma decimal. '' / null → null; texto no numérico → NaN (nunca se guarda)
+const num = v => v === '' || v == null ? null : Number(String(v).trim().replace(',', '.'))
+const esNumeroInvalido = v => v != null && v !== '' && !Number.isFinite(num(v))
 
 // `embed`: dentro de la portada (Inicio). `onCambio`: avisa a la portada de que
 // las posiciones han cambiado (para recalcular boxes y bloques).
 // Posiciones + símbolos + eventos de calendario en una carga, cacheada y compartida (lib/cache.js)
 async function loaderPosiciones() {
-  const [data, simbolos, eventos, snapsBloque] = await Promise.all([fetchPosiciones(), getSimbolos(), eventosProximos(), fetchSnapsBloques().catch(() => [])])
-  return { ...data, simbolos, eventos, snapsBloque }
+  const [data, simbolos, eventos, snapsBloque, cierresBloque] = await Promise.all([fetchPosiciones(), getSimbolos(), eventosProximos(), fetchSnapsBloques().catch(() => []), fetchCierresBloques().catch(() => [])])
+  return { ...data, simbolos, eventos, snapsBloque, cierresBloque }
 }
 
 export default function Posiciones({ embed = false, onCambio, seleccionInicial = null, wallet: walletProp = null }) {
@@ -135,15 +140,16 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
         diasAbiertos: diasAbiertos(p.entry_date),
         sem: pctSem(q),
         semFresco: q ? frescura(q) : null,
-        precioVivo: q?.price ?? null,
+        // Precio vivo en la unidad de los niveles (Londres: peniques de Yahoo → £, 07/10/2026)
+        precioVivo: precioEnUnidadNivel(q),
         // Precio de referencia para la distancia al SL: el vivo si es coherente con la entrada y el G/P de la
         // captura; si no (p. ej. VBTC.DE cotizado como BTC-USD), el estimado por entrada × (1 + retorno).
         ...(() => {
           const est = entry && ret != null ? entry * (1 + ret / 100) : null
-          const live = q?.price ?? null
+          const live = precioEnUnidadNivel(q)
           const px = live && (est == null || (live / est > 0.6 && live / est < 1.6)) ? live : est
           const sl = p.sl_price != null ? Number(p.sl_price) : null
-          return { precioRef: px, aSLpct: px && sl ? (px / sl - 1) * 100 : null }
+          return { precioRef: px, aSLpct: distanciaSLpct(px, sl) }
         })(),
         peso: base ? val / base * 100 : null,
         bloqueEf: bloqueDe(p),
@@ -153,49 +159,21 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
         slCalc: p.sl_price == null && !!entry,
         tpTesis: p.tp_price != null ? Number(p.tp_price) : tesisTP(entry),
         tpCalc: p.tp_price == null && !!entry,
-        aTP: ret == null ? null : TESIS_TP - ret,
-        aSL: ret == null ? null : ret - TESIS_SL,
+        // Niveles reales del ticket en % sobre la entrada; −11/+23,5 solo si faltan (07/10/2026)
+        ...(() => {
+          const n = tesisNiveles(p)
+          return { slPct: n.slPct, tpPct: n.tpPct, aTP: ret == null ? null : n.tpPct - ret, aSL: ret == null ? null : ret - n.slPct }
+        })(),
       }
     })
   }, [raw, quotes, simbolos, eventos, wallet])
 
-  // Gráfica de cada bloque: rentabilidad TWR acumulada (01/10/2026). Cada semana, el rendimiento del bloque
-  // es el de las posiciones que estaban en él la semana anterior y siguen esta, descontando el dinero nuevo
-  // (aumento de invertido): r = Σ(valor − Δinvertido) ÷ Σ valor anterior − 1. Las semanas se encadenan:
-  // altas, salidas y aportaciones no mueven la curva; solo la mueve lo que ganan o pierden las posiciones.
-  // Las posiciones ya cerradas se asignan por su bloque por defecto.
+  // Gráfica de cada bloque: rentabilidad TWR acumulada (01/10/2026; auditoría 07/10/2026 → lib/bloques.js
+  // serieTWRBloques). Altas, salidas, aportaciones y retiradas no mueven la curva; los cierres de la semana
+  // cuentan con su valor de cierre real; la Tesis excluye las Puente.
   const seriesBloque = useMemo(() => {
     if (!raw?.snapsBloque?.length) return {}
-    const bloqueDeClave = new Map((raw.positions || []).map(p => [p.ticker + '|' + p.broker, bloqueDe(p)]))
-    const porBloque = {}   // bq -> week -> clave -> { val, inv }
-    for (const s of raw.snapsBloque) {
-      const val = Number(s.value), inv = Number(s.invested)
-      if (!Number.isFinite(val) || !(val > 0)) continue
-      const clave = s.ticker + '|' + s.broker
-      const bq = bloqueDeClave.get(clave) || bloquePorDefecto({ ticker: s.ticker })
-      const sem = ((porBloque[bq] ||= {})[s.week_end] ||= {})
-      const prev = sem[clave] || { val: 0, inv: 0 }
-      sem[clave] = { val: prev.val + val, inv: prev.inv + (Number.isFinite(inv) ? inv : 0) }
-    }
-    const out = {}
-    for (const [bq, sems] of Object.entries(porBloque)) {
-      const fechas = Object.keys(sems).sort()
-      let acum = 1
-      const serie = [{ fecha: fechas[0], pct: 0 }]
-      for (let i = 1; i < fechas.length; i++) {
-        const a = sems[fechas[i - 1]], b = sems[fechas[i]]
-        let num = 0, den = 0
-        for (const [clave, x] of Object.entries(b)) {
-          const y = a[clave]; if (!y) continue                       // alta de esta semana: aún sin rendimiento
-          const nuevo = x.inv && y.inv ? Math.max(0, x.inv - y.inv) : 0   // dinero añadido a la posición
-          num += x.val - nuevo; den += y.val
-        }
-        if (den > 0) acum *= num / den
-        serie.push({ fecha: fechas[i], pct: (acum - 1) * 100 })
-      }
-      out[bq] = serie
-    }
-    return out
+    return serieTWRBloques(raw.snapsBloque, raw.positions || [], raw.cierresBloque || [])
   }, [raw])
 
   const sorted = useMemo(() => {
@@ -276,7 +254,17 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
   }
 
   async function commitCierre() {
-    const vale = v => v != null && v !== '' && !Number.isNaN(Number(v))
+    // Los borradores guardan el texto tal cual (admite coma decimal); se parsea aquí con num()
+    const vale = v => v != null && v !== '' && num(v) != null
+    const malos = [
+      ...Object.entries(draft).flatMap(([id, d]) => ['invested', 'current_value'].filter(k => esNumeroInvalido(d[k]))
+        .map(k => `${raw.positions.find(p => String(p.id) === String(id))?.ticker || id} (${k === 'invested' ? 'invertido' : 'valor'})`)),
+      ...BROKERS.filter(b => esNumeroInvalido(liqDraft?.[b])).map(b => `liquidez ${b}`),
+      ...(esNumeroInvalido(btcDraft) ? ['₿ wallet'] : []),
+    ]
+    if (malos.length) { setMsg('Números no válidos, corrígelos antes de cerrar: ' + malos.join(', ')); return }
+    const liqNum = Object.fromEntries(Object.entries(liqDraft || {}).map(([k, v]) => [k, num(v) ?? 0]))
+    const btcNum = num(btcDraft) ?? 0
     const cambiosInv = Object.entries(draft).filter(([, d]) => vale(d.invested))
     if (!liqTocada && !window.confirm('¿Seguro? No se ha editado la liquidez.')) return
     if (cambiosInv.length && !window.confirm(
@@ -288,11 +276,17 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
       '\n\n¿Confirmas?')) return
 
     setBusy(true)
+    // 0. Con wallet BTC hace falta su precio: se comprueba ANTES de escribir nada (si no, el cierre se
+    // abortaría con altas y cierres ya aplicados y un reintento los duplicaría)
+    if (btcNum > 0) {
+      const qb = await fetchQuotes(['BTC-USD'])
+      if (!(qb['BTC-USD']?.price > 0)) { setBusy(false); setMsg('No hay precio de BTC: no se guarda el cierre. Reintenta en un momento.'); return }
+    }
     // 1. aplicar borradores
     for (const [id, d] of Object.entries(draft)) {
       const patch = {}
-      if (vale(d.invested)) patch.invested = Number(d.invested)
-      if (vale(d.current_value)) patch.current_value = Number(d.current_value)
+      if (vale(d.invested)) patch.invested = num(d.invested)
+      if (vale(d.current_value)) patch.current_value = num(d.current_value)
       if (d.ingest_badge) patch.ingest_badge = d.ingest_badge
       if (d.ingest_source) patch.ingest_source = d.ingest_source
       if (Object.keys(patch).length) await updatePosicion(Number(id), patch)
@@ -302,7 +296,7 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
     for (const n of pendAltas) {
       await altaPosicion({
         ticker: n.ticker, broker: n.broker,
-        entry_date: n.entry_date || new Date().toISOString().slice(0, 10),
+        entry_date: n.entry_date || fechaLocalISO(),
         invested: n.invested, current_value: n.current_value,
         apalancamiento: n.apalancamiento || 1,
         clase: n.clase, fuente: n.fuente || 'YO', bloque: n.bloque || bloquePorDefecto(n),
@@ -310,13 +304,21 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
       })
     }
     for (const c of pendCierres) await cerrarPosicion(c.pos, c.motivo)
-    await guardarLiquidez(liqDraft)
-    await guardarBtcWallet(Number(btcDraft) || 0)
+    await guardarLiquidez(liqNum)
+    await guardarBtcWallet(btcNum)
     // 2. recargar y commit
     const fresh = await fetchPosiciones()
-    const res = await cerrarSemana(fresh.positions, liqDraft, Number(btcDraft) || 0)
+    let res
+    try { res = await cerrarSemana(fresh.positions, liqNum, btcNum) }
+    catch (e) { res = { error: e } }
     setBusy(false)
-    if (res.error) { setMsg('Error al cerrar semana: ' + res.error.message); return }
+    if (res.error) {
+      // Borradores, altas y cierres YA están escritos: se vacían para que un reintento no los duplique
+      setDraft({}); setPendCierres([]); setPendAltas([]); setLiqDraft(liqNum); setBtcDraft(btcNum)
+      setMsg('Error al cerrar semana: ' + res.error.message + ' (los cambios de posiciones ya están guardados; pulsa CERRAR SEMANA de nuevo para sellar)')
+      recargar()
+      return
+    }
     setCierre(false); setDraft({}); setLiqDraft(null); setPendCierres([]); setPendAltas([])
     // Backup automático versionado, SOLO tras commit exitoso (regla aprobada con "OJO")
     let bk = ''
@@ -365,7 +367,7 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
       const ticker = (n.ticker || n.nombre || '?').toUpperCase()
       await altaPosicion({
         ticker, broker: n.broker,
-        entry_date: n.entry_date || new Date().toISOString().slice(0, 10),
+        entry_date: n.entry_date || fechaLocalISO(),
         invested: inv, current_value: n.valor ?? inv,
         apalancamiento: n.apalancamiento || 1,
         clase: n.clase || 'TACTICA', fuente: n.fuente || 'YO', bloque: bloquePorDefecto({ ticker }),
@@ -444,7 +446,7 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
 
   const totalPos = rows.reduce((a, p) => a + p.valor, 0)
   const liq = cierre ? liqDraft : raw.liquidez
-  const totalLiq = Object.values(liq || {}).reduce((a, v) => a + (Number(v) || 0), 0)
+  const totalLiq = Object.values(liq || {}).reduce((a, v) => a + (num(v) || 0), 0)
   const Titulo = embed ? 'h2' : 'h1'
 
   return (
@@ -528,15 +530,18 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
             <b>Liquidez</b>
             {BROKERS.map(b => (
               <label key={b}>{b}
-                <input data-col="liq" value={liqDraft[b] ?? ''} onKeyDown={keyNav}
-                  onChange={e => { setLiqDraft({ ...liqDraft, [b]: e.target.value === '' ? '' : Number(e.target.value) }); setLiqTocada(true) }} />
+                <input data-col="liq" value={liqDraft[b] ?? ''} onKeyDown={keyNav} inputMode="decimal"
+                  className={esNumeroInvalido(liqDraft[b]) ? 'falta' : ''}
+                  onChange={e => { setLiqDraft({ ...liqDraft, [b]: e.target.value }); setLiqTocada(true) }} />
               </label>
             ))}
             <label title="Monedero BTC personal (cantidad en BTC): se valora a precio de mercado en el cierre">₿ wallet
-              <input data-col="liq" value={btcDraft ?? ''} onKeyDown={keyNav}
-                onChange={e => setBtcDraft(e.target.value === '' ? '' : Number(e.target.value))} />
+              <input data-col="liq" value={btcDraft ?? ''} onKeyDown={keyNav} inputMode="decimal"
+                className={esNumeroInvalido(btcDraft) ? 'falta' : ''}
+                onChange={e => setBtcDraft(e.target.value)} />
             </label>
             <span className="liq-total">Total cuenta: ${fmt$(totalPos + totalLiq)} + ₿</span>
+            {(BROKERS.some(b => esNumeroInvalido(liqDraft[b])) || esNumeroInvalido(btcDraft)) && <span className="down">Número no válido: usa 1234,56 o 1234.56</span>}
           </div>
         )}
 
@@ -588,12 +593,20 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
 function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorrar, onWallet, onAsa, arrastrando = false, movil = false }) {
   const { b, peso, rows, wallet, serie } = g
   const esTesis = b.id === 'TESIS'
+  // TESIS: el Σ es de la Tesis nativa; las Puente (abiertas antes del 30/09/2026) van en su propio subtotal
+  const rowsPuente = esTesis ? rows.filter(esPuente) : []
+  const rowsSigma = esTesis ? rows.filter(p => !esPuente(p)) : rows
   const wInv = wallet?.invertido && wallet?.usd ? wallet.invertido : 0   // wallet con coste: entra en el G/P
-  const inv = rows.reduce((a, p) => a + Number(p.invested || 0), 0) + wInv
-  const val = rows.reduce((a, p) => a + p.valor, 0) + (wallet?.usd || 0)
+  const inv = rowsSigma.reduce((a, p) => a + Number(p.invested || 0), 0) + wInv
+  const val = rowsSigma.reduce((a, p) => a + p.valor, 0) + (wallet?.usd || 0)
   const gp = val - (wInv ? 0 : (wallet?.usd || 0)) - inv
   const gpPct = inv ? gp / inv * 100 : null
-  const pesoSum = rows.reduce((a, p) => a + (p.peso || 0), 0) + (wallet?.peso || 0)
+  const pesoSum = rowsSigma.reduce((a, p) => a + (p.peso || 0), 0) + (wallet?.peso || 0)
+  const pu = rowsPuente.length ? (() => {
+    const i = rowsPuente.reduce((a, p) => a + Number(p.invested || 0), 0)
+    const v = rowsPuente.reduce((a, p) => a + p.valor, 0)
+    return { n: rowsPuente.length, inv: i, val: v, gp: v - i, gpPct: i ? (v - i) / i * 100 : null, peso: rowsPuente.reduce((a, p) => a + (p.peso || 0), 0) }
+  })() : null
   const fFecha = d => d ? d.slice(2).split('-').reverse().join('/') : '—'
 
   // Móvil (fuera del modo cierre): lista de tarjetas de dos líneas, sin tabla
@@ -657,13 +670,23 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
           )}
           {serie?.length > 1 && <li className="fila-serie"><SerieBloque serie={serie} /></li>}
           <li className="subtotal">
-            <div className="pl-izq">Σ {b.corto} · inv {fmt$(inv)}</div>
+            <div className="pl-izq">Σ {b.corto}{pu ? ' nativa' : ''} · inv {fmt$(inv)}</div>
             <div className="pl-der">
               <div className={'pl-gpp ' + pctClass(gpPct)}>{fmtPct(gpPct)}</div>
               <div className="pl-valor">{fmt$(val)} <i className={pctClass(gp)}>{fmt$(gp)}</i></div>
               <div className="pl-peso">{pesoSum.toFixed(1)}% cartera</div>
             </div>
           </li>
+          {pu && (
+            <li className="subtotal" title="Tesis PUENTE: abiertas antes de adoptar la regla (30/09/2026). Fuera del Σ de la Tesis nativa.">
+              <div className="pl-izq">Σ Puente ({pu.n}) · inv {fmt$(pu.inv)}</div>
+              <div className="pl-der">
+                <div className={'pl-gpp ' + pctClass(pu.gpPct)}>{fmtPct(pu.gpPct)}</div>
+                <div className="pl-valor">{fmt$(pu.val)} <i className={pctClass(pu.gp)}>{fmt$(pu.gp)}</i></div>
+                <div className="pl-peso">{pu.peso.toFixed(1)}% cartera</div>
+              </div>
+            </li>
+          )}
         </ul>
       ) : (
       <table className={'pos-tabla num' + (cierre ? ' modo-cierre' : '') + (esTesis ? ' tesis' : '')}>
@@ -681,7 +704,7 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
                 <th title="Precio de entrada (por acción). Se fija al alta o en el panel de detalle.">P.ENT</th>
                 <th title="Stop loss del ticket. Gris = calculado −11 % sobre la entrada, aún no puesto.">SL</th>
                 <th title="Take profit del ticket. Gris = calculado +23,5 % sobre la entrada, aún no puesto.">TP</th>
-                <th className="tl" title="Recorrido del precio entre el SL (−11) y el TP (+23,5). El texto es lo que falta hasta el TP, en puntos.">→ TP</th>
+                <th className="tl" title="Recorrido del precio entre el SL y el TP del ticket (−11 / +23,5 si aún no están puestos). El texto es lo que falta hasta el TP, en puntos.">→ TP</th>
               </>
             ) : (
               <>
@@ -721,12 +744,14 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
               <td className="tl broker">{p.broker}</td>
               <td>{p.entry_date ? p.entry_date.slice(2).split('-').reverse().join('/') : '—'}</td>
               <td>{cierre
-                ? <input data-col="inv" value={draft[p.id]?.invested ?? p.invested} onKeyDown={keyNav}
-                    onChange={e => setDraft(d => ({ ...d, [p.id]: { ...d[p.id], invested: e.target.value === '' ? '' : Number(e.target.value) } }))} />
+                ? <input data-col="inv" value={draft[p.id]?.invested ?? p.invested} onKeyDown={keyNav} inputMode="decimal"
+                    className={esNumeroInvalido(draft[p.id]?.invested) ? 'falta' : ''} title={esNumeroInvalido(draft[p.id]?.invested) ? 'Número no válido' : ''}
+                    onChange={e => setDraft(d => ({ ...d, [p.id]: { ...d[p.id], invested: e.target.value } }))} />
                 : fmt$(p.invested)}</td>
               <td className="col-clave col-ini">{cierre
-                ? <input data-col="val" value={draft[p.id]?.current_value ?? p.valor} onKeyDown={keyNav}
-                    onChange={e => setDraft(d => ({ ...d, [p.id]: { ...d[p.id], current_value: e.target.value === '' ? '' : Number(e.target.value) } }))} />
+                ? <input data-col="val" value={draft[p.id]?.current_value ?? p.valor} onKeyDown={keyNav} inputMode="decimal"
+                    className={esNumeroInvalido(draft[p.id]?.current_value) ? 'falta' : ''} title={esNumeroInvalido(draft[p.id]?.current_value) ? 'Número no válido' : ''}
+                    onChange={e => setDraft(d => ({ ...d, [p.id]: { ...d[p.id], current_value: e.target.value } }))} />
                 : fmt$(p.valor)}</td>
               <td className={'col-clave col-fin ' + pctClass(p.gp)}>{fmt$(p.gp)}</td>
               {esTesis ? (
@@ -777,7 +802,7 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
         </tbody>
         <tfoot>
           <tr className="subtotal">
-            <td className="tl">Σ {b.corto}</td>
+            <td className="tl" title={pu ? 'Tesis nativa: sin las posiciones Puente' : ''}>Σ {b.corto}{pu ? ' nativa' : ''}</td>
             <td className={'col-gpp ' + pctClass(gpPct)}>{fmtPct(gpPct)}</td>
             <td colSpan={2}></td>
             <td>{fmt$(inv)}</td>
@@ -787,6 +812,19 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
             <td>{pesoSum.toFixed(1)}%</td>
             {cierre && <td></td>}
           </tr>
+          {pu && (
+            <tr className="subtotal" title="Tesis PUENTE: abiertas antes de adoptar la regla (30/09/2026). Fuera del Σ de la Tesis nativa.">
+              <td className="tl">Σ Puente <span className="calc">({pu.n})</span></td>
+              <td className={'col-gpp ' + pctClass(pu.gpPct)}>{fmtPct(pu.gpPct)}</td>
+              <td colSpan={2}></td>
+              <td>{fmt$(pu.inv)}</td>
+              <td className="col-clave col-ini">{fmt$(pu.val)}</td>
+              <td className={'col-clave col-fin ' + pctClass(pu.gp)}>{fmt$(pu.gp)}</td>
+              <td colSpan={5}></td>
+              <td>{pu.peso.toFixed(1)}%</td>
+              {cierre && <td></td>}
+            </tr>
+          )}
         </tfoot>
       </table>
       )}
@@ -808,10 +846,10 @@ function sinSL(p) {
 // Vigía: texto con los niveles vigilados y la distancia del precio vivo a cada uno
 function tituloVigia(p) {
   const px = p.precioVivo, sl = p.sl_price != null ? Number(p.sl_price) : null, tp = p.tp_price != null ? Number(p.tp_price) : null
-  const d = (a, b) => (a / b - 1) * 100
+  // p.precioVivo ya viene en la unidad de los niveles (peniques → £). Distancias en % del precio.
   const partes = []
-  if (sl) partes.push(`suelo/SL ${fmtPx(sl)}${px ? ` (a ${d(px, sl).toFixed(1)} %)` : ''}`)
-  if (tp) partes.push(`TP ${fmtPx(tp)}${px ? ` (a ${d(tp, px).toFixed(1)} %)` : ''}`)
+  if (sl) partes.push(`suelo/SL ${fmtPx(sl)}${px ? ` (a ${distanciaSLpct(px, sl).toFixed(1)} %)` : ''}`)
+  if (tp) partes.push(`TP ${fmtPx(tp)}${px ? ` (a ${((tp / px - 1) * 100).toFixed(1)} %)` : ''}`)
   return 'Vigía BTP: ' + (partes.join(' · ') || 'sin niveles: pon SL y/o TP en Precios del ticket') + (px ? ` · precio ${fmtPx(px)}` : '')
 }
 
@@ -852,14 +890,17 @@ function SerieBloque({ serie }) {
   )
 }
 
-// Barra del recorrido −11 → +23,5 con la marca de entrada y el texto "faltan X pp al TP"
+// Barra del recorrido SL → TP (los del ticket en % sobre la entrada; −11/+23,5 si faltan)
+// con la marca de entrada y el texto "faltan X pp al TP"
 function BarraTesis({ p, etiqueta = false }) {
   if (p.ret == null) return <span className="calc">—</span>
-  const rango = TESIS_TP - TESIS_SL
-  const pos = Math.max(0, Math.min(1, (p.ret - TESIS_SL) / rango))
-  const cero = (0 - TESIS_SL) / rango
+  const SL = p.slPct ?? TESIS_SL, TP = p.tpPct ?? TESIS_TP
+  const rango = TP - SL
+  if (!(rango > 0)) return <span className="calc">—</span>
+  const pos = Math.max(0, Math.min(1, (p.ret - SL) / rango))
+  const cero = Math.max(0, Math.min(1, (0 - SL) / rango))
   const izq = Math.min(pos, cero), ancho = Math.abs(pos - cero)
-  const txt = p.ret >= TESIS_TP ? 'TP alcanzado' : p.ret <= TESIS_SL ? 'en SL' : `${p.aTP.toLocaleString('es-ES', { maximumFractionDigits: 1 })} pp${etiqueta ? ' al TP' : ''}`
+  const txt = p.ret >= TP ? 'TP alcanzado' : p.ret <= SL ? 'en SL' : `${p.aTP.toLocaleString('es-ES', { maximumFractionDigits: 1 })} pp${etiqueta ? ' al TP' : ''}`
   return (
     <span className="barra-tesis" title={`Retorno del precio ${fmtPct(p.ret)} · faltan ${p.aTP?.toFixed(1)} pp al TP · ${p.aSL?.toFixed(1)} pp sobre el SL`}>
       <i className="bt-pista">
@@ -1125,14 +1166,13 @@ function PanelWallet({ wallet, onClose, onChange }) {
 // `inicial`: prellenado (desde el Buscador: ticker, precio de entrada, SL/TP de la Tesis).
 export function AltaDialog({ inicial = {}, onClose, onDone }) {
   const [f, setF] = useState({
-    ticker: '', broker: 'xtb', entry_date: new Date().toISOString().slice(0, 10),
+    ticker: '', broker: 'xtb', entry_date: fechaLocalISO(),
     invested: '', current_value: '', clase: 'TACTICA', estado: 'OK', fuente: 'YO', estrBtc: 'TACTICA',
     apalancamiento: 1, entry_price: '', sl_price: '', tp_price: '', bloque: 'TESIS',
     ...Object.fromEntries(Object.entries(inicial || {}).filter(([, v]) => v != null)),
   })
   const [err, setErr] = useState(null)
   const set = (k, v) => setF(x => ({ ...x, [k]: v }))
-  const num = v => v === '' || v == null ? null : Number(String(v).replace(',', '.'))
 
   // Tesis: al fijar la entrada, SL y TP se rellenan solos si están vacíos
   function entradaBlur() {
@@ -1143,13 +1183,16 @@ export function AltaDialog({ inicial = {}, onClose, onDone }) {
 
   async function guardar(e) {
     e.preventDefault()
-    const inv = Number(f.invested)
+    const inv = num(f.invested)
     if (!f.ticker.trim() || !inv) { setErr('Ticker e invertido son obligatorios.'); return }
+    const malos = [['invested', 'Invertido'], ['current_value', 'Valor'], ['entry_price', 'P. entrada'], ['sl_price', 'SL'], ['tp_price', 'TP'], ['apalancamiento', 'Apal.']]
+      .filter(([k]) => esNumeroInvalido(f[k])).map(([, l]) => l)
+    if (malos.length) { setErr('Número no válido en: ' + malos.join(', ') + ' (usa 12,34 o 12.34)'); return }
     const { error } = await altaPosicion({
       ticker: f.ticker.trim().toUpperCase(), broker: f.broker, entry_date: f.entry_date,
-      invested: inv, current_value: Number(f.current_value) || inv,
+      invested: inv, current_value: num(f.current_value) || inv,
       clase: f.bloque === 'BTC' ? f.estrBtc : f.bloque === 'TESIS' ? 'TACTICA' : f.bloque === 'SATELITE' ? 'DISRUPTIVA' : 'NUCLEO', estado: 'OK', fuente: 'YO', bloque: f.bloque,
-      apalancamiento: Number(f.apalancamiento) || 1,
+      apalancamiento: num(f.apalancamiento) || 1,
       entry_price: num(f.entry_price), sl_price: num(f.sl_price), tp_price: num(f.tp_price),
     })
     if (error) setErr(error.message); else onDone()

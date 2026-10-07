@@ -62,10 +62,10 @@ export default function Bloques({ positions, liquidez, objetivos, wallet, onBloq
             {w.todas.map(f => (
               <tr key={f.id} className={'sem-' + f.semaforo + (onBloque && f.id !== 'CAJA' ? ' clic' : '')}
                   title={f.ayuda} onClick={() => onBloque && f.id !== 'CAJA' && onBloque(f.id)}>
-                <td className="tl"><i className="bq-dot" style={{ background: f.color }} /><span className="bq-largo">{f.label}</span><span className="bq-corto">{f.corto}</span>{f.wallet ? <span className="bq-wallet" title="Incluye la wallet BTC personal, valorada a precio de mercado (sin coste conocido: no entra en el G/P)"> · incl. ₿ wallet ${fmt$(f.wallet)}</span> : null}</td>
+                <td className="tl"><i className="bq-dot" style={{ background: f.color }} /><span className="bq-largo">{f.label}</span><span className="bq-corto">{f.corto}</span>{f.wallet ? <span className="bq-wallet" title={f.walletConCoste ? 'Incluye la wallet BTC personal, valorada a precio de mercado; su coste registrado entra en el G/P' : 'Incluye la wallet BTC personal, valorada a precio de mercado (sin coste conocido: no entra en el G/P)'}> · incl. ₿ wallet ${fmt$(f.wallet)}</span> : null}</td>
                 <td className="c-n">{f.id === 'CAJA' ? '' : f.n}</td>
                 <td>${fmt$(f.valor)}</td>
-                <td className={'c-gp ' + pctClass(f.gp)} title={f.wallet ? 'G/P de las posiciones de bróker; la wallet no tiene coste registrado' : ''}>{f.id === 'CAJA' ? '' : fmtPct(f.gpPct)}</td>
+                <td className={'c-gp ' + pctClass(f.gp)} title={f.wallet && !f.walletConCoste ? 'G/P de las posiciones de bróker; la wallet no tiene coste registrado' : f.wallet ? 'G/P de las posiciones de bróker + wallet BTC (con su coste registrado)' : ''}>{f.id === 'CAJA' ? '' : fmtPct(f.gpPct)}</td>
                 <td className="real">{f.real == null ? '—' : f.real.toFixed(1) + '%'}</td>
                 <td className="obj">{f.objetivo}%</td>
                 <td className={'desvio ' + f.semaforo}>{fmtPP(f.desvio)}</td>

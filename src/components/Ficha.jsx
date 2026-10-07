@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabase'
 import { fetchHistory } from '../lib/quotes'
 import { useArrastreCierre } from '../lib/movil'
 import { tesisSL, tesisTP } from '../lib/bloques'
+import { esPeniques } from '../lib/riesgo'
 import { SECTOR_ES, fmtCap, capBucket, diasHasta, nivelVix, nivelCorr, fmtCorr } from '../lib/universo'
 
 const VISTAS = [['3m', '3M'], ['6m', '6M'], ['1y', '1A'], ['2y', '2A'], ['5y', '5A']]
@@ -177,7 +178,10 @@ export default function Ficha({ valor: v, onClose, lista = null, indice = -1, on
     setMsg(error ? 'No se pudo guardar en la sombra: ' + error.message : `${v.symbol} a la cartera sombra a ${fmtPx(precio)}`)
   }
   function entrada() {
-    const alta = { ticker: v.symbol, nombre: v.name, entry_price: precio, sl_price: sl, tp_price: tp, bloque: 'TESIS', clase: 'TACTICA', fuente: 'YO' }
+    // Convención BTP: los niveles de Londres se guardan en LIBRAS; Yahoo cotiza en peniques (GBp/GBX)
+    const k = esPeniques(v.currency) ? 0.01 : 1
+    const r4 = x => x == null ? null : Math.round(x * k * 10000) / 10000
+    const alta = { ticker: v.symbol, nombre: v.name, entry_price: r4(precio), sl_price: r4(sl), tp_price: r4(tp), bloque: 'TESIS', clase: 'TACTICA', fuente: 'YO' }
     nav('/?alta=' + encodeURIComponent(JSON.stringify(alta)))
   }
 

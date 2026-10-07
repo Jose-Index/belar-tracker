@@ -5,14 +5,14 @@
 // además la cierra (borra) usando esos datos reales. NUNCA auto-commit.
 import { useState } from 'react'
 import { extraerCierres } from '../lib/ia'
-import { registrarCierre } from '../lib/posiciones-db'
+import { registrarCierre, tipoCierre, fechaLocalISO } from '../lib/posiciones-db'
 import { resolverSimbolo, variantes } from '../lib/quotes'
 import './ingesta.css'
 
 const fmt$ = v => v == null ? '—' : Number(v).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const MOTIVOS = ['xSL', 'manual', 'escalonada']
 const BROKERS_UI = [{ id: 'etoro', label: 'eToro' }, { id: 'xtb', label: 'XTB' }, { id: 'ibkr', label: 'IBKR' }]
-const HOY = () => new Date().toISOString().slice(0, 10)
+const HOY = () => fechaLocalISO()
 
 export default function IngestaCierres({ positions = [], simbolos = [], onDone }) {
   const [estado, setEstado] = useState('idle')  // idle | procesando | revision | error
@@ -71,8 +71,8 @@ export default function IngestaCierres({ positions = [], simbolos = [], onDone }
     }
     if (!window.confirm(
       `Se van a REGISTRAR ${sel.length} cierre(s) en el histórico` +
-      (sel.some(f => f.pos) ? ` y se cerrarán ${sel.filter(f => f.pos).length} posición(es) abiertas en BTP` : '') +
-      ':\n\n' + sel.map(f => `· ${f.ticker} (${f.broker}) — ${f.fecha_cierre} — motivo ${f.motivo}${f.pos ? ' — cierra abierta' : ''}`).join('\n') +
+      (sel.some(f => f.pos) ? ` y se cerrarán (o reducirán, si es parcial) ${sel.filter(f => f.pos).length} posición(es) abiertas en BTP` : '') +
+      ':\n\n' + sel.map(f => `· ${f.ticker} (${f.broker}) — ${f.fecha_cierre} — motivo ${f.motivo}${f.pos ? (parcial(f) ? ' — CIERRE PARCIAL: la abierta se reduce' : ' — cierra abierta') : ''}`).join('\n') +
       '\n\n¿Confirmas?')) return
     setBusy(true); setErr(null)
     let n = 0
@@ -83,7 +83,7 @@ export default function IngestaCierres({ positions = [], simbolos = [], onDone }
         invested: f.invertido, closed_value: f.valorCierre,
         motivo: f.motivo, apalancamiento: f.apalancamiento,
         clase: f.pos?.clase, fuente: f.pos?.fuente, bloque: f.pos?.bloque,
-        posId: f.pos?.id,
+        posId: f.pos?.id, pos: f.pos || null,
       })
       if (r.error) { setErr(`${f.ticker}: ${r.error.message}`); break }
       n++
@@ -92,6 +92,8 @@ export default function IngestaCierres({ positions = [], simbolos = [], onDone }
     if (n) { setEstado('idle'); setFilas([]); onDone?.(n) }
   }
 
+  // Cierre parcial: el invertido cerrado es menor que el de la abierta en más de un 0,5 %
+  const parcial = f => !!f.pos && tipoCierre(f.invertido, f.pos.invested).parcial
   const setCampo = (i, campo, val) => setFilas(fs => fs.map((x, j) => j === i ? { ...x, [campo]: val } : x))
 
   if (estado === 'idle' || estado === 'error') {
@@ -149,7 +151,9 @@ export default function IngestaCierres({ positions = [], simbolos = [], onDone }
             onChange={e => setCampo(i, 'motivo', e.target.value)}>
             {MOTIVOS.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
-          {f.pos
+          {f.pos && parcial(f)
+            ? <span className="warn" title={`Cierre parcial: invertido cerrado ${fmt$(f.invertido)} de ${fmt$(f.pos.invested)}. La posición abierta NO se borra: queda con invertido ${fmt$(Number(f.pos.invested) - Number(f.invertido))} y el valor actual reducido en la misma proporción.`}>cierre parcial</span>
+            : f.pos
             ? <span className="warn" title="Este cierre casa con una posición aún abierta en BTP: al aplicar, se cierra con estos datos reales">cierra abierta</span>
             : <span title="No hay posición abierta con este ticker en BTP: solo se registra en el histórico">solo histórico</span>}
           {f.dudosa && <span className="down" title="invertido + G/P no cuadra con la salida: revisa los importes en la captura">⚠ revisar</span>}

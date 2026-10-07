@@ -1,5 +1,7 @@
 import { supabase } from './supabase'
 import { walletDe } from './bloques'
+import { fechaLocalISO } from './fechas'
+export { fechaLocalISO }
 
 // ─── Operaciones de datos de Posiciones (RLS: solo José) ─────────────
 
@@ -15,7 +17,7 @@ export async function fetchPosiciones() {
     positions: pos.data || [],
     snapshots: snaps.data || [],
     liquidez: st.liquidez || { etoro: 0, xtb: 0, ibkr: 0 },
-    btcQty: walletDe(st.btc_wallet).qty || 0.014706,  // monedero BTC personal
+    btcQty: walletDe(st.btc_wallet).qty || 0,          // monedero BTC personal (sin wallet: 0)
     btcWallet: walletDe(st.btc_wallet),               // { qty, invertido, aportes }
     lastClose: st.last_week_close || null,
     bloquesOrden: Array.isArray(st.bloques_orden?.orden) ? st.bloques_orden.orden : null,   // orden de las tablas por bloque
@@ -66,11 +68,13 @@ export async function altaPosicion(p) {
 }
 
 // Borrar = cerrar: registro en histórico ANTES de borrar. Nunca delete seco.
-export async function cerrarPosicion(p, motivo) {
-  const inv = p.invested, cv = p.current_value
+// opts (opcional): { closed_date, closed_value } — por defecto hoy (hora de Madrid) y el valor actual.
+export async function cerrarPosicion(p, motivo, opts = {}) {
+  const inv = p.invested
+  const cv = opts.closed_value != null && Number.isFinite(Number(opts.closed_value)) ? Number(opts.closed_value) : p.current_value
   const { error } = await supabase.from('position_history').insert({
     ticker: p.ticker, broker: p.broker, entry_date: p.entry_date,
-    closed_date: new Date().toISOString().slice(0, 10),
+    closed_date: opts.closed_date || fechaLocalISO(),
     invested: inv, closed_value: cv,
     pl_pct: inv && cv != null ? Math.round((cv - inv) / inv * 10000) / 100 : null,
     close_reason: motivo, clase: p.clase, fuente: p.fuente,
@@ -83,14 +87,23 @@ export async function cerrarPosicion(p, motivo) {
   return supabase.from('positions').delete().eq('id', p.id)
 }
 
+// ¿Cierre parcial? El invertido cerrado es menor que el de la posición abierta en más de un 0,5 %.
+// Devuelve { parcial, fraccionRestante } (fracción del invertido que sigue abierta).
+export function tipoCierre(invCerrado, invAbierto, tolerancia = 0.005) {
+  const c = Number(invCerrado), a = Number(invAbierto)
+  if (!(c > 0) || !(a > 0) || c >= a * (1 - tolerancia)) return { parcial: false, fraccionRestante: 0 }
+  return { parcial: true, fraccionRestante: (a - c) / a }
+}
+
 // Registro de cierre por captura (13/08/2026): datos REALES de salida (fecha e
 // importe del broker), no el valor de la última semana. Si posId viene, además
-// borra la posición abierta correspondiente.
+// borra la posición abierta correspondiente; si `pos` viene y el cierre es PARCIAL
+// (invertido cerrado < invertido abierto − 0,5 %), no se borra: se reduce (07/10/2026).
 export async function registrarCierre(c) {
   const inv = c.invested, cv = c.closed_value
   const { error } = await supabase.from('position_history').insert({
     ticker: c.ticker, broker: c.broker, entry_date: c.entry_date || null,
-    closed_date: c.closed_date || new Date().toISOString().slice(0, 10),
+    closed_date: c.closed_date || fechaLocalISO(),
     invested: inv, closed_value: cv,
     pl_pct: inv && cv != null ? Math.round((cv - inv) / inv * 10000) / 100 : null,
     close_reason: c.motivo || 'manual', clase: c.clase || null, fuente: c.fuente || null,
@@ -99,7 +112,16 @@ export async function registrarCierre(c) {
   })
   if (error) return { error }
   await supabase.from('repositorio').insert({ ticker: c.ticker, estado: 'CERRADA', nota: `${c.motivo || 'manual'} · captura` })
-  if (c.posId) return supabase.from('positions').delete().eq('id', c.posId)
+  if (c.posId) {
+    const t = c.pos ? tipoCierre(inv, c.pos.invested) : { parcial: false }
+    if (t.parcial) {
+      const restInv = Math.round((Number(c.pos.invested) - Number(inv)) * 100) / 100
+      const cvAb = Number(c.pos.current_value ?? c.pos.invested) || 0
+      const restCv = Math.round(cvAb * t.fraccionRestante * 100) / 100
+      return updatePosicion(c.posId, { invested: restInv, current_value: restCv })
+    }
+    return supabase.from('positions').delete().eq('id', c.posId)
+  }
   return {}
 }
 
@@ -121,6 +143,14 @@ export async function fetchSnapsBloques() {
   return filas
 }
 
+// Histórico de cierres para la TWR por bloque (cierres de la semana con su valor real y su bloque)
+export async function fetchCierresBloques() {
+  const { data, error } = await supabase.from('position_history')
+    .select('ticker,broker,entry_date,closed_date,invested,closed_value,bloque').order('closed_date').limit(5000)
+  if (error) throw error
+  return data || []
+}
+
 export function guardarLiquidez(liq) {
   return supabase.from('app_state').upsert({ key: 'liquidez', value: liq, updated_at: new Date().toISOString() })
 }
@@ -128,7 +158,7 @@ export function guardarLiquidez(liq) {
 // CERRAR SEMANA: snapshot por posición + snapshot cartera (con desglose por broker
 // y monedero BTC personal, como la serie histórica) + sello. El commit del sábado.
 export async function cerrarSemana(positions, liquidez, btcQty = 0) {
-  const week_end = new Date().toISOString().slice(0, 10)
+  const week_end = fechaLocalISO()
   const totalLiq = Object.values(liquidez).reduce((a, v) => a + (Number(v) || 0), 0)
 
   // Por broker: posiciones + su liquidez
@@ -146,7 +176,9 @@ export async function cerrarSemana(positions, liquidez, btcQty = 0) {
     const q = Object.fromEntries((r.quotes || []).map(x => [x.symbol, x.price]))
     if (btcQty > 0 && q['BTC-USD']) btcUsd = Math.round(btcQty * q['BTC-USD'] * 100) / 100
     if (q['EURUSD=X']) eurusd = Math.round(q['EURUSD=X'] * 10000) / 10000
-  } catch { /* sin precio: btcUsd 0 y se avisa abajo; eurusd null */ }
+  } catch { /* sin precio: se aborta abajo si hay wallet; eurusd null */ }
+  // Con wallet y sin precio de BTC NO se guarda el cierre (antes se sellaba btc_usd = 0 y el total caía)
+  if (btcQty > 0 && !(btcUsd > 0)) throw new Error('No hay precio de BTC: no se guarda el cierre. Reintenta en un momento.')
 
   const totalPos = positions.reduce((a, p) => a + Number(p.current_value ?? p.invested), 0)
   const total = Math.round((totalPos + totalLiq + btcUsd) * 100) / 100
@@ -156,7 +188,6 @@ export async function cerrarSemana(positions, liquidez, btcQty = 0) {
     week_end, total_value: total, liquidez, desglose, eurusd,
   }, { onConflict: 'week_end' })
   if (e1) return { error: e1 }
-  if (btcQty > 0 && btcUsd === 0) console.warn('BTC wallet sin precio: total sin monedero')
 
   // Una fila por ticker+broker: si hay dos posiciones del mismo valor en el mismo
   // bróker (BTC en XTB, 04/10/2026), se suman. Sin esto Postgres rechaza el upsert

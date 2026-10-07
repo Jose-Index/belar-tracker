@@ -1,6 +1,8 @@
 // BTP · POST /api/correlacion { symbols: [...] } (≤150) — correlación con la cartera (02/10/2026).
-// Rendimientos SEMANALES de 1 año (robustos a husos horarios distintos entre bolsas) de cada símbolo
-// frente a cada posición abierta; resultado = media ponderada por importe invertido.
+// Rendimientos SEMANALES de 1 año (robustos a husos horarios distintos entre bolsas). Desde el 07/10/2026
+// es una correlación REAL con la cartera: se construye la serie semanal de la cartera
+// r_cart,t = Σ w_h · r_h,t (pesos por valor actual × apalancamiento, normalizados cada semana entre las
+// posiciones con dato) y se calcula Pearson(r_s, r_cart) en las semanas presentes en ambas.
 // Se excluye la propia posición si el símbolo ya está en cartera. Posiciones sin cotización (copy) fuera.
 // Auth: sesión Supabase del usuario, BELAR_TOKEN o CRON_SECRET (lee positions).
 import { autorizarUsuario, rest, sinCache, ahora } from './_belar.js'
@@ -34,6 +36,25 @@ function corr(a, b) {
   return sxx && syy ? sxy / Math.sqrt(sxx * syy) : null
 }
 
+// Serie semanal de la cartera: { semana: Σ w_h·r_h ÷ Σ w_h } con las posiciones que tienen dato esa semana.
+// Una semana solo cuenta si cubre al menos `cobertura` del peso total (evita semanas con 1-2 valores).
+export function serieCartera(W, pesos, excluir = null, cobertura = 0.5) {
+  const hs = Object.keys(pesos).filter(h => h !== excluir && pesos[h] > 0 && W[h])
+  const total = hs.reduce((a, h) => a + pesos[h], 0)
+  if (!total) return {}
+  const acc = {}
+  for (const h of hs) {
+    for (const [t, r] of Object.entries(W[h])) {
+      if (!Number.isFinite(r)) continue
+      const a = (acc[t] ||= { num: 0, w: 0 })
+      a.num += pesos[h] * r; a.w += pesos[h]
+    }
+  }
+  const out = {}
+  for (const [t, a] of Object.entries(acc)) if (a.w >= total * cobertura) out[t] = a.num / a.w
+  return out
+}
+
 export default async function handler(req, res) {
   sinCache(res)
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST' }); return }
@@ -44,7 +65,7 @@ export default async function handler(req, res) {
   if (!symbols.length) { res.status(400).json({ error: 'symbols vacío' }); return }
   try {
     const [pos, sims] = await Promise.all([
-      rest('positions?select=ticker,invested,current_value'),
+      rest('positions?select=ticker,invested,current_value,apalancamiento'),
       rest('symbols?select=ticker,yahoo_symbol'),
     ])
     const ys = t => { const s = (sims || []).find(x => x.ticker === t); return s ? s.yahoo_symbol : t }
@@ -52,22 +73,18 @@ export default async function handler(req, res) {
     for (const p of pos || []) {
       const y = ys(p.ticker)
       if (!y) continue
-      pesos[y] = (pesos[y] || 0) + Number(p.current_value || p.invested || 0)
+      pesos[y] = (pesos[y] || 0) + Number(p.current_value || p.invested || 0) * (Number(p.apalancamiento) || 1)   // exposición
     }
     const cartera = Object.keys(pesos).filter(y => pesos[y] > 0)
     const series = await spark([...new Set([...cartera, ...symbols])], '1y', '1d')
     const W = Object.fromEntries(Object.entries(series).map(([k, v]) => [k, semanal(v)]))
     const out = {}
+    const base = serieCartera(W, pesos)                       // cartera completa (símbolos que no están en ella)
     for (const s of symbols) {
       if (!W[s]) { out[s] = null; continue }
-      let num = 0, den = 0
-      for (const h of cartera) {
-        if (h === s || !W[h]) continue
-        const c = corr(W[s], W[h])
-        if (c == null) continue
-        num += c * pesos[h]; den += pesos[h]
-      }
-      out[s] = den ? Math.round(num / den * 100) / 100 : null
+      const rc = pesos[s] > 0 ? serieCartera(W, pesos, s) : base   // si ya está en cartera, se excluye
+      const c = corr(W[s], rc)
+      out[s] = c == null ? null : Math.round(c * 100) / 100
     }
     res.status(200).json({ corr: out, cartera: cartera.length, served_at: ahora() })
   } catch (e) {

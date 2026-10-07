@@ -37,10 +37,13 @@ async function cotizacion(symbol) {
   const cripto = meta.instrumentType === 'CRYPTOCURRENCY' || /-USD$/.test(symbol)
   const abierto = cripto || (p && now >= p.start && now < p.end)
   const k = meta.currency === 'GBp' || meta.currency === 'GBX' ? 0.01 : 1   // peniques → £
+  // Mínimo/máximo del día solo si son coherentes con el precio (Yahoo a veces da 0 o valores de otra sesión)
+  const precio = meta.regularMarketPrice * k
+  const dayLow = Number(meta.regularMarketDayLow) * k, dayHigh = Number(meta.regularMarketDayHigh) * k
   return {
-    precio: meta.regularMarketPrice * k,
-    minimo: (meta.regularMarketDayLow ?? meta.regularMarketPrice) * k,
-    maximo: (meta.regularMarketDayHigh ?? meta.regularMarketPrice) * k,
+    precio,
+    minimo: dayLow > 0 && dayLow <= precio ? dayLow : precio,
+    maximo: dayHigh > 0 && dayHigh >= precio ? dayHigh : precio,
     moneda: k === 1 ? meta.currency : 'GBP', abierto, at: (meta.regularMarketTime || now) * 1000,
   }
 }
@@ -55,6 +58,8 @@ async function push(topic, { titulo, mensaje, prioridad = 4, tags = [] }) {
 }
 
 const fx = n => Number(n).toLocaleString('es-ES', { maximumFractionDigits: 4 })
+// Distancia al SL en % del precio: (px − sl) / px · 100 (misma fórmula que la tabla de Posiciones)
+const aSL = (px, sl) => (px - sl) / px * 100
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store, max-age=0')
@@ -88,14 +93,14 @@ export default async function handler(req, res) {
     const sl = p.sl_price != null ? Number(p.sl_price) : null
     const tp = p.tp_price != null ? Number(p.tp_price) : null
     vistas.push({ id: p.id, ticker: p.ticker, simbolo: sym, precio: q.precio, abierto: q.abierto, sl, tp,
-      a_sl: sl ? (q.precio / sl - 1) * 100 : null, a_tp: tp ? (tp / q.precio - 1) * 100 : null })
+      a_sl: sl ? aSL(q.precio, sl) : null, a_tp: tp ? (tp / q.precio - 1) * 100 : null })
     if (!q.abierto) continue                         // fuera de sesión no se dispara nada (evita precios de pre/post)
     const checks = []
     if (sl) {
       if (q.minimo <= sl) checks.push({ tipo: 'sl', nivel: sl, sev: 'alta', prioridad: 5, tags: ['rotating_light'],
         titulo: `${p.ticker}: tocó el suelo/SL ${fx(sl)}`, txt: `Precio ${fx(q.precio)} ${q.moneda} (mínimo del día ${fx(q.minimo)}). ${p.broker}: cierre manual según su invalidación.` })
-      else if ((q.precio / sl - 1) * 100 <= CERCA) checks.push({ tipo: 'cerca-sl', nivel: sl, sev: 'media', prioridad: 4, tags: ['warning'],
-        titulo: `${p.ticker}: a ${((q.precio / sl - 1) * 100).toFixed(1)} % del suelo/SL`, txt: `Precio ${fx(q.precio)} ${q.moneda}; nivel ${fx(sl)}. ${p.broker}.` })
+      else if (aSL(q.precio, sl) <= CERCA) checks.push({ tipo: 'cerca-sl', nivel: sl, sev: 'media', prioridad: 4, tags: ['warning'],
+        titulo: `${p.ticker}: a ${aSL(q.precio, sl).toFixed(1)} % del suelo/SL`, txt: `Precio ${fx(q.precio)} ${q.moneda}; nivel ${fx(sl)}. ${p.broker}.` })
     }
     if (tp) {
       if (q.maximo >= tp) checks.push({ tipo: 'tp', nivel: tp, sev: 'alta', prioridad: 5, tags: ['moneybag'],

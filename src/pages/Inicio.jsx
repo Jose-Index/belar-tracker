@@ -3,8 +3,10 @@
 import { useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { serieTWRDesglose } from '../lib/twr'
-import { fetchQuotes, intervaloPrecios } from '../lib/quotes'
+import { serieTWRDesglose, rentabilidadDietz, aportacionesEntre, eurusdEn } from '../lib/twr'
+import { fetchQuotes, intervaloPrecios, getSimbolos, yahooDe } from '../lib/quotes'
+import { filtroPlatt, precioEnUnidadNivel } from '../lib/riesgo'
+import { fechaLocalISO } from '../lib/fechas'
 import { useCache, useSondeo, invalidar } from '../lib/cache'
 import { walletDe } from '../lib/bloques'
 import Mercados from '../components/Mercados.jsx'
@@ -14,27 +16,37 @@ import Posiciones from './Posiciones.jsx'
 import './inicio.css'
 
 const fmt$ = v => v == null ? '—' : Number(v).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtK = v => v >= 1000 ? (v / 1000).toFixed(1) + 'k' : String(Math.round(v))
-const fmtPct = v => v == null ? '—' : (v > 0 ? '+' : '') + v.toFixed(2) + '%'
+const fmtK = v => !Number.isFinite(Number(v)) ? '—' : Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + 'k' : String(Math.round(v))
+const fmtPct = v => v == null || !Number.isFinite(v) ? '—' : (v > 0 ? '+' : '') + v.toFixed(2) + '%'
+const val = p => Number(p.current_value ?? p.invested) || 0
 const pctClass = v => v == null ? '' : v > 0 ? 'up' : v < 0 ? 'down' : ''
 const fFecha = d => d ? d.slice(2).split('-').reverse().join('/') : '—'
 
 // Todo lo que necesita la portada en una sola carga, cacheada y compartida (ver lib/cache.js)
 async function loaderInicio() {
-  const [w, p, c, st] = await Promise.all([
+  const [w, p, c, st, yr] = await Promise.all([
     supabase.from('weekly_snapshots').select('*').order('week_end'),
     supabase.from('positions').select('*'),
     supabase.from('contributions').select('fecha,broker,importe_eur,importe_usd'),
     supabase.from('app_state').select('key,value').in('key', ['liquidez', 'btc_wallet', 'bloques_objetivo']),
+    supabase.from('yearly_results').select('year,valor_cierre_usd,valor_cierre_eur,eurusd_cierre'),
   ])
   const estado = Object.fromEntries((st.data || []).map(r => [r.key, r.value]))
   return {
-    weeks: w.data || [], positions: p.data || [], contribs: c.data || [],
+    weeks: w.data || [], positions: p.data || [], contribs: c.data || [], anuales: yr.data || [],
     liquidez: estado.liquidez || {}, btcQty: walletDe(estado.btc_wallet).qty, btcInv: walletDe(estado.btc_wallet).invertido,
     objetivos: estado.bloques_objetivo || null,
   }
 }
 const loaderBtc = () => fetchQuotes(['BTC-USD'])
+// Filtro Platt: precio vivo SOLO de las posiciones con SL y sin precio de entrada → { ticker: quote }
+async function loaderPlatt(tickers) {
+  if (!tickers.length) return {}
+  const simbolos = await getSimbolos()
+  const ys = Object.fromEntries(tickers.map(t => [t, yahooDe(t, simbolos)]))
+  const q = await fetchQuotes(Object.values(ys))
+  return Object.fromEntries(tickers.map(t => [t, q[ys[t]] || null]))
+}
 
 export default function Inicio() {
   const { data } = useCache('inicio', loaderInicio, { ttl: 60e3, persist: true })
@@ -46,6 +58,10 @@ export default function Inicio() {
   const btcQty = data?.btcQty || 0
   const objetivos = data?.objetivos || null   // app_state.bloques_objetivo (opcional)
   const btcPrecio = qBtc?.['BTC-USD']?.price || null
+  const sinEntrada = [...new Set(positions.filter(p => p.sl_price && !p.entry_price && p.invested).map(p => p.ticker))].sort()
+  const clavePlatt = 'quotes:platt:' + sinEntrada.join(',')
+  const { data: qPlatt } = useSondeo(clavePlatt, () => loaderPlatt(sinEntrada),
+    { intervalo: intervaloPrecios, persist: true, activo: sinEntrada.length > 0, deps: [clavePlatt] })
   const location = useLocation()
   // Alta prellenada desde el Buscador: /?alta=<json>
   const altaInicial = useMemo(() => {
@@ -80,36 +96,37 @@ export default function Inicio() {
   }
 
   // Boxes
-  const totalPos = positions.reduce((a, p) => a + Number(p.current_value ?? p.invested), 0)
-  const totalInv = positions.reduce((a, p) => a + Number(p.invested), 0)
+  const totalPos = positions.reduce((a, p) => a + val(p), 0)
+  const totalInv = positions.reduce((a, p) => a + (Number(p.invested) || 0), 0)
   const totalLiq = Object.values(liquidez).reduce((a, v) => a + (Number(v) || 0), 0)
   const btcUsd = btcQty && btcPrecio ? btcQty * btcPrecio : 0
   const totalCuenta = totalPos + totalLiq + btcUsd
+  const vivoOk = !btcQty || !!btcPrecio      // con wallet y sin precio de BTC, el total vivo aún no es fiable
   const cuentas = ['etoro', 'xtb', 'ibkr'].map(b => {
-    const pos = positions.filter(p => p.broker === b).reduce((a, p) => a + Number(p.current_value ?? p.invested), 0)
+    const pos = positions.filter(p => p.broker === b).reduce((a, p) => a + val(p), 0)
     const liq = Number(liquidez[b]) || 0
     return { b, pos, liq, total: pos + liq, per: periodosDe(b) }
   })
   const perBtc = periodosDe('btc')
   const gp = totalPos - totalInv
   const gpPct = totalInv ? gp / totalInv * 100 : null
-  const ult = serie.at(-1), pen = serie.at(-2)
-  const semPct = ult && pen ? (ult.usd - pen.usd) / pen.usd * 100 : null
+  const ult = serie.at(-1)
+  const hoy = fechaLocalISO()
+  // Semana en curso: total vivo frente al último cierre, descontando las aportaciones posteriores a ese cierre
+  const fSem = ult ? aportacionesEntre(contribs, ult.fecha, hoy, weeks).total : 0
+  const semPct = ult && ult.usd > 0 && vivoOk ? ((totalCuenta - fSem) / ult.usd - 1) * 100 : null
   const año = new Date().getFullYear()
-  const aportadoAño = contribs.filter(c => c.fecha?.startsWith(String(año))).reduce((a, c) => a + Number(c.importe_eur), 0)
-  const aportadoTotal = contribs.reduce((a, c) => a + Number(c.importe_eur), 0)
-  const iniAño = serie.find(s => s.fecha >= `${año}-01-01`)
-  const añoPct = ult && iniAño && iniAño !== ult ? (ult.usd - iniAño.usd) / iniAño.usd * 100 : null
+  const aportadoAño = contribs.filter(c => c.fecha?.startsWith(String(año))).reduce((a, c) => a + (Number(c.importe_eur) || 0), 0)
+  const aportadoTotal = contribs.reduce((a, c) => a + (Number(c.importe_eur) || 0), 0)
+  const rAño = useMemo(() => anioDietz({ año, weeks: weeks || [], contribs, anuales: data?.anuales || [], vivo: vivoOk ? totalCuenta : null, hoy }),
+    [año, weeks, contribs, data, vivoOk, totalCuenta, hoy])
+  const añoPct = rAño.usd
 
-  // Filtro Platt: si todos los SLs saltan a la vez, ¿cuánto se pierde?
-  // Pérdida por posición = valor actual − valor en SL (entrada, apalancamiento).
-  const conSL = positions.filter(p => p.sl_price && p.entry_price && p.invested)
-  const plattPerdida = conSL.reduce((a, p) => {
-    const retSL = (Number(p.sl_price) / Number(p.entry_price) - 1) * Number(p.apalancamiento || 1)
-    const valorEnSL = Number(p.invested) * (1 + retSL)
-    return a + Math.max(0, Number(p.current_value ?? p.invested) - valorEnSL)
-  }, 0)
-  const plattPct = totalCuenta ? plattPerdida / totalCuenta * 100 : null
+  // Filtro Platt: si todos los SLs saltan a la vez, ¿cuánto se pierde? (lib/riesgo.js)
+  // Con precio de entrada: valor actual − valor en SL. Sin entrada: con el precio vivo (peniques → £).
+  const platt = filtroPlatt(positions, p => precioEnUnidadNivel(qPlatt?.[p.ticker]))
+  const plattPerdida = platt.perdida
+  const plattPct = vivoOk && totalCuenta ? plattPerdida / totalCuenta * 100 : null
   const plattOk = plattPct != null && plattPct <= 10
 
   if (!weeks) return <p className="placeholder">Cargando…</p>
@@ -132,23 +149,27 @@ export default function Inicio() {
         <div className="card box">
           <span className="box-t">Semana en curso</span>
           <span className={'box-v ' + pctClass(semPct)}>{fmtPct(semPct)}</span>
-          <span className="box-s">vs cierre {fFecha(pen?.fecha)}</span>
+          <span className="box-s" title={fSem ? `Descontadas aportaciones posteriores al cierre: $${fmt$(fSem)}` : ''}>vs cierre {fFecha(ult?.fecha)}{vivoOk ? '' : ' · esperando precio ₿'}</span>
         </div>
         <div className="card box">
-          <span className="box-t">{año}</span>
+          <span className="box-t" title={`Rentabilidad ${año} por Dietz modificado: (V1 − V0 − ΣF) ÷ (V0 + Σ wᵢ·Fᵢ). V0 = cierre ${año - 1}${rAño.fuenteV0 ? ' (' + rAño.fuenteV0 + ')' : ''}; V1 = ${rAño.fuenteV1}; F = aportaciones del año ponderadas por el tiempo que han estado invertidas.${rAño.sinCambio ? ` ${rAño.sinCambio} aportación(es) sin importe $ ni EURUSD: no computan.` : ''}`}>{año}</span>
           <span className={'box-v ' + pctClass(añoPct)}>{fmtPct(añoPct)}</span>
+          <span className={'box-s ' + pctClass(rAño.eur)}>en €: {fmtPct(rAño.eur)}{rAño.fuenteV1 === 'último cierre' ? ` · al cierre ${fFecha(rAño.d1)}` : ''}{rAño.sinCambio ? ' · ⚠' : ''}</span>
           <span className="box-s">aportado {año}: {fmt$(aportadoAño)}€ · total: {fmt$(aportadoTotal)}€</span>
         </div>
         <div className="card box box-platt"
-             title="Filtro Platt: pérdida si TODOS los SLs saltaran a la vez, sobre el capital total. Umbral de aviso: 10%. Posiciones sin SL no computan (no saltan).">
+             title={'Filtro Platt: pérdida si TODOS los SLs saltaran a la vez, sobre el capital total (posiciones + liquidez + ₿ wallet). Umbral de aviso: 10%. '
+               + 'Con precio de entrada se usa el SL frente a la entrada; sin entrada, el SL frente al precio vivo. Posiciones sin SL no computan (no saltan).'
+               + (platt.sinDatos ? ` ${platt.sinDatos} posición(es) con SL sin precio de entrada ni precio vivo: no computan.` : '')}>
           <span className="box-t">Platt</span>
-          {conSL.length
+          {platt.n && plattPct != null
             ? <span className={'box-v ' + (plattOk ? 'up' : 'warn')}>−{plattPct.toFixed(1)}%</span>
             : <span className="box-v warn">—</span>}
           <span className="box-s">
-            {conSL.length
-              ? `−$${fmtK(plattPerdida)} si saltan los ${conSL.length} SLs · umbral 10%`
+            {platt.n
+              ? `−$${fmtK(plattPerdida)} si saltan los ${platt.n} SLs · umbral 10%`
               : `sin SLs calibrados aún (${positions.length} posiciones)`}
+            {platt.sinDatos ? ` · ${platt.sinDatos} posiciones sin datos` : ''}
           </span>
         </div>
       </div>
@@ -190,4 +211,30 @@ function Periodos({ per }) {
       ))}
     </span>
   )
+}
+
+// Rentabilidad del año en curso (Dietz modificado, USD y €). V0 = cierre del año anterior
+// (yearly_results o, si no hay, último cierre semanal ≤ 31/12); V1 = total vivo o, sin él, último cierre.
+function anioDietz({ año, weeks, contribs, anuales, vivo, hoy }) {
+  const d0 = `${año - 1}-12-31`
+  const yr = anuales.find(r => Number(r.year) === año - 1)
+  const snap0 = [...weeks].reverse().find(w => w.week_end <= d0 && Number(w.total_value) > 0)
+  let v0 = null, fuenteV0 = null
+  if (yr && Number(yr.valor_cierre_usd) > 0) { v0 = Number(yr.valor_cierre_usd); fuenteV0 = 'resultados anuales' }
+  else if (snap0) { v0 = Number(snap0.total_value); fuenteV0 = 'cierre semanal ' + snap0.week_end }
+  const ult = weeks.at(-1)
+  let v1, d1, fuenteV1
+  if (vivo != null && vivo > 0) { v1 = vivo; d1 = hoy; fuenteV1 = 'total vivo' }
+  else if (ult) { v1 = Number(ult.total_value); d1 = ult.week_end; fuenteV1 = 'último cierre' }
+  if (v0 == null || v1 == null || !(d1 > d0)) return { usd: null, eur: null, fuenteV0, fuenteV1, d1 }
+  const ap = aportacionesEntre(contribs, d0, d1, weeks)
+  const usd = rentabilidadDietz({ v0, d0, v1, d1, flujos: ap.flujos })
+  // €: V0€ del cierre anual (o V0 / EURUSD de cierre), V1€ = V1 / EURUSD del último cierre semanal, flujos = importe €
+  const fx0 = Number(yr?.eurusd_cierre) > 0 ? Number(yr.eurusd_cierre) : eurusdEn(weeks, d0)
+  const v0e = yr && Number(yr.valor_cierre_eur) > 0 ? Number(yr.valor_cierre_eur) : fx0 ? v0 / fx0 : null
+  const fx1 = eurusdEn(weeks, d1)
+  const flujosEur = contribs.filter(c => c.fecha > d0 && c.fecha <= d1 && Number.isFinite(Number(c.importe_eur)))
+    .map(c => ({ fecha: c.fecha, importe: Number(c.importe_eur) }))
+  const eur = v0e && fx1 ? rentabilidadDietz({ v0: v0e, d0, v1: v1 / fx1, d1, flujos: flujosEur }) : null
+  return { usd, eur, fuenteV0, fuenteV1, d1, sinCambio: ap.sinCambio }
 }

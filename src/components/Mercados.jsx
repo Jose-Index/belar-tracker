@@ -225,7 +225,7 @@ function Comparativa({ s, pts, range, onCerrar }) {
     let vivo = true
     async function montar() {
       const [{ data: weeks }, { data: contribs }] = await Promise.all([
-        supabase.from('weekly_snapshots').select('week_end,total_value').order('week_end'),
+        supabase.from('weekly_snapshots').select('week_end,total_value,eurusd').order('week_end'),
         supabase.from('contributions').select('fecha,importe_eur,importe_usd'),
       ])
       if (!vivo || !weeks?.length || pts.length < 2) { setDatos({ vacio: true }); return }

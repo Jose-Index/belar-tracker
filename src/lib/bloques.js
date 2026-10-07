@@ -107,7 +107,7 @@ export function pesosBloques(positions, liquidez, objetivos, wallet) {
     return {
       ...b, objetivo, n: ps.length + (extra ? 1 : 0), valor, invertido, gp,
       gpPct: invertido ? gp / invertido * 100 : null,
-      wallet: extra || 0,
+      wallet: extra || 0, walletConCoste: !!walletInv,
       real, desvio, usd: real == null ? null : (objetivo - real) / 100 * base, // $ que faltan (+) o sobran (−)
       semaforo: semaforoDesvio(desvio),
     }
@@ -120,4 +120,105 @@ export function pesosBloques(positions, liquidez, objetivos, wallet) {
     usd: realCaja == null ? null : (objCaja - realCaja) / 100 * base, semaforo: semaforoDesvio(realCaja == null ? null : realCaja - objCaja),
   }
   return { base, totalPos, caja, walletUsd, filas, filaCaja, todas: [...filas, filaCaja] }
+}
+
+// Niveles de la Tesis en % sobre la entrada (07/10/2026): los REALES del ticket (sl_price/tp_price frente a
+// entry_price); −11 / +23,5 solo cuando falta el nivel o la entrada. { slPct, tpPct, slReal, tpReal }
+export function tesisNiveles(p) {
+  const e = Number(p?.entry_price), sl = Number(p?.sl_price), tp = Number(p?.tp_price)
+  const slReal = e > 0 && sl > 0, tpReal = e > 0 && tp > 0
+  return {
+    slPct: slReal ? (sl / e - 1) * 100 : TESIS_SL,
+    tpPct: tpReal ? (tp / e - 1) * 100 : TESIS_TP,
+    slReal, tpReal,
+  }
+}
+
+// TWR por bloque a partir de los cierres semanales por posición (position_snapshots: week_end, ticker,
+// broker, value, invested), las posiciones abiertas y el histórico de cierres (position_history: ticker,
+// broker, entry_date, closed_date, closed_value, bloque). Auditoría 07/10/2026:
+//  · Cada cierre semanal se asigna a la "vida" de la posición: la abierta si ya existía en esa fecha; si no,
+//    el cierre del histórico más próximo posterior (con SU bloque; bloquePorDefecto solo si no lo tiene).
+//  · TESIS excluye las posiciones Puente (entrada < 30/09/2026).
+//  · Semana a semana, por clave ticker|broker: r = Σ num ÷ Σ val_anterior, con
+//      sigue abierta  → num += val + max(0, inv_ant − inv) (retirada / cierre parcial: no es pérdida)
+//                       − max(0, inv − inv_ant) (dinero nuevo); si hubo un cierre parcial registrado en la
+//                       semana, se usa su closed_value en lugar de la Δinvertido.
+//      cerrada en la semana (en el histórico, closed_date en (sem_ant, sem]) → num += closed_value
+//      desaparece sin cierre registrado → fuera de la semana (ni num ni den)
+//      alta de la semana → aún sin rendimiento
+// Devuelve { [bloque]: [{ fecha, pct }] } con pct acumulado en %.
+export function serieTWRBloques(snaps, positions = [], cierres = []) {
+  const abiertas = new Map()
+  for (const p of positions || []) {
+    const k = p.ticker + '|' + p.broker
+    if (!abiertas.has(k)) abiertas.set(k, [])
+    abiertas.get(k).push(p)
+  }
+  const cierresDe = new Map()
+  for (const c of cierres || []) {
+    if (!c?.closed_date) continue
+    const k = c.ticker + '|' + c.broker
+    if (!cierresDe.has(k)) cierresDe.set(k, [])
+    cierresDe.get(k).push(c)
+  }
+  for (const l of cierresDe.values()) l.sort((a, b) => (a.closed_date < b.closed_date ? -1 : 1))
+  const bloqueCierre = c => (c.bloque && BLOQUE_DE_ID[c.bloque]) ? c.bloque : bloquePorDefecto(c)
+  const puenteCierre = c => bloqueCierre(c) === 'TESIS' && !!c.entry_date && c.entry_date < TESIS_ADOPCION
+
+  // Vida a la que pertenece un cierre semanal → { bq, puente } (null = se descarta)
+  function vida(k, ticker, fecha) {
+    const ab = (abiertas.get(k) || []).find(p => !p.entry_date || p.entry_date <= fecha)
+    if (ab) return { bq: bloqueDe(ab), puente: esPuente(ab) }
+    const c = (cierresDe.get(k) || []).find(x => x.closed_date >= fecha)
+    if (c) return { bq: bloqueCierre(c), puente: puenteCierre(c) }
+    const cualquiera = (abiertas.get(k) || [])[0]
+    if (cualquiera) return { bq: bloqueDe(cualquiera), puente: esPuente(cualquiera) }
+    return { bq: bloquePorDefecto({ ticker }), puente: false }
+  }
+
+  const porBloque = {}   // bq -> week -> clave -> { val, inv }
+  for (const s of snaps || []) {
+    const val = Number(s.value), inv = Number(s.invested)
+    if (!Number.isFinite(val) || !(val > 0)) continue
+    const clave = s.ticker + '|' + s.broker
+    const v = vida(clave, s.ticker, s.week_end)
+    if (v.bq === 'TESIS' && v.puente) continue                     // la Tesis nativa no mide las Puente
+    const sem = ((porBloque[v.bq] ||= {})[s.week_end] ||= {})
+    const prev = sem[clave] || { val: 0, inv: 0 }
+    sem[clave] = { val: prev.val + val, inv: prev.inv + (Number.isFinite(inv) ? inv : 0) }
+  }
+
+  const cerradoEntre = (k, fa, fb) => (cierresDe.get(k) || []).filter(c => c.closed_date > fa && c.closed_date <= fb)
+  // Semanas globales (no solo las del bloque): si todo el bloque se cierra en una semana, esa semana no
+  // tiene filas del bloque pero sí debe cobrar los cierres
+  const todas = [...new Set((snaps || []).map(x => x.week_end))].sort()
+  const out = {}
+  for (const [bq, sems] of Object.entries(porBloque)) {
+    const fechas = todas.slice(todas.indexOf(Object.keys(sems).sort()[0]))
+    let acum = 1
+    const serie = [{ fecha: fechas[0], pct: 0 }]
+    for (let i = 1; i < fechas.length; i++) {
+      const fa = fechas[i - 1], fb = fechas[i]
+      const a = sems[fa] || {}, b = sems[fb] || {}
+      if (!Object.keys(a).length && !Object.keys(b).length) continue   // bloque vacío esas semanas
+      let num = 0, den = 0
+      for (const [clave, y] of Object.entries(a)) {
+        const x = b[clave]
+        const cs = cerradoEntre(clave, fa, fb)
+        const cobrado = cs.reduce((s, c) => s + (Number(c.closed_value) || 0), 0)
+        if (x) {
+          const nuevo = x.inv && y.inv ? Math.max(0, x.inv - y.inv) : 0      // dinero añadido a la posición
+          const retirado = cs.length ? cobrado : (x.inv && y.inv ? Math.max(0, y.inv - x.inv) : 0)
+          num += x.val - nuevo + retirado; den += y.val
+        } else if (cs.length) {
+          num += cobrado; den += y.val                                      // cerrada en la semana: valor real de salida
+        }
+      }
+      if (den > 0) acum *= num / den
+      serie.push({ fecha: fb, pct: (acum - 1) * 100 })
+    }
+    out[bq] = serie
+  }
+  return out
 }
