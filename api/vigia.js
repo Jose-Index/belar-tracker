@@ -39,11 +39,21 @@ async function cotizacion(symbol) {
   const k = meta.currency === 'GBp' || meta.currency === 'GBX' ? 0.01 : 1   // peniques → £
   // Mínimo/máximo del día solo si son coherentes con el precio (Yahoo a veces da 0 o valores de otra sesión)
   const precio = meta.regularMarketPrice * k
-  const dayLow = Number(meta.regularMarketDayLow) * k, dayHigh = Number(meta.regularMarketDayHigh) * k
+  // 14/10/2026: mínimo/máximo de las velas de 5 min de la sesión regular de HOY, no de meta.regularMarketDayLow
+  // (el 06/10 a la apertura de Londres dio un mínimo falso bajo el SL de ZEG.L con el precio a 17,80).
+  // Además se descartan velas a más de un 8 % del precio (prints sueltos).
+  const res0 = j.chart.result[0], ts = res0.timestamp || [], qq = res0.indicators?.quote?.[0] || {}
+  let lo = precio, hi = precio
+  for (let i = 0; i < ts.length; i++) {
+    if (p && (ts[i] < p.start || ts[i] >= p.end)) continue
+    const l = Number(qq.low?.[i]) * k, h = Number(qq.high?.[i]) * k
+    if (l > 0 && Math.abs(l / precio - 1) <= 0.08) lo = Math.min(lo, l)
+    if (h > 0 && Math.abs(h / precio - 1) <= 0.08) hi = Math.max(hi, h)
+  }
   return {
     precio,
-    minimo: dayLow > 0 && dayLow <= precio ? dayLow : precio,
-    maximo: dayHigh > 0 && dayHigh >= precio ? dayHigh : precio,
+    minimo: lo,
+    maximo: hi,
     moneda: k === 1 ? meta.currency : 'GBP', abierto, at: (meta.regularMarketTime || now) * 1000,
   }
 }
@@ -55,6 +65,11 @@ async function push(topic, { titulo, mensaje, prioridad = 4, tags = [] }) {
     body: JSON.stringify({ topic, title: titulo, message: mensaje, priority: prioridad, tags, click: APP }),
   })
   return r.ok
+}
+
+// Supabase a veces devuelve 500 transitorio ("JWT issued at future"): un reintento a los 2 s (14/10/2026)
+async function rest2(path, opts) {
+  try { return await rest(path, opts) } catch (e) { await new Promise(r => setTimeout(r, 2000)); return rest(path, opts) }
 }
 
 const fx = n => Number(n).toLocaleString('es-ES', { maximumFractionDigits: 4 })
@@ -74,11 +89,21 @@ export default async function handler(req, res) {
     return
   }
 
+  try { await pasada(req, res, topic, dry) }
+  catch (e) {   // nunca 500 por un fallo transitorio: se registra y responde 200 (cron-job.org dejaba de mandar correos de fallo)
+    const msg = String(e?.message || e).slice(0, 300)
+    try { await rest2('app_state?on_conflict=key', { method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal',
+      body: { key: 'vigia_error', value: { at: new Date().toISOString(), error: msg }, updated_at: new Date().toISOString() } }) } catch {}
+    res.status(200).json({ ok: false, error: msg })
+  }
+}
+
+async function pasada(req, res, topic, dry) {
   const ahora = new Date().toISOString()
   const [pos, sims, st] = await Promise.all([
-    rest('positions?select=id,ticker,broker,sl_price,tp_price,sl_type,bloque&sl_type=eq.ALERTA'),
-    rest('symbols?select=ticker,yahoo_symbol'),
-    rest('app_state?select=value&key=eq.vigia'),
+    rest2('positions?select=id,ticker,broker,sl_price,tp_price,sl_type,bloque&sl_type=eq.ALERTA'),
+    rest2('symbols?select=ticker,yahoo_symbol'),
+    rest2('app_state?select=value&key=eq.vigia'),
   ])
   const estado = st?.[0]?.value || {}
   const disparos = { ...(estado.disparos || {}) }
@@ -120,7 +145,7 @@ export default async function handler(req, res) {
   if (!dry) {
     for (const e of eventos) {
       try {
-        await rest('alerts', { method: 'POST', prefer: 'return=minimal',
+        await rest2('alerts', { method: 'POST', prefer: 'return=minimal',
           body: { autor: 'belar', severidad: e.sev, ticker: e.ticker, titulo: e.titulo, detalle: e.txt + ' (Vigía BTP)', activa: true } })
       } catch (x) { errores.push(`Radar ${e.ticker}: ${String(x.message).slice(0, 160)}`) }
       try { if (await push(topic, { titulo: e.titulo, mensaje: e.txt, prioridad: e.prioridad, tags: e.tags })) enviados++ }
@@ -129,7 +154,7 @@ export default async function handler(req, res) {
     // Disparos de posiciones que ya no se vigilan: fuera, para que no crezca sin fin
     const ids = new Set((pos || []).map(p => String(p.id)))
     for (const k of Object.keys(disparos)) if (!ids.has(k.split(':')[0])) delete disparos[k]
-    await rest('app_state?on_conflict=key', { method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal',
+    await rest2('app_state?on_conflict=key', { method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal',
       body: { key: 'vigia', value: { last_run: ahora, last_ok: errores.length ? estado.last_ok || null : ahora, vigiladas: vistas.length, errores, disparos }, updated_at: ahora } })
   }
   res.status(200).json({ ok: true, dry, at: ahora, vigiladas: vistas.length, eventos: eventos.map(e => e.titulo), enviados, push: topic ? 'ntfy' : 'FALTA NTFY_TOPIC', errores, vistas })
