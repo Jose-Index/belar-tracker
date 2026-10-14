@@ -66,6 +66,7 @@ Cada aviso se da una sola vez por posición, tipo y nivel (`app_state.vigia.disp
 - Lanzador: cron-job.org cada 5 minutos con cabecera `Authorization: Bearer <CRON_SECRET>` (el plan Hobby de Vercel solo permite un cron diario).
 - Push: variable `NTFY_TOPIC` en Vercel → Preview (canal privado de ntfy; app ntfy en el iPhone suscrita a ese canal). Sin ella, solo Radar.
 - Estado: `app_state.vigia = { last_run, last_ok, vigiladas, errores, disparos }`; la leyenda de Posiciones lo muestra y marca ¡PARADO! si en horario de mercado lleva >20 min sin pasada.
+- Robustez (14/10/2026): el mínimo/máximo del día sale de las velas de 5 min de la sesión regular de hoy (se descartan velas a más de un 8 % del precio), no de `regularMarketDayLow` (el 06/10 dio 0 en la apertura de Londres y disparó un SL falso en ZEG.L). Los errores pasajeros de Supabase se reintentan una vez a los 2 s y la ruta ya no devuelve 500: si falla, responde 200 con `ok:false` y lo deja en `app_state.vigia_error`.
 - Unidades: el nivel se compara tal cual con el precio de Yahoo del símbolo canónico (Londres cotiza en peniques, GBp).
 - No sustituye a una orden real: hasta 5 min de retraso y cierre manual. Solo para lo que el bróker no admite.
 
