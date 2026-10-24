@@ -169,6 +169,15 @@ export async function fetchCierresBloques() {
   return data || []
 }
 
+// Cierres ya registrados desde una fecha (ingesta única, 24/10/2026): para no duplicar
+// lo que el historial del broker vuelve a enseñar semana tras semana.
+export async function fetchCierresDesde(desde) {
+  const { data, error } = await supabase.from('position_history')
+    .select('ticker,broker,closed_date,invested,closed_value').gte('closed_date', desde).limit(2000)
+  if (error) throw error
+  return data || []
+}
+
 export function guardarLiquidez(liq) {
   return supabase.from('app_state').upsert({ key: 'liquidez', value: liq, updated_at: new Date().toISOString() })
 }
