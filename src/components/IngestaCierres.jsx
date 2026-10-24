@@ -5,12 +5,12 @@
 // además la cierra (borra) usando esos datos reales. NUNCA auto-commit.
 import { useState } from 'react'
 import { extraerCierres } from '../lib/ia'
-import { registrarCierre, tipoCierre, fechaLocalISO } from '../lib/posiciones-db'
+import { registrarCierre, tipoCierre, fechaLocalISO, MOTIVOS_CIERRE, motivoPropuesto } from '../lib/posiciones-db'
 import { resolverSimbolo, variantes } from '../lib/quotes'
 import './ingesta.css'
 
 const fmt$ = v => v == null ? '—' : Number(v).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const MOTIVOS = ['xSL', 'manual', 'escalonada']
+const MOTIVOS = MOTIVOS_CIERRE
 const BROKERS_UI = [{ id: 'etoro', label: 'eToro' }, { id: 'xtb', label: 'XTB' }, { id: 'ibkr', label: 'IBKR' }]
 const HOY = () => fechaLocalISO()
 
@@ -41,7 +41,8 @@ export default function IngestaCierres({ positions = [], simbolos = [], onDone }
           fecha_cierre: c.fecha_cierre || '',
           entry_date: c.fecha_apertura || pos?.entry_date || null,
           apalancamiento: c.apalancamiento || pos?.apalancamiento || 1,
-          motivo: 'manual', pos: pos || null,
+          motivo: motivoPropuesto(pos, invertido > 0 && valorCierre != null ? (valorCierre / invertido - 1) * 100 : null) || 'manual',
+          pos: pos || null,
           dudosa: c.gp != null && invertido != null && valorCierre != null &&
             Math.abs(invertido + c.gp - valorCierre) > 0.05,
         })
