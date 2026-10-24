@@ -5,6 +5,9 @@
 // modo ausente → posiciones abiertas: { extracciones: [{ broker, liquidez|null, posiciones: [...] }] }
 // modo 'cerradas' (13/08/2026) → pantallas de historial/posiciones cerradas:
 //   { extracciones: [{ broker, cierres: [{nombre, ticker, invertido, valor_cierre, gp, fecha_cierre, fecha_apertura, apalancamiento}] }] }
+// modo 'auto' (24/10/2026, ingesta única del cierre de semana) → UNA captura por llamada; la IA decide
+//   si es de posiciones abiertas o de historial y devuelve { tipo: 'abiertas'|'cerradas', extracciones } con
+//   el formato del modo correspondiente.
 
 import { anthropic, jsonDe } from './_anthropic.js'
 
@@ -59,6 +62,21 @@ Reglas:
 - Si una cifra no se lee con certeza, null antes que inventarla.
 - CRÍTICO: transcribe cada importe dígito a dígito y reléelo antes de escribirlo. Ante ambigüedad visual, null.`
 
+// Modo auto: primero clasificar la pantalla, después aplicar las reglas del tipo que toque.
+const PROMPT_AUTO = `Eres el extractor de datos de BTP (Belar Tracker Pro). Recibes UNA captura de un broker (eToro, XTB o IBKR).
+PASO 1 · Decide qué pantalla es:
+- "abiertas": cartera / posiciones abiertas (valor actual, G/P no realizada, "Mi Portafolio", "Posiciones abiertas", "Positions", "Portfolio").
+- "cerradas": historial / posiciones cerradas / operaciones cerradas (fecha u hora de CIERRE, beneficio REALIZADO, "Historial", "Cerradas", "Posiciones cerradas", "Historial de órdenes", "Realized P&L", "Trade History").
+PASO 2 · Extrae con las reglas del tipo elegido (abajo van las dos). Responde EXCLUSIVAMENTE un JSON:
+- si es "abiertas": {"tipo":"abiertas","extracciones":[...formato de ABIERTAS...]}
+- si es "cerradas": {"tipo":"cerradas","extracciones":[...formato de CERRADAS...]}
+
+===== REGLAS DE ABIERTAS =====
+${PROMPT}
+
+===== REGLAS DE CERRADAS =====
+${PROMPT_CERRADAS}`
+
 // Lista de posiciones ya registradas para anclar los tickers a lo que existe de verdad.
 function textoConocidas(conocidas) {
   if (!Array.isArray(conocidas) || !conocidas.length) return ''
@@ -73,16 +91,20 @@ export default async function handler(req, res) {
   try {
     const { images, modo, conocidas } = req.body || {}
     if (!images?.length) { res.status(400).json({ error: 'images requerido' }); return }
+    const auto = modo === 'auto'
     const content = [
-      ...images.slice(0, 8).map(im => ({
+      ...images.slice(0, auto ? 1 : 8).map(im => ({
         type: 'image',
         source: { type: 'base64', media_type: im.media_type || 'image/png', data: im.data },
       })),
-      { type: 'text', text: modo === 'cerradas' ? PROMPT_CERRADAS : PROMPT + textoConocidas(conocidas) },
+      { type: 'text', text: auto ? PROMPT_AUTO + textoConocidas(conocidas)
+        : modo === 'cerradas' ? PROMPT_CERRADAS : PROMPT + textoConocidas(conocidas) },
     ]
     const msg = await anthropic({ messages: [{ role: 'user', content }] })
     res.setHeader('Cache-Control', 'no-store')
-    res.status(200).json(jsonDe(msg))
+    const j = jsonDe(msg)
+    if (auto && j.tipo !== 'cerradas') j.tipo = 'abiertas'
+    res.status(200).json(j)
   } catch (e) {
     res.status(500).json({ error: String(e.message || e) })
   }
