@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { extraerCapturas } from '../lib/ia'
+import { MOTIVOS_CIERRE, motivoPropuesto } from '../lib/posiciones-db'
 import { resolverSimbolo, aprenderAlias, variantes } from '../lib/quotes'
 import './ingesta.css'
 
@@ -7,7 +8,7 @@ const fmt$ = v => v == null ? '—' : Number(v).toLocaleString('es-ES', { minimu
 
 // Elegibles en la propia pantalla de revisión (spec §8 + motivos de cierre del histórico)
 const CLASES_ALTA = { NUCLEO: 'NÚCLEO', MOMENTUM: 'MOMENTUM', TACTICA: 'TÁCTICA', DISRUPTIVA: 'DISRUPT.' }
-const MOTIVOS_CIERRE = ['xSL', 'manual', 'escalonada']
+
 const BROKERS_UI = [{ id: 'etoro', label: 'eToro' }, { id: 'xtb', label: 'XTB' }, { id: 'ibkr', label: 'IBKR' }]
 const HOY = () => new Date().toISOString().slice(0, 10)
 
@@ -142,7 +143,7 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
     const faltantes = positions
       .filter(p => brokersEnCaptura.has(p.broker) && !vistos.has(p.id))
       // cerrar es serio: desmarcado por defecto. Motivo elegible aquí mismo (defecto xSL).
-      .map(p => ({ pos: p, sel: false, motivo: 'xSL' }))
+      .map(p => ({ pos: p, sel: false, motivo: motivoPropuesto(p, Number(p.invested) > 0 && p.current_value != null ? (Number(p.current_value) / Number(p.invested) - 1) * 100 : null) || 'xSL' }))
     return { updates, nuevas, faltantes, liq }
   }
 
