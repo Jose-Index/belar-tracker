@@ -227,18 +227,31 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
         const vars = new Set(textos.flatMap(variantes))
         const invertido = c.invertido ?? (c.valor_cierre != null && c.gp != null ? c.valor_cierre - c.gp : null)
         const valorCierre = c.valor_cierre ?? (c.invertido != null && c.gp != null ? c.invertido + c.gp : null)
-        const fecha = /^\d{4}-\d{2}-\d{2}$/.test(c.fecha_cierre || '') ? c.fecha_cierre : ''
+        const esFecha = x => /^\d{4}-\d{2}-\d{2}$/.test(x || '')
+        let fecha = esFecha(c.fecha_cierre) ? c.fecha_cierre : ''
+        let fApert = esFecha(c.fecha_apertura) ? c.fecha_apertura : ''
+        // Fechas cruzadas (la IA tomó la de apertura por la de cierre, 24/10/2026): el cierre es la posterior.
+        if (fecha && fApert && fecha < fApert) { const tmp = fecha; fecha = fApert; fApert = tmp }
         const clave = `${broker}|${t}|${fecha}|${invertido == null ? '' : Math.round(invertido)}`
         if (claves.has(clave)) continue  // la misma fila en dos capturas solapadas
         claves.add(clave)
         const mismoTicker = tk => { const u = String(tk || '').toUpperCase(); return u === t || vars.has(u) }
         const casa = tol => h => h.broker === broker && mismoTicker(h.ticker) && (!fecha || h.closed_date === fecha) &&
           (invertido == null || Math.abs(Number(h.invested) - invertido) <= Math.max(1, Math.abs(invertido) * tol))
-        const ya = hist.some(casa(0.005))
+        const ya = hist.some(casa(0.005)) || (invertido != null && hist.some(h => h.broker !== broker && mismoTicker(h.ticker) &&
+          !!fecha && h.closed_date === fecha && Math.abs(Number(h.invested) - invertido) <= Math.max(1, Math.abs(invertido) * 0.005)))
         // Posición abierta que cierra: mismo broker y ticker; si hay varias (lotes), la de invertido más cercano.
         const cerca = p => invertido == null ? 0 : Math.abs(Number(p.invested) - invertido)
         let pos = ya ? null : positions.filter(p => p.broker === broker && !usados.has(p.id) && mismoTicker(p.ticker))
           .sort((x, y) => cerca(x) - cerca(y))[0] || null
+        // Broker mal leído (historial recortado de eToro leído como XTB, 24/10/2026): si en el broker leído no
+        // está, pero en otro hay una abierta con el mismo ticker y el mismo invertido (±0,5 %), es esa.
+        let brokerCorregido = false
+        if (!pos && !ya && invertido != null) {
+          pos = positions.find(p => p.broker !== broker && !usados.has(p.id) && mismoTicker(p.ticker) &&
+            Math.abs(Number(p.invested) - invertido) <= Math.max(0.5, Math.abs(invertido) * 0.005)) || null
+          brokerCorregido = !!pos
+        }
         let porImporte = false
         if (!pos && !ya && invertido != null) {
           // Nombre no reconocido: una abierta del mismo broker que no salga en la captura, con el mismo invertido (±0,5 %).
@@ -247,24 +260,33 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
           porImporte = !!pos
         }
         if (pos) usados.add(pos.id)
+        const brokerF = pos ? pos.broker : broker
         const lev = Number(c.apalancamiento) || Number(pos?.apalancamiento) || 1
-        const pct = pctLev(invertido, valorCierre, lev)
+        // % de precio: de los precios de la fila si vienen (sin divisa ni apalancamiento); si no, del importe ÷ apalancamiento.
+        const pa = Number(c.precio_apertura), pc = Number(c.precio_cierre)
+        const pct = pa > 0 && pc > 0 ? (pc / pa - 1) * 100 : pctLev(invertido, valorCierre, lev)
+        // El distintivo SL/TP del broker manda sobre la deducción por precio.
+        const mb = String(c.motivo_broker || '').toUpperCase()
+        const motivoB = mb === 'TP' ? 'xTP' : mb === 'SL' ? 'xSL' : null
         const reciente = !fecha || fecha >= desdeCierres
-        const dudosa = c.gp != null && invertido != null && valorCierre != null && Math.abs(invertido + c.gp - valorCierre) > 0.05
+        // Dudosa: importes que no cuadran, o una fecha de cierre anterior a la apertura de la posición que cierra.
+        const dudosa = (c.gp != null && invertido != null && valorCierre != null && Math.abs(invertido + c.gp - valorCierre) > 0.05) ||
+          (!!pos && !!fecha && !!pos.entry_date && fecha < pos.entry_date)
         filas.push({
-          sel: !ya && (reciente || !!pos), ya, reciente, dudosa, porImporte,
-          ticker: pos ? pos.ticker : t, broker, textos,
+          sel: !ya && (reciente || !!pos), ya, reciente, dudosa, porImporte, brokerCorregido, motivoB,
+          ticker: pos ? pos.ticker : t, broker: brokerF, textos,
           invertido, valorCierre, fecha_cierre: fecha,
-          entry_date: /^\d{4}-\d{2}-\d{2}$/.test(c.fecha_apertura || '') ? c.fecha_apertura : (pos?.entry_date || null),
+          entry_date: fApert || pos?.entry_date || null,
           apalancamiento: lev,
           pct: invertido > 0 && valorCierre != null ? (valorCierre / invertido - 1) * 100 : null,
-          motivo: motivoPropuesto(pos, pct) || 'manual',
+          motivo: motivoB || motivoPropuesto(pos, pct) || 'manual',
           mapear: pos ? String(pos.id) : '',
         })
       }
     }
     // Primero lo que hay que decidir; lo ya registrado o antiguo, al final.
-    return filas.sort((a, b) => (a.ya || !a.reciente) - (b.ya || !b.reciente) || String(b.fecha_cierre).localeCompare(String(a.fecha_cierre)))
+    const abajo = f => f.ya || (!f.reciente && !f.mapear)
+    return filas.sort((a, b) => abajo(a) - abajo(b) || String(b.fecha_cierre).localeCompare(String(a.fecha_cierre)))
   }
 
   // Antes de mandar al borrador: resolver los mapeos manuales (una "alta" que en
@@ -455,8 +477,10 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
       </>}
 
       {d.cierres.length > 0 && (() => {
-        const vivos = d.cierres.map((c, i) => [c, i]).filter(([c]) => !c.ya && c.reciente)
-        const resto = d.cierres.map((c, i) => [c, i]).filter(([c]) => c.ya || !c.reciente)
+        // Lo que cierra una posición abierta de BTP siempre va arriba, sea cual sea la fecha leída.
+        const arriba = c => !c.ya && (c.reciente || !!c.mapear)
+        const vivos = d.cierres.map((c, i) => [c, i]).filter(([c]) => arriba(c))
+        const resto = d.cierres.map((c, i) => [c, i]).filter(([c]) => !arriba(c))
         const fila = ([c, i]) => (
           <div key={i} className={'diff-row' + (c.ya ? ' apagada' : '')}>
             <label className="diff-pick">
@@ -479,9 +503,11 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
                 </select>
               </label>
               {c.porImporte && c.mapear && <span className="warn" title="El nombre no se reconoce, pero el invertido coincide con esta posición">mismo invertido</span>}
+              {c.brokerCorregido && <span className="warn" title="La captura se leyó como de otro broker; se ha casado con la posición de este por ticker e invertido">broker corregido</span>}
+              {c.motivoB && <span className="ok-cap" title="Motivo marcado por el propio broker en la captura">✓{c.motivoB === 'xTP' ? 'TP' : 'SL'} broker</span>}
               {c.mapear && (() => { const p = positions.find(x => String(x.id) === c.mapear); return p && c.invertido != null && c.invertido < Number(p.invested) * 0.995
                 ? <span className="warn" title="Se cierra menos de lo invertido: la posición se reduce, no se borra">parcial</span> : null })()}
-              {!c.reciente && <span className="warn">antiguo</span>}
+              {!c.reciente && <span className="warn" title="Fecha de cierre anterior al último cierre de semana: compruébala">fecha antigua</span>}
               {c.dudosa && <span className="down" title="Invertido + G/P no cuadra con el valor de cierre: compruébalo en la captura">⚠ revisar</span>}
             </>}
           </div>
@@ -489,7 +515,7 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
         return <>
           <h4>Cierres del historial ({vivos.length})</h4>
           {vivos.map(fila)}
-          {!vivos.length && <p className="diff-nota">Ningún cierre nuevo en el historial.</p>}
+          {!vivos.length && <p className="diff-nota">Ningún cierre nuevo en el historial{resto.length ? ' (revisa los plegados: si alguno es de esta semana, márcalo y elige qué posición cierra)' : ''}.</p>}
           {resto.length > 0 && <details className="diff-mas">
             <summary>{resto.length} ya registrados o anteriores a {desdeCierres.slice(2).split('-').reverse().join('/')}</summary>
             {resto.map(fila)}
