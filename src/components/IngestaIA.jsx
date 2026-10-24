@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { extraerCapturas } from '../lib/ia'
-import { MOTIVOS_CIERRE, motivoPropuesto } from '../lib/posiciones-db'
+import { extraerAuto } from '../lib/ia'
+import { MOTIVOS_CIERRE, motivoPropuesto, fetchCierresDesde, fechaLocalISO } from '../lib/posiciones-db'
 import { resolverSimbolo, aprenderAlias, variantes } from '../lib/quotes'
 import './ingesta.css'
 
@@ -9,43 +9,109 @@ const fmt$ = v => v == null ? '—' : Number(v).toLocaleString('es-ES', { minimu
 // Elegibles en la propia pantalla de revisión (spec §8 + motivos de cierre del histórico)
 const CLASES_ALTA = { NUCLEO: 'NÚCLEO', MOMENTUM: 'MOMENTUM', TACTICA: 'TÁCTICA', DISRUPTIVA: 'DISRUPT.' }
 
+// % sobre el precio (no sobre el importe): en un CFD x2 el importe se mueve el doble.
+const pctLev = (inv, val, lev) => Number(inv) > 0 && val != null && Number.isFinite(Number(val))
+  ? (Number(val) / Number(inv) - 1) * 100 / (Number(lev) || 1) : null
+
+// Abiertas de varias capturas: una extracción por broker, sin filas repetidas
+// (capturas solapadas al hacer scroll) y con la liquidez que aparezca.
+function juntarAbiertas(exs) {
+  const por = new Map()
+  for (const e of exs) {
+    if (!e.broker) continue
+    const acc = por.get(e.broker) || { broker: e.broker, liquidez: null, posiciones: [], _k: new Set() }
+    if (e.liquidez != null) acc.liquidez = e.liquidez
+    for (const r of e.posiciones || []) {
+      const k = `${String(r.ticker || r.nombre || '').toUpperCase()}|${r.invertido ?? ''}|${r.valor ?? ''}`
+      if (acc._k.has(k)) continue
+      acc._k.add(k); acc.posiciones.push(r)
+    }
+    por.set(e.broker, acc)
+  }
+  return [...por.values()].map(({ _k, ...x }) => x)
+}
+
 const BROKERS_UI = [{ id: 'etoro', label: 'eToro' }, { id: 'xtb', label: 'XTB' }, { id: 'ibkr', label: 'IBKR' }]
 const HOY = () => new Date().toISOString().slice(0, 10)
 
-// Zona de arrastre + pantalla de revisión (diff). NUNCA auto-commit:
-// José revisa y acepta; lo aceptado vuelve a Posiciones como borrador/acciones.
-export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
-  const [estado, setEstado] = useState('idle')  // idle | procesando | diff | error
-  const [err, setErr] = useState(null)
-  const [diff, setDiff] = useState(null)
-  const [aviso, setAviso] = useState(null)
-  const [crudo, setCrudo] = useState(null)      // extracciones tal cual las devolvió la IA
-  const [brokerSel, setBrokerSel] = useState('')  // '' = el que dedujo la IA
+// Ingesta única (24/10/2026): José va echando capturas de cualquier broker y de
+// cualquier pantalla (posiciones abiertas o historial de cerradas), en varias tandas;
+// cada una se lee por separado y la IA dice qué es. Al revisar se cruza todo: valores,
+// altas, cierres REALES del historial (fecha e importe del broker, motivo por SL/TP)
+// y lo que falta sin dato de cierre. NUNCA auto-commit: José revisa y acepta.
+let SEQ = 0
+const PARALELO = 3
+const diasAntes = (iso, n) => { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10) }
 
-  async function procesar(files) {
-    if (!files?.length) return
-    setEstado('procesando'); setErr(null); setAviso(null)
-    try {
-      const ex = await extraerCapturas(files, positions.map(p => ({ broker: p.broker, ticker: p.ticker, invertido: Number(p.invested) })))
-      setCrudo(ex); setBrokerSel('')
-      setDiff(construirDiff(ex, positions, ''))
-      setEstado('diff')
-    } catch (e) {
-      setErr(String(e.message || e)); setEstado('error')
+export default function IngestaIA({ positions, simbolos = [], onAplicar, desde = null }) {
+  const [estado, setEstado] = useState('cola')  // cola | leyendo | diff
+  const [cola, setCola] = useState([])          // [{id, file, url, est: pend|leyendo|ok|error, err, res, broker, tipo}]
+  const [diff, setDiff] = useState(null)
+  const [hist, setHist] = useState([])
+  const [aviso, setAviso] = useState(null)
+
+  const conocidas = () => positions.map(p => ({ broker: p.broker, ticker: p.ticker, invertido: Number(p.invested) }))
+  // Ventana de cierres "de esta semana": desde 7 días antes del último cierre sellado (o 21 días).
+  const desdeCierres = desde ? diasAntes(desde, 7) : diasAntes(fechaLocalISO(), 21)
+
+  function anadir(files) {
+    const nuevos = [...(files || [])].filter(f => f.type?.startsWith('image/'))
+      .map(f => ({ id: ++SEQ, file: f, url: URL.createObjectURL(f), est: 'pend', err: null, res: null, broker: '', tipo: '' }))
+    if (nuevos.length) { setCola(c => [...c, ...nuevos]); setAviso(null) }
+  }
+  const quitar = id => setCola(c => { const x = c.find(y => y.id === id); if (x) URL.revokeObjectURL(x.url); return c.filter(y => y.id !== id) })
+  const setItem = (id, patch) => setCola(c => c.map(x => x.id === id ? { ...x, ...patch } : x))
+  // Lo que se usa al cruzar: lo corregido por José manda sobre lo detectado.
+  const brokerDe = x => x.broker || x.res?.extracciones?.[0]?.broker || ''
+  const tipoDe = x => x.tipo || x.res?.tipo || ''
+
+  async function leerYRevisar() {
+    setEstado('leyendo'); setAviso(null)
+    const conoc = conocidas()
+    let actual = cola
+    const pend = actual.filter(x => x.est === 'pend' || x.est === 'error')
+    let i = 0
+    async function trabajador() {
+      while (i < pend.length) {
+        const it = pend[i++]
+        setItem(it.id, { est: 'leyendo', err: null })
+        try {
+          const res = await extraerAuto(it.file, conoc)
+          actual = actual.map(x => x.id === it.id ? { ...x, est: 'ok', res } : x)
+          setItem(it.id, { est: 'ok', res })
+        } catch (e) {
+          actual = actual.map(x => x.id === it.id ? { ...x, est: 'error', err: String(e.message || e) } : x)
+          setItem(it.id, { est: 'error', err: String(e.message || e) })
+        }
+      }
     }
+    await Promise.all(Array.from({ length: Math.min(PARALELO, pend.length) }, trabajador))
+    const fallos = actual.filter(x => x.est === 'error')
+    if (fallos.length) { setEstado('cola'); setAviso(`${fallos.length} captura(s) no se pudieron leer: reintenta o quítalas.`); return }
+    await revisar(actual)
+  }
+
+  async function revisar(items = cola) {
+    let h = hist
+    try { h = await fetchCierresDesde(diasAntes(desdeCierres, 120)); setHist(h) } catch { /* sin histórico: no se deduplica */ }
+    setDiff(construirDiff(items, positions, h))
+    setEstado('diff')
   }
 
   // `override`: broker forzado por José. La deducción de la IA falla (xStation con tema
   // claro se confunde con IBKR) y un broker mal puesto no casa ninguna posición: propone
   // altas de todo y cierres de todo lo del otro broker. Por eso es corregible aquí mismo,
   // sin volver a pasar las capturas por la IA.
-  function construirDiff(extracciones, positions, override) {
+  function construirDiff(items, positions, hist) {
     const updates = [], nuevas = [], liq = {}
     const vistos = new Set()
-    const brokerDe = x => override || x.broker
-    const brokersEnCaptura = new Set(extracciones.map(brokerDe))
-    for (const ex0 of extracciones) {
-      const ex = { ...ex0, broker: brokerDe(ex0) }
+    // Cada captura con su broker (el corregido por José, si lo hay). Las abiertas de un mismo
+    // broker se juntan y se quitan las filas repetidas (capturas solapadas al hacer scroll).
+    const deTipo = t => items.filter(x => x.est === 'ok' && tipoDe(x) === t)
+      .flatMap(x => (x.res.extracciones || []).map(e => ({ ...e, broker: x.broker || e.broker })))
+    const extracciones = juntarAbiertas(deTipo('abiertas'))
+    const brokersEnCaptura = new Set(extracciones.map(x => x.broker))
+    for (const ex of extracciones) {
       if (ex.liquidez != null) liq[ex.broker] = ex.liquidez
       for (const r of ex.posiciones || []) {
         const textos = [r.ticker, r.nombre].filter(Boolean)
@@ -140,11 +206,65 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
         }
       }
     }
+    const cierres = cruzarCierres(deTipo('cerradas'), positions, hist, vistos)
     const faltantes = positions
       .filter(p => brokersEnCaptura.has(p.broker) && !vistos.has(p.id))
-      // cerrar es serio: desmarcado por defecto. Motivo elegible aquí mismo (defecto xSL).
-      .map(p => ({ pos: p, sel: false, motivo: motivoPropuesto(p, Number(p.invested) > 0 && p.current_value != null ? (Number(p.current_value) / Number(p.invested) - 1) * 100 : null) || 'xSL' }))
-    return { updates, nuevas, faltantes, liq }
+      // Sin dato de cierre: desmarcado por defecto (se cerraría con el valor de la última captura).
+      .map(p => ({ pos: p, sel: false, motivo: motivoPropuesto(p, pctLev(p.invested, p.current_value, p.apalancamiento)) || 'xSL' }))
+    return { updates, nuevas, faltantes, cierres, liq }
+  }
+
+  // Cierres leídos del historial del broker → posición abierta que cierran, motivo por SL/TP,
+  // y fuera lo que ya está en el histórico de BTP o es antiguo (el historial enseña meses).
+  function cruzarCierres(extracciones, positions, hist, vistos) {
+    const filas = [], claves = new Set(), usados = new Set()
+    for (const ex of extracciones) {
+      for (const c of ex.cierres || []) {
+        const broker = ex.broker
+        const textos = [c.ticker, c.nombre].filter(Boolean)
+        const canon = resolverSimbolo(textos, simbolos)
+        const t = (canon || c.ticker || c.nombre || '?').toUpperCase()
+        const vars = new Set(textos.flatMap(variantes))
+        const invertido = c.invertido ?? (c.valor_cierre != null && c.gp != null ? c.valor_cierre - c.gp : null)
+        const valorCierre = c.valor_cierre ?? (c.invertido != null && c.gp != null ? c.invertido + c.gp : null)
+        const fecha = /^\d{4}-\d{2}-\d{2}$/.test(c.fecha_cierre || '') ? c.fecha_cierre : ''
+        const clave = `${broker}|${t}|${fecha}|${invertido == null ? '' : Math.round(invertido)}`
+        if (claves.has(clave)) continue  // la misma fila en dos capturas solapadas
+        claves.add(clave)
+        const mismoTicker = tk => { const u = String(tk || '').toUpperCase(); return u === t || vars.has(u) }
+        const casa = tol => h => h.broker === broker && mismoTicker(h.ticker) && (!fecha || h.closed_date === fecha) &&
+          (invertido == null || Math.abs(Number(h.invested) - invertido) <= Math.max(1, Math.abs(invertido) * tol))
+        const ya = hist.some(casa(0.005))
+        // Posición abierta que cierra: mismo broker y ticker; si hay varias (lotes), la de invertido más cercano.
+        const cerca = p => invertido == null ? 0 : Math.abs(Number(p.invested) - invertido)
+        let pos = ya ? null : positions.filter(p => p.broker === broker && !usados.has(p.id) && mismoTicker(p.ticker))
+          .sort((x, y) => cerca(x) - cerca(y))[0] || null
+        let porImporte = false
+        if (!pos && !ya && invertido != null) {
+          // Nombre no reconocido: una abierta del mismo broker que no salga en la captura, con el mismo invertido (±0,5 %).
+          pos = positions.find(p => p.broker === broker && !usados.has(p.id) && !vistos.has(p.id) &&
+            Math.abs(Number(p.invested) - invertido) <= Math.max(0.5, Math.abs(invertido) * 0.005)) || null
+          porImporte = !!pos
+        }
+        if (pos) usados.add(pos.id)
+        const lev = Number(c.apalancamiento) || Number(pos?.apalancamiento) || 1
+        const pct = pctLev(invertido, valorCierre, lev)
+        const reciente = !fecha || fecha >= desdeCierres
+        const dudosa = c.gp != null && invertido != null && valorCierre != null && Math.abs(invertido + c.gp - valorCierre) > 0.05
+        filas.push({
+          sel: !ya && (reciente || !!pos), ya, reciente, dudosa, porImporte,
+          ticker: pos ? pos.ticker : t, broker, textos,
+          invertido, valorCierre, fecha_cierre: fecha,
+          entry_date: /^\d{4}-\d{2}-\d{2}$/.test(c.fecha_apertura || '') ? c.fecha_apertura : (pos?.entry_date || null),
+          apalancamiento: lev,
+          pct: invertido > 0 && valorCierre != null ? (valorCierre / invertido - 1) * 100 : null,
+          motivo: motivoPropuesto(pos, pct) || 'manual',
+          mapear: pos ? String(pos.id) : '',
+        })
+      }
+    }
+    // Primero lo que hay que decidir; lo ya registrado o antiguo, al final.
+    return filas.sort((a, b) => (a.ya || !a.reciente) - (b.ya || !b.reciente) || String(b.fecha_cierre).localeCompare(String(a.fecha_cierre)))
   }
 
   // Antes de mandar al borrador: resolver los mapeos manuales (una "alta" que en
@@ -178,29 +298,79 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
     for (const u of updates) {
       if (u.sel && u.canon && !cerrados.has(u.pos.id)) aprendidos += await aprenderAlias(u.pos.ticker, u.textos) || 0
     }
-    const faltantes = d.faltantes.filter(f => !cerrados.has(f.pos.id))
-    onAplicar({ ...d, updates, nuevas: d.nuevas.filter(n => !n.mapear), faltantes, aprendidos })
-    setEstado('idle'); setAviso(null)
+    // Cierres del historial aceptados: con su posición abierta (si la hay) y los datos reales.
+    const cierres = d.cierres.filter(c => c.sel && !c.ya).map(c => {
+      const pos = c.mapear ? positions.find(p => String(p.id) === String(c.mapear)) || null : null
+      return {
+        pos, motivo: c.motivo,
+        real: {
+          ticker: pos ? pos.ticker : c.ticker, broker: c.broker,
+          entry_date: c.entry_date || pos?.entry_date || null,
+          closed_date: c.fecha_cierre || fechaLocalISO(),
+          invested: c.invertido ?? pos?.invested, closed_value: c.valorCierre,
+          apalancamiento: c.apalancamiento || 1,
+        },
+      }
+    })
+    const sinDatos = cierres.filter(c => c.real.invested == null || c.real.closed_value == null)
+    if (sinDatos.length) {
+      setAviso(`Cierre sin importes legibles: ${sinDatos.map(c => c.real.ticker).join(', ')}. Desmárcalo o vuelve a pasar la captura.`)
+      return
+    }
+    const cubiertas = new Set(cierres.filter(c => c.pos).map(c => c.pos.id))
+    const faltantes = d.faltantes.filter(f => !cerrados.has(f.pos.id) && !cubiertas.has(f.pos.id))
+    onAplicar({ ...d, updates, nuevas: d.nuevas.filter(n => !n.mapear), faltantes, cierres, aprendidos })
+    cola.forEach(x => URL.revokeObjectURL(x.url))
+    setCola([]); setDiff(null); setEstado('cola'); setAviso(null)
   }
 
-  if (estado === 'idle' || estado === 'error') {
+  if (estado === 'cola' || estado === 'leyendo') {
+    const leyendo = estado === 'leyendo'
+    const nPend = cola.filter(x => x.est !== 'ok').length
     return (
       <div className="ingesta card">
         <label className="dropzone"
           onDragOver={e => e.preventDefault()}
-          onDrop={e => { e.preventDefault(); procesar(e.dataTransfer.files) }}>
-          <input type="file" accept="image/*" multiple hidden
-                 onChange={e => procesar(e.target.files)} />
-          <b>Arrastra aquí las capturas de tus brokers</b>
-          <span>(o toca para elegirlas) · eToro / XTB / IBKR · la IA extrae y tú revisas</span>
-          {err && <span className="auth-err">{err}</span>}
+          onDrop={e => { e.preventDefault(); if (!leyendo) anadir(e.dataTransfer.files) }}>
+          <input type="file" accept="image/*" multiple hidden disabled={leyendo}
+                 onChange={e => { anadir(e.target.files); e.target.value = '' }} />
+          <b>{cola.length ? 'Añade más capturas' : 'Arrastra aquí las capturas de tus brokers'}</b>
+          <span>(o toca para elegirlas) · eToro / XTB / IBKR · posiciones abiertas e historial de cerradas, en las tandas que quieras</span>
         </label>
+        {cola.length > 0 && <div className="cola-capturas">
+          {cola.map(x => (
+            <div key={x.id} className={'cap-item est-' + x.est}>
+              <img src={x.url} alt="" />
+              <div className="cap-info">
+                <span className="cap-est">{{ pend: 'pendiente', leyendo: 'leyendo…', ok: '✓ leída', error: '✗ error' }[x.est]}</span>
+                {x.est === 'ok' && <>
+                  <select className="diff-sel" value={tipoDe(x)} title="Qué pantalla es (corrígelo si la IA se equivoca)"
+                    onChange={e => setItem(x.id, { tipo: e.target.value })}>
+                    <option value="abiertas">abiertas</option>
+                    <option value="cerradas">historial</option>
+                  </select>
+                  <select className="diff-sel" value={brokerDe(x)} title="Broker (corrígelo si la IA se equivoca)"
+                    onChange={e => setItem(x.id, { broker: e.target.value })}>
+                    {BROKERS_UI.map(b => <option key={b.id} value={b.id}>{b.label}</option>)}
+                  </select>
+                  <span className="cap-n">{(x.res.extracciones || []).reduce((a, e) => a + (e.posiciones || e.cierres || []).length, 0)} filas</span>
+                </>}
+                {x.err && <span className="auth-err" title={x.err}>{x.err.slice(0, 60)}</span>}
+              </div>
+              {!leyendo && <button className="btn-escape" title="Quitar" onClick={() => quitar(x.id)}>✕</button>}
+            </div>
+          ))}
+        </div>}
+        {aviso && <p className="auth-err">{aviso}</p>}
+        {cola.length > 0 && <div className="modal-botones">
+          {nPend > 0
+            ? <button className="btn-primario" disabled={leyendo} onClick={leerYRevisar}>
+                {leyendo ? 'Leyendo capturas…' : `Leer ${nPend === cola.length ? 'todas' : 'las pendientes'} (${nPend}) y revisar`}</button>
+            : <button className="btn-primario" onClick={() => revisar()}>Revisar</button>}
+          {!leyendo && <button className="btn-escape" onClick={() => { cola.forEach(x => URL.revokeObjectURL(x.url)); setCola([]); setAviso(null) }}>vaciar</button>}
+        </div>}
       </div>
     )
-  }
-
-  if (estado === 'procesando') {
-    return <div className="ingesta card procesando">Leyendo capturas con IA…</div>
   }
 
   // ── Pantalla de revisión ──
@@ -214,20 +384,16 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
   // Candidatas a mapeo: posiciones del mismo broker que no aparecen ya como actualizadas
   const yaVistas = new Set(d.updates.map(u => u.pos.id))
   const candidatas = broker => positions.filter(p => p.broker === broker && !yaVistas.has(p.id))
+  // Una faltante deja de serlo si un alta se mapea a ella o un cierre del historial la cierra.
+  const cubierta = f => d.nuevas.some(n => n.sel && n.mapear === String(f.pos.id)) ||
+    d.cierres.some(c => c.sel && !c.ya && c.mapear === String(f.pos.id))
 
   return (
     <div className="ingesta card num">
       <div className="diff-head">
         <b>Revisión de capturas</b>
-        <label className="diff-pick" title="Si la IA se ha equivocado de broker, corrígelo aquí: se recalcula todo al instante, sin volver a leer las capturas.">
-          capturas de
-          <select className="diff-sel" value={brokerSel}
-            onChange={e => { setBrokerSel(e.target.value); setDiff(construirDiff(crudo, positions, e.target.value)); setAviso(null) }}>
-            <option value="">detectado: {[...new Set((crudo || []).map(x => x.broker))].join(' + ') || '—'}</option>
-            {BROKERS_UI.map(b => <option key={b.id} value={b.id}>{b.label}</option>)}
-          </select>
-        </label>
-        <button className="btn-escape" onClick={() => { setEstado('idle'); setAviso(null) }}>descartar</button>
+        <button className="btn-sec" title="Volver a las capturas para añadir más o corregir broker/tipo; lo leído no se vuelve a leer"
+          onClick={() => { setEstado('cola'); setAviso(null) }}>← capturas ({cola.length})</button>
       </div>
 
       {d.updates.length > 0 && <>
@@ -288,15 +454,58 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar }) {
         ))}
       </>}
 
-      {d.faltantes.length > 0 && <>
-        <h4>No aparecen en la captura — ¿cerradas? ({d.faltantes.filter(f => !d.nuevas.some(n => n.sel && n.mapear === String(f.pos.id))).length})</h4>
-        {d.faltantes.map((f, i) => d.nuevas.some(n => n.sel && n.mapear === String(f.pos.id)) ? null : (
+      {d.cierres.length > 0 && (() => {
+        const vivos = d.cierres.map((c, i) => [c, i]).filter(([c]) => !c.ya && c.reciente)
+        const resto = d.cierres.map((c, i) => [c, i]).filter(([c]) => c.ya || !c.reciente)
+        const fila = ([c, i]) => (
+          <div key={i} className={'diff-row' + (c.ya ? ' apagada' : '')}>
+            <label className="diff-pick">
+              <input type="checkbox" checked={c.sel} disabled={c.ya} onChange={() => toggle('cierres', i)} />
+              <span className="t">{c.ticker} <i>{c.broker}</i></span>
+            </label>
+            <span>{c.fecha_cierre ? c.fecha_cierre.slice(2).split('-').reverse().join('/') : <b className="down">sin fecha</b>}</span>
+            <span>{fmt$(c.invertido)} → <b>{fmt$(c.valorCierre)}</b>
+              {c.pct != null && <b className={c.pct >= 0 ? 'up' : 'down'}> {c.pct >= 0 ? '+' : ''}{c.pct.toFixed(1)} %</b>}</span>
+            {c.ya ? <span className="warn">ya en el histórico</span> : <>
+              <select className="diff-sel" value={c.motivo} title="Motivo del cierre: propuesto comparando la salida con el SL/TP de la posición"
+                onChange={e => setCampo('cierres', i, 'motivo', e.target.value)}>
+                {MOTIVOS_CIERRE.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+              <label className="diff-pick" title="Posición abierta de BTP que cierra. 'Solo histórico' = no estaba en BTP (abierta y cerrada entre cierres).">
+                cierra
+                <select className="diff-sel" value={c.mapear} onChange={e => setCampo('cierres', i, 'mapear', e.target.value)}>
+                  <option value="">solo histórico</option>
+                  {positions.filter(p => p.broker === c.broker).map(p => <option key={p.id} value={p.id}>{p.ticker} · {fmt$(p.invested)}</option>)}
+                </select>
+              </label>
+              {c.porImporte && c.mapear && <span className="warn" title="El nombre no se reconoce, pero el invertido coincide con esta posición">mismo invertido</span>}
+              {c.mapear && (() => { const p = positions.find(x => String(x.id) === c.mapear); return p && c.invertido != null && c.invertido < Number(p.invested) * 0.995
+                ? <span className="warn" title="Se cierra menos de lo invertido: la posición se reduce, no se borra">parcial</span> : null })()}
+              {!c.reciente && <span className="warn">antiguo</span>}
+              {c.dudosa && <span className="down" title="Invertido + G/P no cuadra con el valor de cierre: compruébalo en la captura">⚠ revisar</span>}
+            </>}
+          </div>
+        )
+        return <>
+          <h4>Cierres del historial ({vivos.length})</h4>
+          {vivos.map(fila)}
+          {!vivos.length && <p className="diff-nota">Ningún cierre nuevo en el historial.</p>}
+          {resto.length > 0 && <details className="diff-mas">
+            <summary>{resto.length} ya registrados o anteriores a {desdeCierres.slice(2).split('-').reverse().join('/')}</summary>
+            {resto.map(fila)}
+          </details>}
+        </>
+      })()}
+
+      {d.faltantes.some(f => !cubierta(f)) && <>
+        <h4>No aparecen en la captura ni en el historial — sin dato de cierre ({d.faltantes.filter(f => !cubierta(f)).length})</h4>
+        {d.faltantes.map((f, i) => cubierta(f) ? null : (
           <div key={i} className="diff-row">
             <label className="diff-pick">
               <input type="checkbox" checked={f.sel} onChange={() => toggle('faltantes', i)} />
               <span className="t">{f.pos.ticker} <i>{f.pos.broker}</i></span>
             </label>
-            <span className="down">cerrar · motivo</span>
+            <span className="down" title="Se cerraría con el valor de la última captura: mejor pasar el historial del broker">cerrar con el último valor · motivo</span>
             <select className="diff-sel" value={f.motivo} title="Motivo del cierre (viaja al histórico)"
               onChange={e => setCampo('faltantes', i, 'motivo', e.target.value)}>
               {MOTIVOS_CIERRE.map(m => <option key={m} value={m}>{m}</option>)}
