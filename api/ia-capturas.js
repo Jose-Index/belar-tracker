@@ -47,7 +47,7 @@ Las capturas adjuntas son pantallas de POSICIONES CERRADAS / HISTORIAL de sus br
 Extrae TODOS los cierres visibles.
 
 Devuelve EXCLUSIVAMENTE un JSON con esta forma, sin texto adicional:
-{"extracciones":[{"broker":"etoro|xtb|ibkr","cierres":[{"nombre":"NVIDIA Corp","ticker":"NVDA","invertido":1717.08,"valor_cierre":1925.54,"gp":208.46,"fecha_cierre":"2026-08-11","fecha_apertura":"2026-04-15","precio_apertura":149.75,"precio_cierre":184.95,"motivo_broker":"TP","apalancamiento":1}]}]}
+{"extracciones":[{"broker":"etoro|xtb|ibkr","cierres":[{"nombre":"NVIDIA Corp","ticker":"NVDA","invertido":1717.08,"valor_cierre":1925.54,"gp":208.46,"fecha_cierre":"2026-08-11","fecha_apertura":"2026-04-15","gp_pct":12.14,"precio_apertura":149.75,"precio_cierre":184.95,"motivo_broker":"TP","apalancamiento":1}]}]}
 
 Reglas:
 - broker: dedúcelo por los RÓTULOS de las columnas y por el formato de las filas, no por los colores. eToro: filas "COMPRAR <ticker>" / "VENDER <ticker>" con un distintivo cuadrado "SL"/"TP" a la izquierda, importes en dólares con coma de miles y punto decimal ("$1,000.00"), unidades, precio y fecha+hora de apertura, precio y fecha+hora de cierre, beneficio en $ y en %; también "Historial"/"Cerradas", "Invertido", "Beneficio". Si ves "COMPRAR"/"VENDER" + ticker o el distintivo SL/TP, es eToro aunque no haya cabecera. XTB (xStation) "Historial de órdenes"/"Posiciones cerradas" con "Valor de apertura", "Beneficio neto", "Hora de cierre"; IBKR muestra "Realized P&L", "Trade History". Si no puedes decidirlo, pon el que más se parezca; José lo corrige en pantalla.
@@ -56,6 +56,8 @@ Reglas:
 - Si la pantalla solo da invertido y gp, calcula valor_cierre = invertido + gp. Si solo da valor_cierre y gp, calcula invertido = valor_cierre - gp.
 - fecha_cierre: la fecha REAL de cierre en YYYY-MM-DD (XTB usa dd.mm.aaaa: conviértela). Si no aparece, null: NO pongas la de hoy.
 - fecha_apertura: si aparece, YYYY-MM-DD; si no, null. Con dos fechas por fila, la primera es la de apertura y la segunda la de cierre (eToro: dd/mm/aaaa hh:mm:ss).
+- gp_pct: el % de beneficio/pérdida de la fila, CON SU SIGNO, si aparece (eToro lo muestra en la última columna); si no, null.
+- FECHAS: copia el año tal como aparece, con sus cuatro cifras (las capturas son del año en curso o del anterior); no lo inventes.
 - precio_apertura / precio_cierre: precio por unidad de entrada y de salida si aparecen (pueden ir en peniques o en moneda local: cópialos tal cual, sin convertir); si no, null. NO son el invertido ni el valor de cierre.
 - motivo_broker: "SL" si la fila lleva el distintivo/etiqueta de stop loss, "TP" si lleva el de take profit; si no hay distintivo, null. No lo deduzcas del resultado.
 - ticker: el símbolo si aparece; si solo hay nombre comercial, tu mejor conversión ("NVIDIA Corp"→"NVDA"). CopyTraders de eToro: el nombre del trader tal cual.
