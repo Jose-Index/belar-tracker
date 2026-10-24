@@ -47,15 +47,17 @@ Las capturas adjuntas son pantallas de POSICIONES CERRADAS / HISTORIAL de sus br
 Extrae TODOS los cierres visibles.
 
 Devuelve EXCLUSIVAMENTE un JSON con esta forma, sin texto adicional:
-{"extracciones":[{"broker":"etoro|xtb|ibkr","cierres":[{"nombre":"NVIDIA Corp","ticker":"NVDA","invertido":1717.08,"valor_cierre":1925.54,"gp":208.46,"fecha_cierre":"2026-08-11","fecha_apertura":"2026-04-15","apalancamiento":1}]}]}
+{"extracciones":[{"broker":"etoro|xtb|ibkr","cierres":[{"nombre":"NVIDIA Corp","ticker":"NVDA","invertido":1717.08,"valor_cierre":1925.54,"gp":208.46,"fecha_cierre":"2026-08-11","fecha_apertura":"2026-04-15","precio_apertura":149.75,"precio_cierre":184.95,"motivo_broker":"TP","apalancamiento":1}]}]}
 
 Reglas:
-- broker: dedúcelo por los RÓTULOS de las columnas, no por los colores. eToro "Historial"/"Cerradas" muestra "Invertido", "Beneficio", "Cerrada"; XTB (xStation) "Historial de órdenes"/"Posiciones cerradas" con "Valor de apertura", "Beneficio neto", "Hora de cierre"; IBKR muestra "Realized P&L", "Trade History". Si no puedes decidirlo, pon el que más se parezca; José lo corrige en pantalla.
+- broker: dedúcelo por los RÓTULOS de las columnas y por el formato de las filas, no por los colores. eToro: filas "COMPRAR <ticker>" / "VENDER <ticker>" con un distintivo cuadrado "SL"/"TP" a la izquierda, importes en dólares con coma de miles y punto decimal ("$1,000.00"), unidades, precio y fecha+hora de apertura, precio y fecha+hora de cierre, beneficio en $ y en %; también "Historial"/"Cerradas", "Invertido", "Beneficio". Si ves "COMPRAR"/"VENDER" + ticker o el distintivo SL/TP, es eToro aunque no haya cabecera. XTB (xStation) "Historial de órdenes"/"Posiciones cerradas" con "Valor de apertura", "Beneficio neto", "Hora de cierre"; IBKR muestra "Realized P&L", "Trade History". Si no puedes decidirlo, pon el que más se parezca; José lo corrige en pantalla.
 - invertido = lo que costó abrir; valor_cierre = el importe al cerrar (invertido + beneficio realizado). En USD, punto decimal.
 - gp = beneficio/pérdida REALIZADA con su signo si está visible; si no, null. Debe cumplirse invertido + gp = valor_cierre; si no cuadra, revisa qué columna es cada cosa.
 - Si la pantalla solo da invertido y gp, calcula valor_cierre = invertido + gp. Si solo da valor_cierre y gp, calcula invertido = valor_cierre - gp.
 - fecha_cierre: la fecha REAL de cierre en YYYY-MM-DD (XTB usa dd.mm.aaaa: conviértela). Si no aparece, null: NO pongas la de hoy.
-- fecha_apertura: si aparece, YYYY-MM-DD; si no, null.
+- fecha_apertura: si aparece, YYYY-MM-DD; si no, null. Con dos fechas por fila, la primera es la de apertura y la segunda la de cierre (eToro: dd/mm/aaaa hh:mm:ss).
+- precio_apertura / precio_cierre: precio por unidad de entrada y de salida si aparecen (pueden ir en peniques o en moneda local: cópialos tal cual, sin convertir); si no, null. NO son el invertido ni el valor de cierre.
+- motivo_broker: "SL" si la fila lleva el distintivo/etiqueta de stop loss, "TP" si lleva el de take profit; si no hay distintivo, null. No lo deduzcas del resultado.
 - ticker: el símbolo si aparece; si solo hay nombre comercial, tu mejor conversión ("NVIDIA Corp"→"NVDA"). CopyTraders de eToro: el nombre del trader tal cual.
 - apalancamiento: x1 si no se indica.
 - AGREGACIÓN: varias sublíneas/lotes del mismo instrumento cerrados el mismo día = UN cierre con los importes totales. Cierres del mismo instrumento en fechas distintas = cierres separados.
@@ -67,6 +69,7 @@ const PROMPT_AUTO = `Eres el extractor de datos de BTP (Belar Tracker Pro). Reci
 PASO 1 · Decide qué pantalla es:
 - "abiertas": cartera / posiciones abiertas (valor actual, G/P no realizada, "Mi Portafolio", "Posiciones abiertas", "Positions", "Portfolio").
 - "cerradas": historial / posiciones cerradas / operaciones cerradas (fecha u hora de CIERRE, beneficio REALIZADO, "Historial", "Cerradas", "Posiciones cerradas", "Historial de órdenes", "Realized P&L", "Trade History").
+La captura puede venir RECORTADA, sin cabecera de columnas. Es "cerradas" si las filas llevan DOS fechas (apertura y cierre), un precio de cierre, o un distintivo "SL"/"TP" de cierre (eToro). Una cartera abierta lleva una sola fecha (o ninguna) por fila.
 PASO 2 · Extrae con las reglas del tipo elegido (abajo van las dos). Responde EXCLUSIVAMENTE un JSON:
 - si es "abiertas": {"tipo":"abiertas","extracciones":[...formato de ABIERTAS...]}
 - si es "cerradas": {"tipo":"cerradas","extracciones":[...formato de CERRADAS...]}
