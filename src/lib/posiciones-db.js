@@ -69,6 +69,24 @@ export async function altaPosicion(p) {
 
 // Borrar = cerrar: registro en histórico ANTES de borrar. Nunca delete seco.
 // opts (opcional): { closed_date, closed_value } — por defecto hoy (hora de Madrid) y el valor actual.
+// Motivos de cierre válidos en el histórico (close_reason es texto libre en la base).
+export const MOTIVOS_CIERRE = ['xSL', 'xTP', 'manual', 'escalonada']
+
+// Propone el motivo de un cierre a partir del % realizado frente a los niveles
+// SL/TP de la posición (sobre entry_price). Tolerancia 1,5 pp por divisa,
+// comisiones y deslizamiento. null si no hay niveles o no casa con ninguno.
+export function motivoPropuesto(pos, pct) {
+  const e = Number(pos?.entry_price), x = Number(pct)
+  if (!(e > 0) || !Number.isFinite(x)) return null
+  const lv = []
+  if (Number(pos.tp_price) > 0) lv.push(['xTP', (Number(pos.tp_price) / e - 1) * 100])
+  if (Number(pos.sl_price) > 0) lv.push(['xSL', (Number(pos.sl_price) / e - 1) * 100])
+  const ok = lv.filter(([m, n]) => m === 'xTP' ? x >= n - 1.5 : x <= n + 1.5)
+  if (!ok.length) return null
+  ok.sort((a, b) => Math.abs(x - a[1]) - Math.abs(x - b[1]))
+  return ok[0][0]
+}
+
 export async function cerrarPosicion(p, motivo, opts = {}) {
   const inv = p.invested
   const cv = opts.closed_value != null && Number.isFinite(Number(opts.closed_value)) ? Number(opts.closed_value) : p.current_value
