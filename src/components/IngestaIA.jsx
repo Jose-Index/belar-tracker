@@ -22,13 +22,42 @@ function juntarAbiertas(exs) {
     const acc = por.get(e.broker) || { broker: e.broker, liquidez: null, posiciones: [], _k: new Set() }
     if (e.liquidez != null) acc.liquidez = e.liquidez
     for (const r of e.posiciones || []) {
-      const k = `${String(r.ticker || r.nombre || '').toUpperCase()}|${r.invertido ?? ''}|${r.valor ?? ''}`
+      // Misma fila en dos capturas: mismo ticker e invertido (el valor puede variar unos céntimos entre capturas).
+      const k = `${String(r.ticker || r.nombre || '').toUpperCase()}|${r.invertido ?? r.valor ?? ''}`
       if (acc._k.has(k)) continue
       acc._k.add(k); acc.posiciones.push(r)
     }
     por.set(e.broker, acc)
   }
+  // Fila agrupada + lotes desplegados del mismo valor (XTB, 24/10/2026: una captura con "BTC" total y otra con
+  // sus dos lotes): la agrupada sobra si su invertido es la suma de los demás; los lotes mandan.
+  for (const acc of por.values()) {
+    const grupos = new Map()
+    for (const r of acc.posiciones) {
+      const t = String(r.ticker || r.nombre || '').toUpperCase()
+      grupos.set(t, [...(grupos.get(t) || []), r])
+    }
+    const fuera = new Set()
+    for (const filas of grupos.values()) {
+      if (filas.length < 3) continue
+      for (const r of filas) {
+        const resto = filas.filter(x => x !== r && !fuera.has(x))
+        const suma = resto.reduce((a, x) => a + (Number(x.invertido) || 0), 0)
+        if (r.invertido != null && resto.length >= 2 && Math.abs(Number(r.invertido) - suma) <= Math.max(1, suma * 0.005)) fuera.add(r)
+      }
+    }
+    acc.posiciones = acc.posiciones.filter(r => !fuera.has(r))
+  }
   return [...por.values()].map(({ _k, ...x }) => x)
+}
+
+// Fecha leída con el año mal (24/10/2026: "2024" donde ponía 2026): si cae fuera de [desde, hoy], se prueba
+// el mismo día y mes en este año y en el anterior.
+function arreglarAnio(f, desde, hoy) {
+  if (!f || (f >= desde && f <= hoy)) return f
+  const y = Number(hoy.slice(0, 4))
+  for (const a of [y, y - 1]) { const g = a + f.slice(4); if (g >= desde && g <= hoy) return g }
+  return f
 }
 
 const BROKERS_UI = [{ id: 'etoro', label: 'eToro' }, { id: 'xtb', label: 'XTB' }, { id: 'ibkr', label: 'IBKR' }]
@@ -153,7 +182,7 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
           }
         }
         const pos = (mismos.length > 1 ? [...mismos].sort((x, y) => cerca(x) - cerca(y))[0] : mismos[0])
-          || positions.find(p => p.broker === ex.broker && p.ticker.toUpperCase() === t)
+          || positions.find(p => p.broker === ex.broker && p.ticker.toUpperCase() === t && !vistos.has(p.id))
           || positions.find(p => p.broker === ex.broker && !canon && vars.has(p.ticker.toUpperCase()))
           || positions.find(p => p.broker === ex.broker && !canon && (
             (r.nombre && r.nombre.toUpperCase().includes(p.ticker.toUpperCase())) ||
@@ -172,6 +201,7 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
         const reconcilia = gp == null || invertido == null || valor == null ||
           Math.abs(invertido + gp - valor) <= 0.05 || Math.abs(invertido - gp - valor) <= 0.05
 
+        if (pos && vistos.has(pos.id)) continue  // nunca dos actualizaciones para la misma posición
         if (pos) {
           vistos.add(pos.id)
           const invBD = Number(pos.invested)
@@ -226,12 +256,23 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
         const t = (canon || c.ticker || c.nombre || '?').toUpperCase()
         const vars = new Set(textos.flatMap(variantes))
         const invertido = c.invertido ?? (c.valor_cierre != null && c.gp != null ? c.valor_cierre - c.gp : null)
-        const valorCierre = c.valor_cierre ?? (c.invertido != null && c.gp != null ? c.invertido + c.gp : null)
+        let valorCierre = c.valor_cierre ?? (c.invertido != null && c.gp != null ? c.invertido + c.gp : null)
+        // El % de la fila (columna del broker) desempata una cifra mal leída (24/10/2026: SSL +194,40 leído 154,40):
+        // si invertido × (1 + %) no cuadra con el valor leído, manda el %.
+        const pctB = Number(c.gp_pct)
+        let corregidoPct = false
+        if (invertido > 0 && Number.isFinite(pctB) && c.gp_pct != null) {
+          const vPct = Math.round(invertido * (1 + pctB / 100) * 100) / 100
+          if (valorCierre == null || Math.abs(vPct - valorCierre) > Math.max(0.3, invertido * 0.0008)) { valorCierre = vPct; corregidoPct = true }
+        }
         const esFecha = x => /^\d{4}-\d{2}-\d{2}$/.test(x || '')
         let fecha = esFecha(c.fecha_cierre) ? c.fecha_cierre : ''
         let fApert = esFecha(c.fecha_apertura) ? c.fecha_apertura : ''
         // Fechas cruzadas (la IA tomó la de apertura por la de cierre, 24/10/2026): el cierre es la posterior.
         if (fecha && fApert && fecha < fApert) { const tmp = fecha; fecha = fApert; fApert = tmp }
+        const hoy = fechaLocalISO()
+        fecha = arreglarAnio(fecha, diasAntes(hoy, 400), hoy)
+        if (fApert) fApert = arreglarAnio(fApert, diasAntes(hoy, 3650), fecha || hoy)
         const clave = `${broker}|${t}|${fecha}|${invertido == null ? '' : Math.round(invertido)}`
         if (claves.has(clave)) continue  // la misma fila en dos capturas solapadas
         claves.add(clave)
@@ -273,7 +314,7 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
         const dudosa = (c.gp != null && invertido != null && valorCierre != null && Math.abs(invertido + c.gp - valorCierre) > 0.05) ||
           (!!pos && !!fecha && !!pos.entry_date && fecha < pos.entry_date)
         filas.push({
-          sel: !ya && (reciente || !!pos), ya, reciente, dudosa, porImporte, brokerCorregido, motivoB,
+          sel: !ya && (reciente || !!pos), ya, reciente, dudosa: dudosa && !corregidoPct, porImporte, brokerCorregido, motivoB, corregidoPct,
           ticker: pos ? pos.ticker : t, broker: brokerF, textos,
           invertido, valorCierre, fecha_cierre: fecha,
           entry_date: fApert || pos?.entry_date || null,
@@ -504,6 +545,7 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
               </label>
               {c.porImporte && c.mapear && <span className="warn" title="El nombre no se reconoce, pero el invertido coincide con esta posición">mismo invertido</span>}
               {c.brokerCorregido && <span className="warn" title="La captura se leyó como de otro broker; se ha casado con la posición de este por ticker e invertido">broker corregido</span>}
+              {c.corregidoPct && <span className="warn" title="El importe leído no cuadraba con el % de la fila: se ha recalculado con el %">importe por %</span>}
               {c.motivoB && <span className="ok-cap" title="Motivo marcado por el propio broker en la captura">✓{c.motivoB === 'xTP' ? 'TP' : 'SL'} broker</span>}
               {c.mapear && (() => { const p = positions.find(x => String(x.id) === c.mapear); return p && c.invertido != null && c.invertido < Number(p.invested) * 0.995
                 ? <span className="warn" title="Se cierra menos de lo invertido: la posición se reduce, no se borra">parcial</span> : null })()}
