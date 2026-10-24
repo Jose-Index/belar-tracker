@@ -88,3 +88,8 @@ BROKER A-Z / ENTRADA / CLASE / ESTADO (orden de urgencia) / %semana / %día / PE
 - Regla de José: cualquier activo con más de una entrada va en BTP con un apunte por entrada (fecha, precio, invertido propios), igual que BTC en XTB. MU en XTB separado el 04/10: lote 27/07 (0,92 acc. a 873,87, 803,96 $) y lote 04/08 (0,1006 acc. a 894,65, 90,00 $).
 - Ingesta: si la captura trae los lotes desplegados, cada fila va a la posición con el invertido más cercano. Si los trae agrupados en una sola fila cuyo invertido es la suma de los lotes (±0,5 %), el valor se reparte entre ellos por número de acciones (invertido / entry_price; sin entry_price, por invertido) y la revisión lo marca "lote · reparto de N". Por eso cada lote debe llevar entry_price.
 - Cierre de semana: position_snapshots tiene clave (week_end, ticker, broker); los lotes del mismo valor y bróker se suman en una fila (arreglo del error "ON CONFLICT DO UPDATE command cannot affect row a second time", 04/10/2026).
+
+## Motivo de cierre xTP en las ingestas (24/10/2026)
+- Lista única `MOTIVOS_CIERRE` en `src/lib/posiciones-db.js`: xSL, xTP, manual, escalonada. La usan la ingesta de posiciones (faltantes) y la ingesta de cierres, que antes no ofrecían xTP; el borrador de Posiciones ya lo tenía (lista propia con los mismos valores).
+- `motivoPropuesto(pos, pct)`: propone el motivo comparando el % realizado con `sl_price` / `tp_price` sobre `entry_price` (tolerancia 1,5 pp por divisa, comisiones y deslizamiento; si casan los dos, el más cercano). Sin niveles o sin casar: ingesta de cierres → manual; faltantes → xSL (con el último valor de captura). Siempre editable en la revisión.
+- `close_reason` es texto libre en la base: xTP no necesita DDL.
