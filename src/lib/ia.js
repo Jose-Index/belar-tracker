@@ -47,6 +47,21 @@ export async function extraerCierres(files) {
   return j.extracciones || []
 }
 
+// Ingesta única (24/10/2026): UNA captura por llamada; la IA dice si es de posiciones
+// abiertas o de historial. Devuelve { tipo: 'abiertas'|'cerradas', extracciones }.
+export async function extraerAuto(file, conocidas = []) {
+  const images = [await leerImagen(file)]
+  const r = await fetch('/api/ia-capturas', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ images, modo: 'auto', conocidas }),
+  })
+  const txt = await r.text()
+  let j
+  try { j = JSON.parse(txt) } catch { throw new Error(r.ok ? 'respuesta no válida' : `HTTP ${r.status}`) }
+  if (j.error) throw new Error(j.error)
+  return { tipo: j.tipo === 'cerradas' ? 'cerradas' : 'abiertas', extracciones: j.extracciones || [] }
+}
+
 // ─── Calendario: solo lectura/purga. La regeneración IA de 24h y el análisis IA
 // se retiraron el 13/08/2026 (coste de Console); la revisión la hace Belar en sesión.
 // Universo vigilado del calendario: posiciones ABIERTAS + repositorio (ENTRAR YA / RADAR).
