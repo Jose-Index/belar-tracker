@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   fetchPosiciones, updatePosicion, altaPosicion, cerrarPosicion,
   guardarLiquidez, guardarBtcWallet, guardarAportesWallet, guardarOrdenBloques, fetchSnapsBloques, cerrarSemana, fetchNotas, addNota, borrarNotaDB, fetchSeriePosicion,
-  fetchCierresBloques, fechaLocalISO,
+  fetchCierresBloques, fechaLocalISO, registrarCierre,
 } from '../lib/posiciones-db'
 import { precioEnUnidadNivel, distanciaSLpct } from '../lib/riesgo'
 import { exportBackup } from '../lib/backup'
@@ -56,6 +56,24 @@ const esNumeroInvalido = v => v != null && v !== '' && !Number.isFinite(num(v))
 async function loaderPosiciones() {
   const [data, simbolos, eventos, snapsBloque, cierresBloque] = await Promise.all([fetchPosiciones(), getSimbolos(), eventosProximos(), fetchSnapsBloques().catch(() => []), fetchCierresBloques().catch(() => [])])
   return { ...data, simbolos, eventos, snapsBloque, cierresBloque }
+}
+
+// Cierre pendiente (24/10/2026): { pos, motivo } cierra con el valor de la última captura;
+// { pos|null, motivo, real } sella los datos REALES leídos del historial del broker.
+const etiquetaCierre = c => {
+  const t = c.pos?.ticker || c.real?.ticker || '?', b = c.pos?.broker || c.real?.broker || ''
+  if (!c.real) return `${t} (${b}) — motivo ${c.motivo || 'manual'} — con el último valor`
+  const pct = c.real.invested > 0 ? (c.real.closed_value / c.real.invested - 1) * 100 : null
+  return `${t} (${b}) — ${c.motivo} — ${c.real.closed_date}${pct != null ? ` — ${pct >= 0 ? '+' : ''}${pct.toFixed(1)} %` : ''}${c.pos ? '' : ' — solo histórico'}`
+}
+const claveCierre = c => c.pos ? `p${c.pos.id}` : `h|${c.real.broker}|${c.real.ticker}|${c.real.closed_date}|${Math.round(c.real.invested)}`
+async function ejecutarCierre(c) {
+  if (!c.real) return cerrarPosicion(c.pos, c.motivo || 'manual')
+  return registrarCierre({
+    ...c.real, motivo: c.motivo,
+    clase: c.pos?.clase || null, fuente: c.pos?.fuente || null, bloque: c.pos?.bloque || null,
+    posId: c.pos?.id || null, pos: c.pos || null,
+  })
 }
 
 export default function Posiciones({ embed = false, onCambio, seleccionInicial = null, wallet: walletProp = null }) {
@@ -272,7 +290,7 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
     // Los cierres son el único paso irreversible: confirmación explícita con nombres.
     if (pendCierres.length && !window.confirm(
       `Se van a CERRAR ${pendCierres.length} posición(es) y registrar en el histórico:\n\n` +
-      pendCierres.map(c => `· ${c.pos.ticker} (${c.pos.broker}) — motivo ${c.motivo}`).join('\n') +
+      pendCierres.map(c => `· ${etiquetaCierre(c)}`).join('\n') +
       '\n\n¿Confirmas?')) return
 
     setBusy(true)
@@ -303,7 +321,7 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
         ingest_badge: 'NEW', ingest_source: `captura ${n.broker} ${n.stamp}`,
       })
     }
-    for (const c of pendCierres) await cerrarPosicion(c.pos, c.motivo)
+    for (const c of pendCierres) await ejecutarCierre(c)
     await guardarLiquidez(liqNum)
     await guardarBtcWallet(btcNum)
     // 2. recargar y commit
@@ -340,10 +358,10 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
   // no pide liquidez: el registro semanal canónico sigue siendo CERRAR SEMANA.
   async function aplicarDirecto(d) {
     const stamp = new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-    const cierres = d.faltantes.filter(f => f.sel)
+    const cierres = [...(d.cierres || []), ...d.faltantes.filter(f => f.sel).map(f => ({ pos: f.pos, motivo: f.motivo }))]
     if (cierres.length && !window.confirm(
       `Se van a CERRAR ${cierres.length} posición(es) y registrar en el histórico:\n\n` +
-      cierres.map(c => `· ${c.pos.ticker} (${c.pos.broker}) — motivo ${c.motivo || 'manual'}`).join('\n') +
+      cierres.map(c => `· ${etiquetaCierre(c)}`).join('\n') +
       '\n\n¿Confirmas?')) return
     setBusy(true)
     let nUpd = 0, nAltas = 0
@@ -356,7 +374,8 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
       patch.ingest_badge = 'UPD'; patch.ingest_source = `captura ${u.pos.broker} ${stamp}`
       await updatePosicion(u.pos.id, patch); nUpd++
     }
-    for (const c of cierres) await cerrarPosicion(c.pos, c.motivo || 'manual')
+    // Primero los valores, después los cierres (un cierre parcial reduce la posición ya actualizada).
+    for (const c of cierres) await ejecutarCierre(c)
     // Liquidez leída en la captura (01/10/2026: antes se descartaba entre cierres de semana y el total no cuadraba).
     const liqLeida = Object.fromEntries(Object.entries(d.liq || {}).filter(([, v]) => v != null && Number.isFinite(Number(v))).map(([k, v]) => [k, Number(v)]))
     if (Object.keys(liqLeida).length) await guardarLiquidez({ ...(raw.liquidez || {}), ...liqLeida })
@@ -398,9 +417,11 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
     setDraft(nuevoDraft)
 
     // Cierres pendientes: posición + motivo elegido. Se ejecutan en el commit.
+    // Los del historial llevan fecha e importe reales y sustituyen a un cierre "con el último valor".
     setPendCierres(prev => {
-      const map = new Map(prev.map(x => [x.pos.id, x]))
-      for (const f of d.faltantes) if (f.sel) map.set(f.pos.id, { pos: f.pos, motivo: f.motivo || 'xSL' })
+      const map = new Map(prev.map(x => [claveCierre(x), x]))
+      for (const f of d.faltantes) if (f.sel) map.set(claveCierre(f), { pos: f.pos, motivo: f.motivo || 'xSL' })
+      for (const c of d.cierres || []) map.set(claveCierre(c), c)
       return [...map.values()]
     })
 
@@ -480,12 +501,12 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
 
         {msg && <p className="pos-msg num">{msg}</p>}
 
-        {cierre && <IngestaIA positions={raw.positions} simbolos={simbolos} onAplicar={aplicarDiff} />}
+        {cierre && <IngestaIA positions={raw.positions} simbolos={simbolos} desde={raw.lastClose?.date} onAplicar={aplicarDiff} />}
 
         {!cierre && ingesta && (
           <>
             <p className="pos-msg num">Actualización entre semana: se aplica al aceptar la revisión, sin sellar snapshot ni tocar el último cierre.</p>
-            <IngestaIA positions={raw.positions} simbolos={simbolos} onAplicar={aplicarDirecto} />
+            <IngestaIA positions={raw.positions} simbolos={simbolos} desde={raw.lastClose?.date} onAplicar={aplicarDirecto} />
           </>
         )}
 
@@ -511,7 +532,10 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
             {pendCierres.map((c, i) => (
               <div key={`c${i}`} className="pend-row">
                 <span className="badge-close">CIERRE</span>
-                <span className="t">{c.pos.ticker} <i>{c.pos.broker}</i></span>
+                <span className="t">{c.pos?.ticker || c.real?.ticker} <i>{c.pos?.broker || c.real?.broker}</i></span>
+                {c.real
+                  ? <span className="num" title="Datos reales del historial del broker">{c.real.closed_date.slice(2).split('-').reverse().join('/')} · ${fmt$(c.real.invested)} → ${fmt$(c.real.closed_value)}{c.pos ? '' : ' · solo histórico'}</span>
+                  : <span className="pend-nota">con el último valor</span>}
                 <label>motivo
                   <select value={c.motivo}
                     onChange={e => setPendCierres(p => p.map((x, j) => j === i ? { ...x, motivo: e.target.value } : x))}>
