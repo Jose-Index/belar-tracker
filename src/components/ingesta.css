@@ -36,3 +36,17 @@
 /* Intercambio manual de invertido/valor */
 .ingesta .btn-permutar { cursor: pointer; opacity: .35; padding: 0 .25rem; user-select: none; }
 .ingesta .btn-permutar:hover { opacity: 1; color: var(--azul-belar); }
+
+/* Ingesta única (24/10/2026): cola de capturas */
+.cola-capturas { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 12px 0; }
+.cap-item { position: relative; border: 1px solid var(--linea, #ddd); border-radius: 8px; overflow: hidden; background: var(--papel); }
+.cap-item img { display: block; width: 100%; height: 90px; object-fit: cover; object-position: top; }
+.cap-item .cap-info { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding: 6px; font-size: 11.5px; }
+.cap-item .cap-est { font-weight: 600; width: 100%; }
+.cap-item.est-ok .cap-est { color: var(--verde, #2e7d32); }
+.cap-item.est-error .cap-est { color: var(--rojo, #c62828); }
+.cap-item.est-leyendo { opacity: .7; }
+.cap-item .cap-n { color: var(--texto-neutro); }
+.cap-item .btn-escape { position: absolute; top: 4px; right: 4px; background: rgba(255,255,255,.85); }
+.diff-row.apagada { opacity: .55; }
+.diff-mas summary { cursor: pointer; font-size: 12px; color: var(--texto-neutro); margin: 6px 0; }
