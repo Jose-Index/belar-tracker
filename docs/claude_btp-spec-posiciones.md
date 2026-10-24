@@ -103,3 +103,7 @@ Sustituye a "una pasada por broker". Vive en MODO CIERRE SEMANA (al borrador) y 
 - **Sin dato de cierre**: abiertas de un broker con captura de posiciones que no salen ni en ella ni en el historial. Desmarcadas: si se marcan, se cierran con el valor de la última captura.
 - **Sellado**: `pendCierres` admite `{ pos, motivo }` (valor de la última captura, `cerrarPosicion`) y `{ pos|null, motivo, real }` (datos del broker, `registrarCierre`). Un cierre del historial sustituye a uno "con el último valor" de la misma posición.
 - La ingesta de cierres de Histórico (`IngestaCierres`) se mantiene para correcciones a posteriori.
+- Robustez (24/10/2026 tarde, primer uso real: historial de eToro recortado sin cabecera, leído como XTB y con la fecha de apertura por la de cierre → 3 cierres plegados como "anteriores"):
+  · Prompt: sin cabecera, dos fechas por fila / precio de cierre / distintivo SL/TP = historial; "COMPRAR/VENDER <ticker>" + "$1,000.00" = eToro; la primera fecha es la apertura. Lee además `precio_apertura`, `precio_cierre` y `motivo_broker` (SL/TP del distintivo).
+  · Cruce: broker corregido si en el leído no está la posición y en otro sí (mismo ticker e invertido ±0,5 %); fechas cruzadas se intercambian; el motivo del distintivo manda; si no, % de precio (precios de la fila) o % de importe ÷ apalancamiento.
+  · Todo cierre que casa con una abierta va arriba, sea cual sea la fecha leída ("fecha antigua" como aviso). Fecha de cierre anterior a la apertura de la posición → ⚠ revisar.
