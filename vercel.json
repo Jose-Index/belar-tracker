@@ -7,6 +7,7 @@
     "api/universo-refresh.js": { "maxDuration": 60 },
     "api/universo-series.js": { "maxDuration": 30 },
     "api/vigia.js": { "maxDuration": 30 },
+    "api/ia-capturas.js": { "maxDuration": 60 },
     "api/activos.js": { "maxDuration": 60 },
     "api/correlacion.js": { "maxDuration": 60 }
   },
