@@ -501,12 +501,12 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
 
         {msg && <p className="pos-msg num">{msg}</p>}
 
-        {cierre && <IngestaIA positions={raw.positions} simbolos={simbolos} desde={raw.lastClose?.date} onAplicar={aplicarDiff} />}
+        {cierre && <IngestaIA positions={raw.positions} simbolos={simbolos} desde={raw.lastClose?.date} liquidez={liqDraft || raw.liquidez} onAplicar={aplicarDiff} />}
 
         {!cierre && ingesta && (
           <>
             <p className="pos-msg num">Actualización entre semana: se aplica al aceptar la revisión, sin sellar snapshot ni tocar el último cierre.</p>
-            <IngestaIA positions={raw.positions} simbolos={simbolos} desde={raw.lastClose?.date} onAplicar={aplicarDirecto} />
+            <IngestaIA positions={raw.positions} simbolos={simbolos} desde={raw.lastClose?.date} liquidez={raw.liquidez} onAplicar={aplicarDirecto} />
           </>
         )}
 
