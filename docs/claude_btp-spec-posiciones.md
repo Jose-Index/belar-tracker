@@ -120,3 +120,13 @@ Incidente: el cierre del 24/10 dejó BTP en 24.101,81 $ frente a 25.638,20 $ rea
 - **Cuadre** arriba de la revisión, por bróker: lo que BTP tendrá al aceptar (actualizaciones + altas + abiertas que se quedan + liquidez leída o la actual) frente al `total_cuenta` de la captura; ✓ si la diferencia es ≤ máx(5 $; 0,5 %). Aviso "liquidez no leída" si la captura de abiertas no trae saldo.
 - Cierres: fecha editable en cada fila; `fechaDudosa` (sin fecha, igual a la apertura leída, ≤ apertura de la posición o anterior al último cierre sellado) bloquea el aplicar hasta corregirla o pulsar "confirmar". Cierre ya sellado con OTRA fecha (mismo bróker, ticker, invertido ±0,5 % y valor de cierre ±1 %): no se duplica; se propone corregir la fecha (`corregirFechaCierre` en `posiciones-db.js`, se escribe al aplicar).
 - Banco de prueba con las capturas reales del 25/10: eToro 10.730,74 = captura; XTB 8.479,65 = captura; IBKR 5.235,54 frente a 5.235,52.
+
+## BTP pide lo que falta antes de aplicar (25/10/2026)
+- La revisión lleva una lista "Falta información para aplicar" y el botón queda desactivado ("Faltan N dato(s)") hasta completarla. Entra en la lista:
+  · posición del bróker capturado que no sale ni abierta ni en el historial: hay que decir "sigue abierta (no salía en la captura)" o "se cerró" con fecha, importe recibido y motivo (nunca se cierra sola con el último valor);
+  · saldo disponible no leído: se escribe en la fila del cuadre;
+  · bróker que no cuadra con el total de la captura: revisar o marcar "acepto la diferencia";
+  · valor dudoso: comprobar y pulsar "⚠ revisar" (pasa a "✓ revisado");
+  · alta sin fecha de apertura; cierre con fecha dudosa o sin importes.
+- CERRAR SEMANA: si alguna posición no ha recibido captura ni valor nuevo (ni se cierra), lo lista por bróker y pide pasar la captura que falta antes de sellar con el valor de la semana pasada.
+- Toda la tarjeta de la ingesta acepta capturas (también sobre la cola y en la revisión, que vuelve a la cola); soltar fuera no abre la imagen.
