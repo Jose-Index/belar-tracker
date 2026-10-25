@@ -92,7 +92,7 @@ BROKER A-Z / ENTRADA / CLASE / ESTADO (orden de urgencia) / %semana / %día / PE
 ## Motivo de cierre xTP en las ingestas (24/10/2026)
 - Lista única `MOTIVOS_CIERRE` en `src/lib/posiciones-db.js`: xSL, xTP, manual, escalonada. La usan la ingesta de posiciones (faltantes) y la ingesta de cierres, que antes no ofrecían xTP; el borrador de Posiciones ya lo tenía (lista propia con los mismos valores).
 - `motivoPropuesto(pos, pct)`: propone el motivo comparando el % realizado con `sl_price` / `tp_price` sobre `entry_price` (tolerancia 1,5 pp por divisa, comisiones y deslizamiento; si casan los dos, el más cercano). Sin niveles o sin casar: ingesta de cierres → manual; faltantes → xSL (con el último valor de captura). Siempre editable en la revisión.
-- `close_reason` es texto libre en la base: xTP no necesita DDL.
+- `close_reason` tiene un CHECK en la base (`position_history_close_reason_check`): xSL, xTP, manual, escalonada. xTP se añadió por DDL el 25/10/2026 (hasta entonces el cierre de SSL por TP se rechazaba en silencio). Un motivo nuevo exige DDL; desde el 25/10 un cierre rechazado para el sellado y avisa.
 
 ## Ingesta única de capturas (24/10/2026)
 Sustituye a "una pasada por broker". Vive en MODO CIERRE SEMANA (al borrador) y en ACTUALIZAR POR CAPTURA (directo).
