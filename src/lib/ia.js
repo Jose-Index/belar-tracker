@@ -1,19 +1,20 @@
 import { supabase } from './supabase'
 
 // ─── Ingesta de capturas ───
-// Reescala en el navegador (máx 1800px) y comprime a JPEG: evita el límite de
-// 4.5MB por petición de Vercel y estandariza lo que ve el extractor.
+// Reescala en el navegador al máximo que el modelo de alta resolución ve sin volver a reducir
+// (2576 px de lado largo y 4784 parches de 28×28, 25/10/2026; antes 1800 px de ancho para un
+// modelo que lo dejaba en ~1000) y comprime a JPEG: evita el límite de 4.5MB por petición de Vercel.
 export function leerImagen(file) {
   return new Promise((ok, ko) => {
     const img = new Image()
     img.onload = () => {
-      const MAX = 1800
-      const esc = Math.min(1, MAX / img.width)
+      const w = img.width, h = img.height
+      const esc = Math.min(1, 2576 / Math.max(w, h), Math.sqrt(4784 * 784 / (w * h)) * 0.97)
       const c = document.createElement('canvas')
       c.width = Math.round(img.width * esc)
       c.height = Math.round(img.height * esc)
       c.getContext('2d').drawImage(img, 0, 0, c.width, c.height)
-      ok({ data: c.toDataURL('image/jpeg', 0.85).split(',')[1], media_type: 'image/jpeg' })
+      ok({ data: c.toDataURL('image/jpeg', 0.9).split(',')[1], media_type: 'image/jpeg' })
       URL.revokeObjectURL(img.src)
     }
     img.onerror = ko
@@ -59,7 +60,7 @@ export async function extraerAuto(file, conocidas = []) {
   let j
   try { j = JSON.parse(txt) } catch { throw new Error(r.ok ? 'respuesta no válida' : `HTTP ${r.status}`) }
   if (j.error) throw new Error(j.error)
-  return { tipo: j.tipo === 'cerradas' ? 'cerradas' : 'abiertas', extracciones: j.extracciones || [] }
+  return { tipo: j.tipo === 'cerradas' ? 'cerradas' : 'abiertas', extracciones: j.extracciones || [], modelo: j._modelo || null }
 }
 
 // ─── Calendario: solo lectura/purga. La regeneración IA de 24h y el análisis IA
