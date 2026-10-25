@@ -284,6 +284,15 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
     const liqNum = Object.fromEntries(Object.entries(liqDraft || {}).map(([k, v]) => [k, num(v) ?? 0]))
     const btcNum = num(btcDraft) ?? 0
     const cambiosInv = Object.entries(draft).filter(([, d]) => vale(d.invested))
+    // Coherencia (25/10/2026): posiciones que este cierre no ha tocado (ni captura, ni valor a mano, ni cierre).
+    // Se sellarían con el valor de la semana pasada: BTP lo dice y pide la captura que falta.
+    const sinTocar = raw.positions.filter(p => draft[p.id]?.current_value == null && !pendCierres.some(c => c.pos?.id === p.id))
+    if (sinTocar.length) {
+      const porB = BROKERS.map(b => [b, sinTocar.filter(p => p.broker === b)]).filter(([, l]) => l.length)
+      if (!window.confirm('Sin captura ni valor nuevo en este cierre:\n\n' +
+        porB.map(([b, l]) => `· ${b}: ${l.map(p => p.ticker).join(', ')}`).join('\n') +
+        '\n\nSe sellarían con el valor de la semana pasada. Lo correcto es pasar la captura que falta (abiertas o historial).\n¿Sellar igualmente?')) return
+    }
     if (!liqTocada && !window.confirm('¿Seguro? No se ha editado la liquidez.')) return
     if (cambiosInv.length && !window.confirm(
       `Vas a modificar INVERTIDO en ${cambiosInv.length} posición(es). ¿Confirmas?`)) return
