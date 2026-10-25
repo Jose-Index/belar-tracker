@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { extraerAuto } from '../lib/ia'
 import { MOTIVOS_CIERRE, motivoPropuesto, fetchCierresDesde, fechaLocalISO, corregirFechaCierre } from '../lib/posiciones-db'
 import { resolverSimbolo, aprenderAlias, variantes } from '../lib/quotes'
@@ -83,6 +83,13 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
   const [diff, setDiff] = useState(null)
   const [hist, setHist] = useState([])
   const [aviso, setAviso] = useState(null)
+  const [arrastre, setArrastre] = useState(false)
+  // Una captura soltada fuera de la tarjeta haría que el navegador abriera la imagen y se perdiera la cola.
+  useEffect(() => {
+    const parar = e => { if ([...(e.dataTransfer?.types || [])].includes('Files')) e.preventDefault() }
+    window.addEventListener('dragover', parar); window.addEventListener('drop', parar)
+    return () => { window.removeEventListener('dragover', parar); window.removeEventListener('drop', parar) }
+  }, [])
 
   const conocidas = () => positions.map(p => ({ broker: p.broker, ticker: p.ticker, invertido: Number(p.invested) }))
   // Ventana de cierres "de esta semana": desde 7 días antes del último cierre sellado (o 21 días).
@@ -449,18 +456,29 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
     setCola([]); setDiff(null); setEstado('cola'); setAviso(null)
   }
 
+  // Toda la tarjeta acepta capturas (25/10/2026): con la cola llena, lo natural es soltar la siguiente sobre
+  // la lista, no sobre el recuadro de arriba. En la revisión, soltar añade a la cola y vuelve a ella.
+  const zona = {
+    onDragOver: e => { if ([...(e.dataTransfer?.types || [])].includes('Files')) { e.preventDefault(); if (!arrastre) setArrastre(true) } },
+    onDragLeave: e => { if (!e.currentTarget.contains(e.relatedTarget)) setArrastre(false) },
+    onDrop: e => {
+      e.preventDefault(); setArrastre(false)
+      if (estado === 'leyendo') return
+      anadir(e.dataTransfer.files)
+      if (estado === 'diff') { setEstado('cola'); setAviso(null) }
+    },
+  }
+
   if (estado === 'cola' || estado === 'leyendo') {
     const leyendo = estado === 'leyendo'
     const nPend = cola.filter(x => x.est !== 'ok').length
     return (
-      <div className="ingesta card">
-        <label className="dropzone"
-          onDragOver={e => e.preventDefault()}
-          onDrop={e => { e.preventDefault(); if (!leyendo) anadir(e.dataTransfer.files) }}>
+      <div className={'ingesta card' + (arrastre ? ' arrastrando' : '')} {...zona}>
+        <label className="dropzone">
           <input type="file" accept="image/*" multiple hidden disabled={leyendo}
                  onChange={e => { anadir(e.target.files); e.target.value = '' }} />
           <b>{cola.length ? 'Añade más capturas' : 'Arrastra aquí las capturas de tus brokers'}</b>
-          <span>(o toca para elegirlas) · eToro / XTB / IBKR · posiciones abiertas e historial de cerradas, en las tandas que quieras</span>
+          <span>(o toca para elegirlas; puedes soltarlas en cualquier parte de este recuadro) · eToro / XTB / IBKR · posiciones abiertas e historial de cerradas, en las tandas que quieras</span>
         </label>
         {cola.length > 0 && <div className="cola-capturas">
           {cola.map(x => (
@@ -514,7 +532,7 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
     d.cierres.some(c => c.sel && !c.ya && c.mapear === String(f.pos.id))
 
   return (
-    <div className="ingesta card num">
+    <div className={'ingesta card num' + (arrastre ? ' arrastrando' : '')} {...zona}>
       <div className="diff-head">
         <b>Revisión de capturas</b>
         <button className="btn-sec" title="Volver a las capturas para añadir más o corregir broker/tipo; lo leído no se vuelve a leer"
