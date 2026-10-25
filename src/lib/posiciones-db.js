@@ -173,9 +173,16 @@ export async function fetchCierresBloques() {
 // lo que el historial del broker vuelve a enseñar semana tras semana.
 export async function fetchCierresDesde(desde) {
   const { data, error } = await supabase.from('position_history')
-    .select('ticker,broker,closed_date,invested,closed_value').gte('closed_date', desde).limit(2000)
+    .select('id,ticker,broker,closed_date,invested,closed_value').gte('closed_date', desde).limit(2000)
   if (error) throw error
   return data || []
+}
+
+// Corrige la fecha de un cierre ya sellado con la fecha mal (25/10/2026: RR.L sellada el 24/08, su apertura,
+// en vez del 23/10). Solo la fecha: importes y motivo no se tocan.
+export async function corregirFechaCierre(id, closed_date) {
+  const { error } = await supabase.from('position_history').update({ closed_date }).eq('id', id)
+  if (error) throw error
 }
 
 export function guardarLiquidez(liq) {
