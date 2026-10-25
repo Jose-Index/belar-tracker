@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { extraerAuto } from '../lib/ia'
-import { MOTIVOS_CIERRE, motivoPropuesto, fetchCierresDesde, fechaLocalISO } from '../lib/posiciones-db'
+import { MOTIVOS_CIERRE, motivoPropuesto, fetchCierresDesde, fechaLocalISO, corregirFechaCierre } from '../lib/posiciones-db'
 import { resolverSimbolo, aprenderAlias, variantes } from '../lib/quotes'
 import './ingesta.css'
 
@@ -19,8 +19,9 @@ function juntarAbiertas(exs) {
   const por = new Map()
   for (const e of exs) {
     if (!e.broker) continue
-    const acc = por.get(e.broker) || { broker: e.broker, liquidez: null, posiciones: [], _k: new Set() }
+    const acc = por.get(e.broker) || { broker: e.broker, liquidez: null, total_cuenta: null, posiciones: [], _k: new Set() }
     if (e.liquidez != null) acc.liquidez = e.liquidez
+    if (e.total_cuenta != null) acc.total_cuenta = e.total_cuenta
     for (const r of e.posiciones || []) {
       // Misma fila en dos capturas: mismo ticker e invertido (el valor puede variar unos céntimos entre capturas).
       const k = `${String(r.ticker || r.nombre || '').toUpperCase()}|${r.invertido ?? r.valor ?? ''}`
@@ -43,7 +44,11 @@ function juntarAbiertas(exs) {
       for (const r of filas) {
         const resto = filas.filter(x => x !== r && !fuera.has(x))
         const suma = resto.reduce((a, x) => a + (Number(x.invertido) || 0), 0)
-        if (r.invertido != null && resto.length >= 2 && Math.abs(Number(r.invertido) - suma) <= Math.max(1, suma * 0.005)) fuera.add(r)
+        const sumaV = resto.reduce((a, x) => a + (Number(x.valor) || 0), 0)
+        const igual = (x, y) => x != null && y > 0 && Math.abs(Number(x) - y) <= Math.max(1, y * 0.005)
+        // La agrupada se reconoce por su invertido = suma de invertidos o, si la IA la leyó mal (25/10/2026:
+        // "BTC" con el valor total puesto como invertido), por cualquiera de sus importes = suma de valores.
+        if (resto.length >= 2 && (igual(r.invertido, suma) || igual(r.valor, sumaV) || igual(r.invertido, sumaV))) fuera.add(r)
       }
     }
     acc.posiciones = acc.posiciones.filter(r => !fuera.has(r))
@@ -72,7 +77,7 @@ let SEQ = 0
 const PARALELO = 3
 const diasAntes = (iso, n) => { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10) }
 
-export default function IngestaIA({ positions, simbolos = [], onAplicar, desde = null }) {
+export default function IngestaIA({ positions, simbolos = [], onAplicar, desde = null, liquidez = {} }) {
   const [estado, setEstado] = useState('cola')  // cola | leyendo | diff
   const [cola, setCola] = useState([])          // [{id, file, url, est: pend|leyendo|ok|error, err, res, broker, tipo}]
   const [diff, setDiff] = useState(null)
@@ -123,7 +128,19 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
   async function revisar(items = cola) {
     let h = hist
     try { h = await fetchCierresDesde(diasAntes(desdeCierres, 120)); setHist(h) } catch { /* sin histórico: no se deduplica */ }
-    setDiff(construirDiff(items, positions, h))
+    // Divisas de las filas (IBKR da BAMNB en EUR, 25/10/2026: se sumaba como si fueran dólares).
+    const monedas = new Set(items.filter(x => x.est === 'ok').flatMap(x => (x.res.extracciones || [])
+      .flatMap(e => e.posiciones || []).map(r => String(r.moneda || 'USD'))).filter(m => m && m.toUpperCase() !== 'USD'))
+    const fx = { USD: 1 }
+    if (monedas.size) {
+      const base = [...new Set([...monedas].map(m => m === 'GBp' || m === 'GBX' ? 'GBP' : m.toUpperCase()))]
+      try {
+        const r = await fetch('/api/quotes?symbols=' + base.map(m => encodeURIComponent(m + 'USD=X')).join(',')).then(x => x.json())
+        for (const q of r.quotes || []) if (q.price > 0) fx[q.symbol.replace('USD=X', '')] = q.price
+        if (fx.GBP) { fx.GBp = fx.GBP / 100; fx.GBX = fx.GBP / 100 }
+      } catch { /* sin cambio: esas filas se marcan para revisar */ }
+    }
+    setDiff(construirDiff(items, positions, h, fx))
     setEstado('diff')
   }
 
@@ -131,8 +148,8 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
   // claro se confunde con IBKR) y un broker mal puesto no casa ninguna posición: propone
   // altas de todo y cierres de todo lo del otro broker. Por eso es corregible aquí mismo,
   // sin volver a pasar las capturas por la IA.
-  function construirDiff(items, positions, hist) {
-    const updates = [], nuevas = [], liq = {}
+  function construirDiff(items, positions, hist, fx = { USD: 1 }) {
+    const updates = [], nuevas = [], liq = {}, totales = {}, sinLiq = []
     const vistos = new Set()
     // Cada captura con su broker (el corregido por José, si lo hay). Las abiertas de un mismo
     // broker se juntan y se quitan las filas repetidas (capturas solapadas al hacer scroll).
@@ -142,7 +159,15 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
     const brokersEnCaptura = new Set(extracciones.map(x => x.broker))
     for (const ex of extracciones) {
       if (ex.liquidez != null) liq[ex.broker] = ex.liquidez
-      for (const r of ex.posiciones || []) {
+      else sinLiq.push(ex.broker)
+      if (ex.total_cuenta != null && Number.isFinite(Number(ex.total_cuenta))) totales[ex.broker] = Number(ex.total_cuenta)
+      for (const r0 of ex.posiciones || []) {
+        // Fila en otra divisa: a USD antes de nada (BTP guarda todo en dólares).
+        const mon = String(r0.moneda || 'USD')
+        const k = mon.toUpperCase() === 'USD' ? 1 : fx[mon] ?? fx[mon.toUpperCase()] ?? null
+        const aUsd = v => v == null || k == null ? v : Math.round(Number(v) * k * 100) / 100
+        const r = k === 1 ? r0 : { ...r0, invertido: aUsd(r0.invertido), valor: aUsd(r0.valor), gp: aUsd(r0.gp),
+          divisa: { moneda: mon, fx: k, invertido: r0.invertido, valor: r0.valor } }
         const textos = [r.ticker, r.nombre].filter(Boolean)
         // El nombre de pantalla se resuelve al símbolo canónico por ticker,
         // aliases y display_name (XTB escribe "Micron" o "MU.US" donde BTP tiene "MU").
@@ -196,7 +221,18 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
         // avisa. Quien manda es el invertido que ya está en BD.
         let { invertido, valor, gp } = r
         let curado = false, permutado = false, dudosa = false
+        // Tres lecturas para un mismo importe (25/10/2026: MATX "655,53" donde ponía 555,53; BTC de eToro con
+        // el "P/L Diario" como G/P): valor leído, invertido + G/P e invertido × (1 + G/P %). Manda la pareja que cuadra.
         const esCopy = simbolos.find(x => x.ticker.toUpperCase() === t)?.asset_type === 'copy'
+        // Solo se corrige el valor si se aparta >1 % del invertido de las otras dos lecturas, que coinciden entre sí
+        // (un dígito mal leído). Copy traders fuera: su "Valor Neto" incluye efectivo y comisiones (no es inv + G/P).
+        const pctF = Number(r.gp_pct)
+        if (!esCopy && invertido > 0 && r.gp_pct != null && Number.isFinite(pctF)) {
+          const vP = invertido * (1 + pctF / 100), tol = Math.max(0.5, invertido * 0.003)
+          const vG = gp != null ? invertido + gp : null
+          if (valor == null) { valor = Math.round((vG ?? vP) * 100) / 100; curado = true }
+          else if (Math.abs(valor - vP) > invertido * 0.01 && vG != null && Math.abs(vG - vP) <= tol) { valor = Math.round(vG * 100) / 100; curado = true }
+        }
         // Reconciliación tolerante al signo del G/P: solo sirve para marcar dudas.
         const reconcilia = gp == null || invertido == null || valor == null ||
           Math.abs(invertido + gp - valor) <= 0.05 || Math.abs(invertido - gp - valor) <= 0.05
@@ -215,7 +251,8 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
             // Ni cuadra con el invertido de BD ni con el G/P: se marca, no se toca.
             dudosa = true
           }
-          updates.push({ pos, invertido, valor, sel: true, curado, permutado, dudosa, textos, canon: !!canon })
+          if (r.divisa && r.divisa.fx == null) dudosa = true
+          updates.push({ pos, invertido, valor, sel: true, curado, permutado, dudosa, textos, canon: !!canon, divisa: r.divisa || null })
         } else {
           // clase y fuente elegibles en la propia revisión (defecto prudente: TÁCTICA / YO).
           // entry_date: de la captura si la trae; si no, hay que ponerla a mano.
@@ -226,7 +263,7 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
             && !nuevas.some(n => n.mapear === String(p.id)) && Math.abs(Number(p.invested) - invertido) < 0.01)
           nuevas.push({
             ...r, ticker: canon || r.ticker || r.nombre, broker: ex.broker,
-            invertido, valor, permutado,
+            invertido, valor, permutado, divisa: r.divisa || null,
             sel: true, clase: 'TACTICA', fuente: 'YO',
             mapearAuto: porImporte ? String(porImporte.id) : '',
             entry_date: /^\d{4}-\d{2}-\d{2}$/.test(r.fecha_apertura || '') ? r.fecha_apertura : '',
@@ -241,7 +278,7 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
       .filter(p => brokersEnCaptura.has(p.broker) && !vistos.has(p.id))
       // Sin dato de cierre: desmarcado por defecto (se cerraría con el valor de la última captura).
       .map(p => ({ pos: p, sel: false, motivo: motivoPropuesto(p, pctLev(p.invested, p.current_value, p.apalancamiento)) || 'xSL' }))
-    return { updates, nuevas, faltantes, cierres, liq }
+    return { updates, nuevas, faltantes, cierres, liq, totales, sinLiq: [...new Set(sinLiq)].filter(b => liq[b] == null) }
   }
 
   // Cierres leídos del historial del broker → posición abierta que cierran, motivo por SL/TP,
@@ -279,8 +316,17 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
         const mismoTicker = tk => { const u = String(tk || '').toUpperCase(); return u === t || vars.has(u) }
         const casa = tol => h => h.broker === broker && mismoTicker(h.ticker) && (!fecha || h.closed_date === fecha) &&
           (invertido == null || Math.abs(Number(h.invested) - invertido) <= Math.max(1, Math.abs(invertido) * tol))
-        const ya = hist.some(casa(0.005)) || (invertido != null && hist.some(h => h.broker !== broker && mismoTicker(h.ticker) &&
+        let ya = hist.some(casa(0.005)) || (invertido != null && hist.some(h => h.broker !== broker && mismoTicker(h.ticker) &&
           !!fecha && h.closed_date === fecha && Math.abs(Number(h.invested) - invertido) <= Math.max(1, Math.abs(invertido) * 0.005)))
+        // Ya sellado pero con OTRA fecha (mismo broker, ticker, invertido y valor de cierre): no es un cierre nuevo,
+        // es el mismo con la fecha mal guardada. Se marca como ya registrado y se propone corregir la fecha.
+        let corrige = null
+        if (!ya && fecha && invertido != null && valorCierre != null) {
+          const h = hist.find(h => h.broker === broker && mismoTicker(h.ticker) && h.closed_date !== fecha &&
+            Math.abs(Number(h.invested) - invertido) <= Math.max(1, Math.abs(invertido) * 0.005) &&
+            Math.abs(Number(h.closed_value) - valorCierre) <= Math.max(1, Math.abs(valorCierre) * 0.01))
+          if (h) { ya = true; corrige = { id: h.id, de: h.closed_date, a: fecha, sel: true } }
+        }
         // Posición abierta que cierra: mismo broker y ticker; si hay varias (lotes), la de invertido más cercano.
         const cerca = p => invertido == null ? 0 : Math.abs(Number(p.invested) - invertido)
         let pos = ya ? null : positions.filter(p => p.broker === broker && !usados.has(p.id) && mismoTicker(p.ticker))
@@ -313,8 +359,15 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
         // Dudosa: importes que no cuadran, o una fecha de cierre anterior a la apertura de la posición que cierra.
         const dudosa = (c.gp != null && invertido != null && valorCierre != null && Math.abs(invertido + c.gp - valorCierre) > 0.05) ||
           (!!pos && !!fecha && !!pos.entry_date && fecha < pos.entry_date)
+        // Fecha de cierre imposible (24/10/2026: RR.L sellada con la de apertura, 24/08): sin fecha, anterior a la
+        // apertura, igual a la apertura leída, o una posición que seguía abierta en el último cierre y "cerró" antes.
+        // Bloquea el aplicar hasta que José la corrija o la confirme en el selector de fecha.
+        const fechaDudosa = !fecha || (!!fApert && fecha === fApert) ||
+          (!!pos && !!pos.entry_date && fecha <= pos.entry_date && pos.entry_date < diasAntes(hoy, 2)) ||
+          (!!pos && !!desde && fecha < diasAntes(desde, 1))
         filas.push({
           sel: !ya && (reciente || !!pos), ya, reciente, dudosa: dudosa && !corregidoPct, porImporte, brokerCorregido, motivoB, corregidoPct,
+          fechaDudosa, fechaEditada: false, corrige,
           ticker: pos ? pos.ticker : t, broker: brokerF, textos,
           invertido, valorCierre, fecha_cierre: fecha,
           entry_date: fApert || pos?.entry_date || null,
@@ -326,7 +379,7 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
       }
     }
     // Primero lo que hay que decidir; lo ya registrado o antiguo, al final.
-    const abajo = f => f.ya || (!f.reciente && !f.mapear)
+    const abajo = f => (f.ya && !f.corrige) || (!f.ya && !f.reciente && !f.mapear)
     return filas.sort((a, b) => abajo(a) - abajo(b) || String(b.fecha_cierre).localeCompare(String(a.fecha_cierre)))
   }
 
@@ -360,6 +413,15 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
     // Nunca de las coincidencias laxas: un alias mal aprendido se arrastra para siempre.
     for (const u of updates) {
       if (u.sel && u.canon && !cerrados.has(u.pos.id)) aprendidos += await aprenderAlias(u.pos.ticker, u.textos) || 0
+    }
+    // Fechas mal selladas en el histórico: se corrigen ya (no dependen del borrador ni del cierre de semana).
+    for (const c of d.cierres) if (c.corrige?.sel && c.corrige.a) {
+      try { await corregirFechaCierre(c.corrige.id, c.corrige.a) } catch (e) { setAviso(`No se pudo corregir la fecha de ${c.ticker}: ${e.message || e}`); return }
+    }
+    const fechasMal = d.cierres.filter(c => c.sel && !c.ya && c.fechaDudosa && !c.fechaEditada)
+    if (fechasMal.length) {
+      setAviso(`Fecha de cierre dudosa en: ${fechasMal.map(c => c.ticker).join(', ')}. Corrígela (o confírmala) en el selector de fecha de la fila.`)
+      return
     }
     // Cierres del historial aceptados: con su posición abierta (si la hay) y los datos reales.
     const cierres = d.cierres.filter(c => c.sel && !c.ya).map(c => {
@@ -459,6 +521,34 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
           onClick={() => { setEstado('cola'); setAviso(null) }}>← capturas ({cola.length})</button>
       </div>
 
+      {(() => {
+        // Cuadre por bróker (25/10/2026): lo que BTP tendrá al aceptar frente al total que la propia captura enseña.
+        const brokers = [...new Set([...Object.keys(d.totales || {}), ...(d.sinLiq || [])])]
+        if (!brokers.length) return null
+        const proy = b => {
+          const upd = d.updates.filter(u => u.sel && u.pos.broker === b).reduce((a, u) => a + Number(u.valor ?? u.pos.current_value ?? 0), 0)
+          const alt = d.nuevas.filter(n => n.sel && n.broker === b).reduce((a, n) => a + Number(n.valor ?? n.invertido ?? 0), 0)
+          const quedan = d.faltantes.filter(f => f.pos.broker === b && !f.sel && !cubierta(f)).reduce((a, f) => a + Number(f.pos.current_value ?? f.pos.invested), 0)
+          const l = d.liq[b] ?? liquidez?.[b] ?? 0
+          return upd + alt + quedan + Number(l)
+        }
+        return <div className="diff-cuadre">
+          <h4>Cuadre con el total de la captura</h4>
+          {brokers.map(b => {
+            const t = d.totales?.[b], p = proy(b), dif = t != null ? p - t : null
+            const ok = dif != null && Math.abs(dif) <= Math.max(5, t * 0.005)
+            return <div key={b} className="diff-row">
+              <span className="t">{b}</span>
+              <span>BTP {fmt$(p)}</span>
+              {t != null ? <span>captura <b>{fmt$(t)}</b></span> : <span className="warn">la captura no enseña el total</span>}
+              {dif != null && (ok ? <span className="ok-cap">✓ cuadra</span>
+                : <span className="down" title="Revisa liquidez, cierres sin marcar y valores antes de aplicar">✗ {dif > 0 ? '+' : ''}{fmt$(dif)} $</span>)}
+              {d.liq[b] == null && <span className="down" title="No se ha leído el saldo disponible: BTP mantendría el anterior. Pasa la captura con el saldo o escríbelo en modo cierre.">liquidez no leída (se queda {fmt$(liquidez?.[b])})</span>}
+            </div>
+          })}
+        </div>
+      })()}
+
       {d.updates.length > 0 && <>
         <h4>Actualizaciones ({d.updates.length})</h4>
         {d.updates.map((u, i) => (
@@ -470,6 +560,8 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
               <span className="warn">invertido {fmt$(u.pos.invested)} → <b>{fmt$(u.invertido)}</b></span>}
             <a className="btn-permutar" title="Intercambiar invertido y valor en esta fila"
                onClick={e => { e.preventDefault(); permutar('updates', i) }}>⇄</a>
+            {u.divisa && <span className="warn" title={`La captura da esta fila en ${u.divisa.moneda}: ${fmt$(u.divisa.valor)} ${u.divisa.moneda}`}>{u.divisa.fx ? `${u.divisa.moneda}→$ ×${u.divisa.fx.toFixed(4)}` : `${u.divisa.moneda} sin cambio`}</span>}
+            {u.curado && <span className="warn" title="El valor leído no cuadraba con invertido + G/P y G/P %: se ha tomado la pareja que cuadra">corregido por %</span>}
             {u.repartido && <span className="warn" title="La captura traía todos los lotes de este valor juntos: el valor se ha repartido entre ellos por número de acciones">lote · reparto de {u.repartido}</span>}
             {u.dudosa && <span className="down" title="Los importes de esta fila no cuadran con lo que hay en BTP y no se puede decidir solo: compruébalos en la captura">⚠ revisar</span>}
           </label>
@@ -519,7 +611,7 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
 
       {d.cierres.length > 0 && (() => {
         // Lo que cierra una posición abierta de BTP siempre va arriba, sea cual sea la fecha leída.
-        const arriba = c => !c.ya && (c.reciente || !!c.mapear)
+        const arriba = c => !!c.corrige || (!c.ya && (c.reciente || !!c.mapear))
         const vivos = d.cierres.map((c, i) => [c, i]).filter(([c]) => arriba(c))
         const resto = d.cierres.map((c, i) => [c, i]).filter(([c]) => !arriba(c))
         const fila = ([c, i]) => (
@@ -528,10 +620,22 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
               <input type="checkbox" checked={c.sel} disabled={c.ya} onChange={() => toggle('cierres', i)} />
               <span className="t">{c.ticker} <i>{c.broker}</i></span>
             </label>
-            <span>{c.fecha_cierre ? c.fecha_cierre.slice(2).split('-').reverse().join('/') : <b className="down">sin fecha</b>}</span>
+            {c.ya ? <span>{c.fecha_cierre ? c.fecha_cierre.slice(2).split('-').reverse().join('/') : '—'}</span>
+              : <label className={'diff-pick' + (c.sel && c.fechaDudosa && !c.fechaEditada ? ' falta' : '')}
+                  title={c.fechaDudosa ? 'Fecha de cierre dudosa (sin fecha, igual a la de apertura o anterior al último cierre): corrígela o confírmala' : 'Fecha de cierre leída de la captura'}>
+                  <input type="date" className="diff-sel" max={HOY()} value={c.fecha_cierre || ''}
+                    onChange={e => setDiff({ ...d, cierres: d.cierres.map((x, j) => j === i ? { ...x, fecha_cierre: e.target.value, fechaEditada: true } : x) })} />
+                  {c.fechaDudosa && !c.fechaEditada && <a className="down" title="Si la fecha es correcta, confírmala aquí"
+                    onClick={e => { e.preventDefault(); setDiff({ ...d, cierres: d.cierres.map((x, j) => j === i ? { ...x, fechaEditada: true } : x) }) }}> ⚠ fecha · confirmar</a>}
+                </label>}
             <span>{fmt$(c.invertido)} → <b>{fmt$(c.valorCierre)}</b>
               {c.pct != null && <b className={c.pct >= 0 ? 'up' : 'down'}> {c.pct >= 0 ? '+' : ''}{c.pct.toFixed(1)} %</b>}</span>
-            {c.ya ? <span className="warn">ya en el histórico</span> : <>
+            {c.ya ? (c.corrige
+              ? <label className="diff-pick warn" title="Este cierre ya está en el histórico, pero con otra fecha: márcalo para corregirla">
+                  <input type="checkbox" checked={c.corrige.sel} onChange={() => setDiff({ ...d, cierres: d.cierres.map((x, j) => j === i ? { ...x, corrige: { ...x.corrige, sel: !x.corrige.sel } } : x) })} />
+                  ya en el histórico con fecha {c.corrige.de.split('-').reverse().join('/')} → corregir a {c.corrige.a.split('-').reverse().join('/')}
+                </label>
+              : <span className="warn">ya en el histórico</span>) : <>
               <select className="diff-sel" value={c.motivo} title="Motivo del cierre: propuesto comparando la salida con el SL/TP de la posición"
                 onChange={e => setCampo('cierres', i, 'motivo', e.target.value)}>
                 {MOTIVOS_CIERRE.map(m => <option key={m} value={m}>{m}</option>)}
