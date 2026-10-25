@@ -53,3 +53,9 @@
 .cap-item .btn-escape { position: absolute; top: 4px; right: 4px; background: rgba(255,255,255,.85); }
 .diff-row.apagada { opacity: .55; }
 .diff-mas summary { cursor: pointer; font-size: 12px; color: var(--texto-neutro); margin: 6px 0; }
+
+/* Falta información (25/10/2026): BTP pide lo que no cuadra antes de aplicar */
+.diff-falta { margin-top: 10px; padding: 8px 12px; border: 1px solid var(--baja); border-radius: var(--radius); background: #FFF5F5; }
+.diff-falta ul { margin: 4px 0 0; padding-left: 18px; font-size: 13px; }
+.diff-falta h4 { color: var(--baja); }
+.ingesta .diff-sel.falta { border-color: var(--baja); background: #FDEFF0; }
