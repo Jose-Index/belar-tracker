@@ -67,13 +67,16 @@ const etiquetaCierre = c => {
   return `${t} (${b}) — ${c.motivo} — ${c.real.closed_date}${pct != null ? ` — ${pct >= 0 ? '+' : ''}${pct.toFixed(1)} %` : ''}${c.pos ? '' : ' — solo histórico'}`
 }
 const claveCierre = c => c.pos ? `p${c.pos.id}` : `h|${c.real.broker}|${c.real.ticker}|${c.real.closed_date}|${Math.round(c.real.invested)}`
+// 25/10/2026: un cierre que la base rechaza (p. ej. el CHECK de close_reason, que no admitía xTP) ya no pasa
+// en silencio: lanza error y el sellado se para (antes se selló la semana con SSL abierta y su dinero en caja).
 async function ejecutarCierre(c) {
-  if (!c.real) return cerrarPosicion(c.pos, c.motivo || 'manual')
-  return registrarCierre({
+  const r = !c.real ? await cerrarPosicion(c.pos, c.motivo || 'manual') : await registrarCierre({
     ...c.real, motivo: c.motivo,
     clase: c.pos?.clase || null, fuente: c.pos?.fuente || null, bloque: c.pos?.bloque || null,
     posId: c.pos?.id || null, pos: c.pos || null,
   })
+  if (r?.error) throw new Error(`${c.pos?.ticker || c.real?.ticker || '?'}: ${r.error.message || r.error}`)
+  return r
 }
 
 export default function Posiciones({ embed = false, onCambio, seleccionInicial = null, wallet: walletProp = null }) {
@@ -330,7 +333,15 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
         ingest_badge: 'NEW', ingest_source: `captura ${n.broker} ${n.stamp}`,
       })
     }
-    for (const c of pendCierres) await ejecutarCierre(c)
+    const hechos = []
+    try { for (const c of pendCierres) { await ejecutarCierre(c); hechos.push(c) } }
+    catch (e) {
+      // Valores y altas ya escritos; los cierres hechos salen de la cola para que un reintento no los duplique.
+      setPendCierres(prev => prev.filter(x => !hechos.includes(x))); setDraft({}); setPendAltas([]); setBusy(false)
+      setMsg('Cierre rechazado por la base — la semana NO se ha sellado: ' + e.message + '. Avisa a Belar antes de reintentar.')
+      recargar()
+      return
+    }
     await guardarLiquidez(liqNum)
     await guardarBtcWallet(btcNum)
     // 2. recargar y commit
@@ -384,7 +395,8 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
       await updatePosicion(u.pos.id, patch); nUpd++
     }
     // Primero los valores, después los cierres (un cierre parcial reduce la posición ya actualizada).
-    for (const c of cierres) await ejecutarCierre(c)
+    try { for (const c of cierres) await ejecutarCierre(c) }
+    catch (e) { setBusy(false); setMsg('Cierre rechazado por la base: ' + e.message + '. Avisa a Belar.'); recargar(); return }
     // Liquidez leída en la captura (01/10/2026: antes se descartaba entre cierres de semana y el total no cuadraba).
     const liqLeida = Object.fromEntries(Object.entries(d.liq || {}).filter(([, v]) => v != null && Number.isFinite(Number(v))).map(([k, v]) => [k, Number(v)]))
     if (Object.keys(liqLeida).length) await guardarLiquidez({ ...(raw.liquidez || {}), ...liqLeida })
