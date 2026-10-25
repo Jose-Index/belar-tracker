@@ -284,7 +284,8 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
     const faltantes = positions
       .filter(p => brokersEnCaptura.has(p.broker) && !vistos.has(p.id))
       // Sin dato de cierre: desmarcado por defecto (se cerraría con el valor de la última captura).
-      .map(p => ({ pos: p, sel: false, motivo: motivoPropuesto(p, pctLev(p.invested, p.current_value, p.apalancamiento)) || 'xSL' }))
+      // Sin dato: NO se decide sola (25/10/2026). José dice si sigue abierta (no salía en la captura) o si cerró, y entonces fecha, importe y motivo.
+      .map(p => ({ pos: p, sel: false, decision: '', fecha: '', importe: '', motivo: motivoPropuesto(p, pctLev(p.invested, p.current_value, p.apalancamiento)) || 'xSL' }))
     return { updates, nuevas, faltantes, cierres, liq, totales, sinLiq: [...new Set(sinLiq)].filter(b => liq[b] == null) }
   }
 
@@ -390,16 +391,60 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
     return filas.sort((a, b) => abajo(a) - abajo(b) || String(b.fecha_cierre).localeCompare(String(a.fecha_cierre)))
   }
 
+  // ─── Coherencia (25/10/2026): nada se aplica con datos sin cuadrar; BTP PIDE lo que falta ───
+  // Número escrito a mano: admite 2.537,43 · 2537,43 · 2,537.43 · 2537.43 (el último separador es el decimal).
+  const numE = v => {
+    let t = String(v ?? '').replace(/[\s$€]/g, '')
+    if (!t) return null
+    const iC = t.lastIndexOf(','), iP = t.lastIndexOf('.')
+    if (iC > iP) t = t.replace(/\./g, '').replace(',', '.')
+    else if (iP > iC && iC > -1) t = t.replace(/,/g, '')
+    const x = Number(t)
+    return Number.isFinite(x) ? x : null
+  }
+  const cubiertaEn = (d, f) => d.nuevas.some(n => n.sel && n.mapear === String(f.pos.id)) ||
+    d.cierres.some(c => c.sel && !c.ya && c.mapear === String(f.pos.id))
+  const liqDe = (d, b) => d.liq[b] ?? numE(d.liqManual?.[b]) ?? null
+  function cuadreDe(d) {
+    const brokers = [...new Set([...Object.keys(d.totales || {}), ...(d.sinLiq || [])])]
+    return brokers.map(b => {
+      const upd = d.updates.filter(u => u.sel && u.pos.broker === b).reduce((a, u) => a + Number(u.valor ?? u.pos.current_value ?? 0), 0)
+      const alt = d.nuevas.filter(n => n.sel && n.broker === b).reduce((a, n) => a + Number(n.valor ?? n.invertido ?? 0), 0)
+      const quedan = d.faltantes.filter(f => f.pos.broker === b && f.decision !== 'cerrada' && !cubiertaEn(d, f))
+        .reduce((a, f) => a + Number(f.pos.current_value ?? f.pos.invested), 0)
+      const l = liqDe(d, b) ?? liquidez?.[b] ?? 0
+      const p = upd + alt + quedan + Number(l), t = d.totales?.[b]
+      const dif = t != null ? p - t : null
+      return { b, p, t, dif, ok: dif == null || Math.abs(dif) <= Math.max(5, t * 0.005), sinLiq: d.liq[b] == null }
+    })
+  }
+  function faltaInfo(d) {
+    const f = []
+    for (const u of d.updates) if (u.sel && u.dudosa && !u.revisado) f.push(`${u.pos.ticker}: el valor no cuadra — compruébalo y pulsa "⚠ revisar"`)
+    for (const n of d.nuevas) if (n.sel && !n.mapear && !n.entry_date) f.push(`${(n.ticker || n.nombre || '?').toUpperCase()}: fecha de apertura`)
+    for (const c of d.cierres) if (c.sel && !c.ya) {
+      if (c.fechaDudosa && !c.fechaEditada) f.push(`${c.ticker}: fecha de cierre dudosa — corrígela o confírmala`)
+      if (c.invertido == null || c.valorCierre == null) f.push(`${c.ticker}: importes del cierre`)
+    }
+    for (const x of d.faltantes) if (!cubiertaEn(d, x)) {
+      if (!x.decision) f.push(`${x.pos.ticker} (${x.pos.broker}): no sale ni abierta ni en el historial — ¿sigue abierta o se cerró?`)
+      else if (x.decision === 'cerrada' && (!x.fecha || numE(x.importe) == null)) f.push(`${x.pos.ticker}: fecha e importe de cierre`)
+    }
+    for (const q of cuadreDe(d)) {
+      if (q.sinLiq && numE(d.liqManual?.[q.b]) == null) f.push(`${q.b}: saldo disponible (la captura no lo enseña)`)
+      else if (!q.ok && !d.aceptaDif?.[q.b]) f.push(`${q.b}: no cuadra con el total de la captura (${q.dif > 0 ? '+' : ''}${fmt$(q.dif)} $) — revisa o acepta la diferencia`)
+    }
+    return f
+  }
+
   // Antes de mandar al borrador: resolver los mapeos manuales (una "alta" que en
   // realidad era una posición existente con otro nombre) y exigir fecha de apertura.
   async function aplicar() {
-    const d = diff
-    const altas = d.nuevas.filter(n => n.sel && !n.mapear)
-    const sinFecha = altas.filter(n => !n.entry_date)
-    if (sinFecha.length) {
-      setAviso(`Falta la fecha de apertura de: ${sinFecha.map(n => (n.ticker || n.nombre || '?').toUpperCase()).join(', ')}. La captura no la trae, ponla a mano.`)
-      return
-    }
+    const d0 = diff
+    const falta = faltaInfo(d0)
+    if (falta.length) { setAviso(`Falta información (${falta.length}): ${falta.join(' · ')}`); return }
+    // Saldo escrito a mano donde la captura no lo enseñaba.
+    const d = { ...d0, liq: { ...d0.liq, ...Object.fromEntries(Object.entries(d0.liqManual || {}).filter(([b]) => d0.liq[b] == null).map(([b, v]) => [b, numE(v)]).filter(([, v]) => v != null)) } }
     const updates = [...d.updates]
     const cerrados = new Set()
     let aprendidos = 0
@@ -425,11 +470,6 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
     for (const c of d.cierres) if (c.corrige?.sel && c.corrige.a) {
       try { await corregirFechaCierre(c.corrige.id, c.corrige.a) } catch (e) { setAviso(`No se pudo corregir la fecha de ${c.ticker}: ${e.message || e}`); return }
     }
-    const fechasMal = d.cierres.filter(c => c.sel && !c.ya && c.fechaDudosa && !c.fechaEditada)
-    if (fechasMal.length) {
-      setAviso(`Fecha de cierre dudosa en: ${fechasMal.map(c => c.ticker).join(', ')}. Corrígela (o confírmala) en el selector de fecha de la fila.`)
-      return
-    }
     // Cierres del historial aceptados: con su posición abierta (si la hay) y los datos reales.
     const cierres = d.cierres.filter(c => c.sel && !c.ya).map(c => {
       const pos = c.mapear ? positions.find(p => String(p.id) === String(c.mapear)) || null : null
@@ -449,8 +489,19 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
       setAviso(`Cierre sin importes legibles: ${sinDatos.map(c => c.real.ticker).join(', ')}. Desmárcalo o vuelve a pasar la captura.`)
       return
     }
+    // Faltantes que José da por cerradas: cierre con SUS datos (fecha, importe, motivo), nunca con el último valor.
     const cubiertas = new Set(cierres.filter(c => c.pos).map(c => c.pos.id))
-    const faltantes = d.faltantes.filter(f => !cerrados.has(f.pos.id) && !cubiertas.has(f.pos.id))
+    for (const f of d.faltantes) {
+      if (f.decision !== 'cerrada' || cerrados.has(f.pos.id) || cubiertas.has(f.pos.id)) continue
+      cierres.push({ pos: f.pos, motivo: f.motivo, real: {
+        ticker: f.pos.ticker, broker: f.pos.broker, entry_date: f.pos.entry_date || null,
+        closed_date: f.fecha, invested: Number(f.pos.invested), closed_value: numE(f.importe),
+        apalancamiento: f.pos.apalancamiento || 1,
+      } })
+      cubiertas.add(f.pos.id)
+    }
+    // Las que siguen abiertas no se tocan (no van como faltantes: nada se cierra con el último valor).
+    const faltantes = []
     onAplicar({ ...d, updates, nuevas: d.nuevas.filter(n => !n.mapear), faltantes, cierres, aprendidos })
     cola.forEach(x => URL.revokeObjectURL(x.url))
     setCola([]); setDiff(null); setEstado('cola'); setAviso(null)
@@ -528,8 +579,8 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
   const yaVistas = new Set(d.updates.map(u => u.pos.id))
   const candidatas = broker => positions.filter(p => p.broker === broker && !yaVistas.has(p.id))
   // Una faltante deja de serlo si un alta se mapea a ella o un cierre del historial la cierra.
-  const cubierta = f => d.nuevas.some(n => n.sel && n.mapear === String(f.pos.id)) ||
-    d.cierres.some(c => c.sel && !c.ya && c.mapear === String(f.pos.id))
+  const cubierta = f => cubiertaEn(d, f)
+  const falta = faltaInfo(d)
 
   return (
     <div className={'ingesta card num' + (arrastre ? ' arrastrando' : '')} {...zona}>
@@ -541,29 +592,25 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
 
       {(() => {
         // Cuadre por bróker (25/10/2026): lo que BTP tendrá al aceptar frente al total que la propia captura enseña.
-        const brokers = [...new Set([...Object.keys(d.totales || {}), ...(d.sinLiq || [])])]
-        if (!brokers.length) return null
-        const proy = b => {
-          const upd = d.updates.filter(u => u.sel && u.pos.broker === b).reduce((a, u) => a + Number(u.valor ?? u.pos.current_value ?? 0), 0)
-          const alt = d.nuevas.filter(n => n.sel && n.broker === b).reduce((a, n) => a + Number(n.valor ?? n.invertido ?? 0), 0)
-          const quedan = d.faltantes.filter(f => f.pos.broker === b && !f.sel && !cubierta(f)).reduce((a, f) => a + Number(f.pos.current_value ?? f.pos.invested), 0)
-          const l = d.liq[b] ?? liquidez?.[b] ?? 0
-          return upd + alt + quedan + Number(l)
-        }
+        const filas = cuadreDe(d)
+        if (!filas.length) return null
+        const setMapa = (k, b, v) => setDiff({ ...d, [k]: { ...(d[k] || {}), [b]: v } })
         return <div className="diff-cuadre">
           <h4>Cuadre con el total de la captura</h4>
-          {brokers.map(b => {
-            const t = d.totales?.[b], p = proy(b), dif = t != null ? p - t : null
-            const ok = dif != null && Math.abs(dif) <= Math.max(5, t * 0.005)
-            return <div key={b} className="diff-row">
+          {filas.map(({ b, p, t, dif, ok, sinLiq }) => (
+            <div key={b} className="diff-row">
               <span className="t">{b}</span>
               <span>BTP {fmt$(p)}</span>
               {t != null ? <span>captura <b>{fmt$(t)}</b></span> : <span className="warn">la captura no enseña el total</span>}
               {dif != null && (ok ? <span className="ok-cap">✓ cuadra</span>
-                : <span className="down" title="Revisa liquidez, cierres sin marcar y valores antes de aplicar">✗ {dif > 0 ? '+' : ''}{fmt$(dif)} $</span>)}
-              {d.liq[b] == null && <span className="down" title="No se ha leído el saldo disponible: BTP mantendría el anterior. Pasa la captura con el saldo o escríbelo en modo cierre.">liquidez no leída (se queda {fmt$(liquidez?.[b])})</span>}
+                : <span className="down" title="Revisa saldo, cierres y valores antes de aplicar">✗ {dif > 0 ? '+' : ''}{fmt$(dif)} $</span>)}
+              {sinLiq && <label className={'diff-pick' + (numE(d.liqManual?.[b]) == null ? ' falta' : '')} title="La captura no enseña el saldo disponible: escríbelo (el de la pantalla del bróker)">
+                saldo disponible <input className="diff-sel" inputMode="decimal" placeholder={fmt$(liquidez?.[b])} value={d.liqManual?.[b] ?? ''}
+                  onChange={e => setMapa('liqManual', b, e.target.value)} /></label>}
+              {!ok && <label className="diff-pick warn" title="Solo si has revisado y la diferencia es real (p. ej. céntimos de cambio o un dato que el bróker no enseña)">
+                <input type="checkbox" checked={!!d.aceptaDif?.[b]} onChange={() => setMapa('aceptaDif', b, !d.aceptaDif?.[b])} /> acepto la diferencia</label>}
             </div>
-          })}
+          ))}
         </div>
       })()}
 
@@ -581,7 +628,8 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
             {u.divisa && <span className="warn" title={`La captura da esta fila en ${u.divisa.moneda}: ${fmt$(u.divisa.valor)} ${u.divisa.moneda}`}>{u.divisa.fx ? `${u.divisa.moneda}→$ ×${u.divisa.fx.toFixed(4)}` : `${u.divisa.moneda} sin cambio`}</span>}
             {u.curado && <span className="warn" title="El valor leído no cuadraba con invertido + G/P y G/P %: se ha tomado la pareja que cuadra">corregido por %</span>}
             {u.repartido && <span className="warn" title="La captura traía todos los lotes de este valor juntos: el valor se ha repartido entre ellos por número de acciones">lote · reparto de {u.repartido}</span>}
-            {u.dudosa && <span className="down" title="Los importes de esta fila no cuadran con lo que hay en BTP y no se puede decidir solo: compruébalos en la captura">⚠ revisar</span>}
+            {u.dudosa && <a className={u.revisado ? 'ok-cap' : 'down'} title="Los importes de esta fila no cuadran con lo que hay en BTP y no se puede decidir solo: compruébalos en la captura y pulsa para darlos por buenos"
+              onClick={e => { e.preventDefault(); setCampo('updates', i, 'revisado', !u.revisado) }}>{u.revisado ? '✓ revisado' : '⚠ revisar'}</a>}
           </label>
         ))}
       </>}
@@ -688,24 +736,38 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
       })()}
 
       {d.faltantes.some(f => !cubierta(f)) && <>
-        <h4>No aparecen en la captura ni en el historial — sin dato de cierre ({d.faltantes.filter(f => !cubierta(f)).length})</h4>
+        <h4>No aparecen ni abiertas ni en el historial — dime qué pasó ({d.faltantes.filter(f => !cubierta(f)).length})</h4>
         {d.faltantes.map((f, i) => cubierta(f) ? null : (
           <div key={i} className="diff-row">
-            <label className="diff-pick">
-              <input type="checkbox" checked={f.sel} onChange={() => toggle('faltantes', i)} />
-              <span className="t">{f.pos.ticker} <i>{f.pos.broker}</i></span>
-            </label>
-            <span className="down" title="Se cerraría con el valor de la última captura: mejor pasar el historial del broker">cerrar con el último valor · motivo</span>
-            <select className="diff-sel" value={f.motivo} title="Motivo del cierre (viaja al histórico)"
-              onChange={e => setCampo('faltantes', i, 'motivo', e.target.value)}>
-              {MOTIVOS_CIERRE.map(m => <option key={m} value={m}>{m}</option>)}
+            <span className="t">{f.pos.ticker} <i>{f.pos.broker}</i></span>
+            <span>último valor {fmt$(f.pos.current_value)}</span>
+            <select className={'diff-sel' + (!f.decision ? ' falta' : '')} value={f.decision} title="Lo mejor es pasar la captura que falta (abiertas o historial); si no, dilo aquí"
+              onChange={e => setCampo('faltantes', i, 'decision', e.target.value)}>
+              <option value="">— ¿qué pasó? —</option>
+              <option value="abierta">sigue abierta (no salía en la captura)</option>
+              <option value="cerrada">se cerró</option>
             </select>
+            {f.decision === 'cerrada' && <>
+              <label className={'diff-pick' + (!f.fecha ? ' falta' : '')}>fecha
+                <input type="date" className="diff-sel" max={HOY()} value={f.fecha} onChange={e => setCampo('faltantes', i, 'fecha', e.target.value)} /></label>
+              <label className={'diff-pick' + (numE(f.importe) == null ? ' falta' : '')} title="Importe recibido al cerrar (invertido + G/P), en dólares">importe $
+                <input className="diff-sel" inputMode="decimal" value={f.importe} onChange={e => setCampo('faltantes', i, 'importe', e.target.value)} /></label>
+              <select className="diff-sel" value={f.motivo} title="Motivo del cierre (viaja al histórico)"
+                onChange={e => setCampo('faltantes', i, 'motivo', e.target.value)}>
+                {MOTIVOS_CIERRE.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </>}
           </div>
         ))}
       </>}
 
       {Object.keys(d.liq).length > 0 &&
         <p className="diff-liq">Liquidez detectada: {Object.entries(d.liq).map(([b, v]) => `${b} $${fmt$(v)}`).join(' · ')}</p>}
+
+      {falta.length > 0 && <div className="diff-falta">
+        <h4>Falta información para aplicar ({falta.length})</h4>
+        <ul>{falta.map((x, i) => <li key={i}>{x}</li>)}</ul>
+      </div>}
 
       {aviso && <p className="auth-err">{aviso}</p>}
 
@@ -714,8 +776,9 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
         Lo único que se guarda al aplicar son los nombres aprendidos de cada broker.</p>
 
       <div className="modal-botones">
-        <button className="btn-primario" onClick={aplicar}>
-          Aplicar al borrador
+        <button className="btn-primario" onClick={aplicar} disabled={falta.length > 0}
+          title={falta.length ? 'Completa lo que falta (lista de arriba)' : ''}>
+          {falta.length ? `Faltan ${falta.length} dato(s)` : 'Aplicar al borrador'}
         </button>
       </div>
     </div>
