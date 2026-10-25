@@ -7,6 +7,9 @@
 }
 .dropzone b { color: var(--azul-belar); font-family: var(--font-ui); }
 .dropzone span { font-size: 12px; }
+/* Toda la tarjeta es zona de soltar (25/10/2026): se ilumina entera al arrastrar capturas encima */
+.ingesta.arrastrando { outline: 2px dashed var(--azul-belar); outline-offset: -2px; background: #F7FAFF; }
+.ingesta.arrastrando .dropzone { background: #EAF2FF; }
 
 .diff-head { display: flex; justify-content: space-between; align-items: center; }
 .ingesta h4 { margin: 12px 0 6px; font: 600 11px var(--font-ui); letter-spacing: .05em; text-transform: uppercase; color: var(--texto-neutro); }
