@@ -2,6 +2,10 @@
 // La clave vive SOLO en el servidor (ANTHROPIC_API_KEY en Vercel).
 
 export const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5'
+// Lectura de capturas (25/10/2026): modelo de ALTA resolución (2576 px / 4784 tokens de imagen). Con el de
+// resolución estándar (1568 tokens) una captura de 2300 px se veía a ~1000 px y se leían mal columnas, cifras
+// y fechas (cierre del 24/10: RR.L con fecha de apertura, SSL sin cerrar, liquidez de eToro sin leer).
+export const MODEL_VISION = process.env.ANTHROPIC_MODEL_VISION || 'claude-opus-5-5'
 
 export async function anthropic(body) {
   const key = process.env.ANTHROPIC_API_KEY
