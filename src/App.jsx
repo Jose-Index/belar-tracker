@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
 import Inicio from './pages/Inicio.jsx'
 import Historico from './pages/Historico.jsx'
+import Tesis from './pages/Tesis.jsx'
 import Fuentes from './pages/Fuentes.jsx'
 import Buscador from './pages/Buscador.jsx'
 import Repositorio from './pages/Repositorio.jsx'
@@ -33,6 +34,7 @@ const MENU = [
   { to: '/buscador', label: 'Buscador', icono: 'buscador', movil: true },
   { to: '/alertas', label: 'Alertas', icono: 'alertas', movil: true },
   { to: '/calendario', label: 'Calendario', icono: 'calendario', movil: true },
+  { to: '/tesis', label: 'Tesis' },
   { to: '/historico', label: 'Histórico' },
   { to: '/repositorio', label: 'Repositorio' },
   { to: '/patrimonio', label: 'Patrimonio €' },
@@ -78,6 +80,7 @@ export default function App() {
           <Route path="/" element={<Inicio />} />
           <Route path="/posiciones" element={<Inicio />} />
           <Route path="/buscador" element={<Buscador />} />
+          <Route path="/tesis" element={<Tesis />} />
           <Route path="/historico" element={<Historico />} />
           <Route path="/repositorio" element={<Repositorio />} />
           <Route path="/alertas" element={<Alertas />} />
