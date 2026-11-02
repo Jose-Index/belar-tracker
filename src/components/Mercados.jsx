@@ -110,7 +110,7 @@ export default function Mercados() {
       <div className="mercados-head">
         <div className="periodos num">
           {PERIODOS.map(([r, l]) => (
-            <button key={r} className={range === r ? 'on' : ''} onClick={() => { setRange(r); setComparando(null) }}>{l}</button>
+            <button key={r} className={range === r ? 'on' : ''} onClick={() => setRange(r)}>{l}</button>
           ))}
         </div>
         <a className="edit-toggle" onClick={() => setEdit(!edit)}>{edit ? 'hecho' : 'editar'}</a>
@@ -120,7 +120,7 @@ export default function Mercados() {
         {lista.map(s => (
           <BoxSimbolo key={s.id} s={s} q={quotes[s.yahoo_symbol]} pts={series[s.yahoo_symbol]}
             range={range} comparable={COMPARABLES.includes(range)}
-            comparando={comparando?.id === s.id}
+            comparando={comparando?.id === s.id && COMPARABLES.includes(range)}
             onComparar={() => setComparando(comparando?.id === s.id ? null : s)}
             edit={edit} onQuitar={() => quitar(s)} onSoltar={fromId => soltar(fromId, s.id)} />
         ))}
@@ -232,7 +232,9 @@ function Comparativa({ s, pts, range, onCerrar }) {
         supabase.from('weekly_snapshots').select('week_end,total_value,eurusd').order('week_end'),
         supabase.from('contributions').select('fecha,importe_eur,importe_usd'),
       ])
-      if (!vivo || !weeks?.length || pts.length < 2) { setDatos({ vacio: true }); return }
+      if (!vivo) return
+      if (pts.length < 2) { setDatos(null); return }   // serie del nuevo periodo aún cargando: "Montando…"
+      if (!weeks?.length) { setDatos({ vacio: true }); return }
       // Índice en diario y con margen hacia atrás (RANGO_COMP); 5A/MAX, la serie de la gráfica
       let base = pts
       const rc = RANGO_COMP[range]
