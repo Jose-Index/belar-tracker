@@ -1,0 +1,26 @@
+/* Tesis · desempeño (02/11/2026) */
+.tesis-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 6px 0 14px; }
+.tesis-kpi { border: 1px solid var(--borde); border-radius: var(--radius); padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; background: var(--superficie); }
+.tesis-kpi .box-t { font: 600 10.5px var(--font-ui); letter-spacing: .05em; color: var(--texto-neutro); text-transform: uppercase; }
+.tesis-kpi b { font-size: 22px; font-weight: 600; }
+.tesis-kpi small { font-size: 11px; color: var(--texto-sec); line-height: 1.35; }
+.tesis-aviso { font-size: 12px; color: var(--texto-sec); border-left: 3px solid var(--aviso); padding: 4px 10px; margin: 0 0 12px; }
+.tesis-res .tesis-total td { font-weight: 600; border-top: 1px solid var(--borde); }
+.tesis-res .tesis-banco td { color: var(--texto-neutro); font-style: italic; }
+.tesis-chips { display: inline-flex; gap: 6px; margin-left: 12px; vertical-align: middle; }
+.tesis-chips .btn-sec.activo { background: var(--azul-belar); color: #fff; border-color: var(--azul-belar); }
+.tesis-chips .btn-sec.activo .hist-n { color: #fff; }
+.tesis-scroll { overflow-x: auto; }
+.tesis-tag { font: 600 9.5px var(--font-ui); letter-spacing: .04em; text-transform: uppercase; color: var(--texto-neutro); border: 1px solid var(--borde); border-radius: 4px; padding: 1px 4px; margin-left: 6px; }
+.tesis-tag.viva { margin-left: 0; color: var(--azul-belar); border-color: var(--azul-belar); }
+.tesis-mot { font-size: 10.5px; color: var(--texto-neutro); margin-left: 4px; }
+.tesis-mot.xTP { color: var(--alza); }
+.tesis-mot.xSL { color: var(--baja); }
+.tesis-nota { font-size: 11px; color: var(--texto-neutro); margin: 10px 0 0; line-height: 1.45; }
+@media (max-width: 900px) {
+  .tesis-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tesis-kpi b { font-size: 18px; }
+  .tesis-res { min-width: 760px; }
+  .tesis-chips { display: flex; margin: 8px 0 0; }
+  .card.historico:has(.tesis-res) { overflow-x: auto; }
+}
