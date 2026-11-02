@@ -6,6 +6,7 @@ const RANGES = {
   '1d': { range: '1d', interval: '5m' },
   '5d': { range: '5d', interval: '30m' },
   '1mo': { range: '1mo', interval: '1d' },
+  '3mo': { range: '3mo', interval: '1d' },     // portada 3M (02/11/2026)
   '6mo': { range: '6mo', interval: '1d' },
   'ytd': { range: 'ytd', interval: '1d' },
   '1y': { range: '1y', interval: '1wk' },
