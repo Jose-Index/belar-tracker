@@ -52,6 +52,7 @@ Body JSON: `{ "tabla", "accion", "datos", "filtro"?, "nota"? }`
 - `POST /api/universo-series` `{ "symbols": [...] }` (≤100) → tendencia por valor (perf 3d/1M/3M/6M, MA20, ATR≈,
   ATRs sobre MA20) calculada con spark de Yahoo y guardada en `universo`. Misma auth que el refresco.
 - `GET /api/history?symbol=X&range=3y&ohlc=1` → serie diaria de 3 años con máximos y mínimos (Ficha).
+- Rangos de `/api/history`: 1d, 5d, 1mo, 3mo (02/11/2026, portada 3M), 6mo, ytd, 1y (semanal), 1yd, 2y, 3y, 5y (semanal), max (mensual).
 - `universo` está en la lista blanca de `?que=tabla`.
 
 ### Vigía BTP (01/10/2026) — `api/vigia.js`
