@@ -9,8 +9,12 @@ import { serieTWR } from '../lib/twr'
 import { useCache, useSondeo, cargar, entrada } from '../lib/cache'
 import './mercados.css'
 
-const PERIODOS = [['1d', '1D'], ['5d', '1S'], ['1mo', '1M'], ['6mo', '6M'], ['ytd', 'YTD'], ['1y', '1A'], ['5y', '5A'], ['max', 'MAX']]
-const COMPARABLES = ['1mo', '6mo', 'ytd', '1y', '5y', 'max']  // la cartera es semanal: 1D/1S no comparan
+const PERIODOS = [['1d', '1D'], ['5d', '1S'], ['1mo', '1M'], ['3mo', '3M'], ['6mo', '6M'], ['ytd', 'YTD'], ['1y', '1A'], ['2y', '2A'], ['5y', '5A'], ['max', 'MAX']]
+// La cartera solo tiene cierres semanales: 1D no compara. 1S compara la última semana cerrada (02/11/2026).
+const COMPARABLES = ['5d', '1mo', '3mo', '6mo', 'ytd', '1y', '2y', '5y', 'max']
+// Serie diaria del índice para la comparativa: tiene que cubrir desde el cierre semanal de la cartera
+// anterior al inicio del periodo (hasta 7 días antes) y casar con sus fechas. 5A y MAX usan la de la gráfica.
+const RANGO_COMP = { '5d': '6mo', '1mo': '6mo', '3mo': '6mo', '6mo': '1yd', 'ytd': '2y', '1y': '2y', '2y': '3y' }
 const fmtPct = v => v == null ? '—' : (v > 0 ? '+' : '') + v.toFixed(2) + '%'
 const pctClass = v => v == null ? '' : v > 0 ? 'up' : v < 0 ? 'down' : ''
 const fFecha = t => {
@@ -208,7 +212,7 @@ function BoxSimbolo({ s, q, pts, range, comparable, comparando, onComparar, edit
           </span>
         ) : (
           <button className="btn-vs" disabled={!comparable} onClick={onComparar}
-                  title={comparable ? 'Comparar con la evolución del portfolio' : 'Comparación disponible de 1M en adelante (la cartera es semanal)'}>
+                  title={comparable ? 'Comparar con la evolución del portfolio' : '1D no compara: la cartera solo tiene cierres semanales'}>
             {comparando ? '✕ cerrar' : 'vs cartera'}
           </button>
         )}
@@ -229,24 +233,40 @@ function Comparativa({ s, pts, range, onCerrar }) {
         supabase.from('contributions').select('fecha,importe_eur,importe_usd'),
       ])
       if (!vivo || !weeks?.length || pts.length < 2) { setDatos({ vacio: true }); return }
-      const desde = pts[0].t
-      // Cartera en TWR: comparar en bruto sería tramposo (las aportaciones inflarían la línea)
-      const cartera = serieTWR(weeks, contribs)
-        .map(p => ({ t: p.t, v: p.idx }))
-        .filter(p => p.t >= desde - 4 * 86400000)
-      if (cartera.length < 2) { setDatos({ vacio: true }); return }
-      // Rebase a 0%: ambas series parten del mismo punto y se mide el desvío
-      const reb = (serie) => {
-        const base = serie[0].v
-        return serie.map(p => ({ t: p.t, pct: (p.v - base) / base * 100 }))
+      // Índice en diario y con margen hacia atrás (RANGO_COMP); 5A/MAX, la serie de la gráfica
+      let base = pts
+      const rc = RANGO_COMP[range]
+      if (rc) {
+        const h = await cargar(claveHist(s.yahoo_symbol, rc), () => fetchHistory(s.yahoo_symbol, rc), { ttl: 15 * 60e3, persist: true }).catch(() => null)
+        if (h?.points?.length > 1) base = h.points
       }
-      const sim = reb(pts), car = reb(cartera)
+      if (!vivo) return
+      // Cartera en TWR: comparar en bruto sería tramposo (las aportaciones inflarían la línea).
+      // Ancla = último cierre semanal en o antes del inicio del periodo; fin = último cierre semanal.
+      const tw = serieTWR(weeks, contribs).map(p => ({ t: p.t, v: p.idx }))
+      let i0 = -1
+      for (let k = 0; k < tw.length; k++) if (tw[k].t <= pts[0].t) i0 = k
+      const cartera = tw.slice(Math.max(0, i0))
+      if (cartera.length < 2) { setDatos({ vacio: true }); return }
+      const t0 = cartera[0].t, t1 = cartera.at(-1).t
+      // Valor del índice al cierre de un día (último punto ≤ fin de ese día)
+      const valorEn = t => { let v = null; for (const p of base) { if (p.t < t + 864e5) v = p.v; else break } return v }
+      const v0 = valorEn(t0) ?? base[0].v
+      const idx = [{ t: t0, v: v0 }, ...base.filter(p => p.t > t0 + 864e5 && p.t < t1 + 864e5)]
+      if (idx.at(-1).t < t1) idx.push({ t: t1, v: valorEn(t1) ?? idx.at(-1).v })
+      // Rebase a 0%: ambas series parten del mismo cierre y terminan en el mismo cierre semanal
+      const reb = (serie) => {
+        const b = serie[0].v
+        return serie.map(p => ({ t: p.t, pct: (p.v - b) / b * 100 }))
+      }
+      const sim = reb(idx), car = reb(cartera)
       // fusionar por timestamp para recharts (dos claves)
       const mapa = new Map()
       for (const p of sim) mapa.set(p.t, { t: p.t, sim: p.pct })
       for (const p of car) mapa.set(p.t, { ...(mapa.get(p.t) || { t: p.t }), car: p.pct })
       const serie = [...mapa.values()].sort((a, b) => a.t - b.t)
-      setDatos({ serie, finSim: sim.at(-1).pct, finCar: car.at(-1).pct })
+      const finSim = (valorEn(t1) ?? idx.at(-1).v) / v0 * 100 - 100
+      setDatos({ serie, finSim, finCar: car.at(-1).pct, t0, t1 })
     }
     montar()
     return () => { vivo = false }
@@ -279,7 +299,7 @@ function Comparativa({ s, pts, range, onCerrar }) {
           <Line type="monotone" dataKey="car" stroke="#2E6BF6" strokeWidth={2} dot={false} connectNulls />
         </LineChart>
       </ResponsiveContainer>
-      <p className="comp-nota">Ambas series parten de 0% al inicio del periodo ({fFecha(datos.serie[0].t)}): desempeño relativo. La cartera va en RENTABILIDAD (TWR, sin efecto de las aportaciones) y con resolución semanal.</p>
+      <p className="comp-nota">Mismo tramo para las dos: del cierre semanal del {fFecha(datos.t0)} al del {fFecha(datos.t1)} (la cartera solo tiene cierres semanales; la semana en curso entra al cerrarla). La cartera va en RENTABILIDAD (TWR, sin efecto de las aportaciones).</p>
     </div>
   )
 }
