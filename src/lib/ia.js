@@ -60,7 +60,7 @@ export async function extraerAuto(file, conocidas = []) {
   let j
   try { j = JSON.parse(txt) } catch { throw new Error(r.ok ? 'respuesta no válida' : `HTTP ${r.status}`) }
   if (j.error) throw new Error(j.error)
-  return { tipo: j.tipo === 'cerradas' ? 'cerradas' : 'abiertas', extracciones: j.extracciones || [], modelo: j._modelo || null }
+  return { tipo: ['cerradas', 'mixta'].includes(j.tipo) ? j.tipo : 'abiertas', extracciones: j.extracciones || [], modelo: j._modelo || null }
 }
 
 // ─── Calendario: solo lectura/purga. La regeneración IA de 24h y el análisis IA
