@@ -173,7 +173,7 @@ export async function fetchCierresBloques() {
 // lo que el historial del broker vuelve a enseñar semana tras semana.
 export async function fetchCierresDesde(desde) {
   const { data, error } = await supabase.from('position_history')
-    .select('id,ticker,broker,closed_date,invested,closed_value').gte('closed_date', desde).limit(2000)
+    .select('id,ticker,broker,entry_date,closed_date,invested,closed_value').gte('closed_date', desde).limit(2000)
   if (error) throw error
   return data || []
 }
