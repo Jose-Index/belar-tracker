@@ -160,7 +160,10 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
     const vistos = new Set()
     // Cada captura con su broker (el corregido por José, si lo hay). Las abiertas de un mismo
     // broker se juntan y se quitan las filas repetidas (capturas solapadas al hacer scroll).
-    const deTipo = t => items.filter(x => x.est === 'ok' && tipoDe(x) === t)
+    // 'mixta' (08/11/2026): una sola captura con los dos paneles (xStation: posiciones abiertas + historial).
+    // Cuenta como abiertas Y como historial. Una de solo historial nunca cuenta como abiertas (daría por
+    // desaparecido todo lo del broker).
+    const deTipo = t => items.filter(x => x.est === 'ok' && (tipoDe(x) === t || tipoDe(x) === 'mixta'))
       .flatMap(x => (x.res.extracciones || []).map(e => ({ ...e, broker: x.broker || e.broker })))
     const extracciones = juntarAbiertas(deTipo('abiertas'))
     const brokersEnCaptura = new Set(extracciones.map(x => x.broker))
@@ -291,8 +294,16 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
 
   // Cierres leídos del historial del broker → posición abierta que cierran, motivo por SL/TP,
   // y fuera lo que ya está en el histórico de BTP o es antiguo (el historial enseña meses).
+  // 08/11/2026: el historial de XTB trae UNA fila por lote y por tramo (MU: lote 27/07 en dos tramos + lote 04/08;
+  // JCI: 0,3 el 05/11 y 5 el 06/11; VBTC.DE: dos lotes). Antes cada fila casaba con una sola posición y el resto
+  // quedaba como "no aparece". Ahora: 1) se leen todas las filas; 2) cada fila va a su lote por fecha de apertura
+  // (o al único lote abierto de ese valor); 3) los tramos de un mismo lote se suman en un solo cierre. Si el lote
+  // ya no está abierto en la captura, se cierra entero: invertido de BTP + suma de G/P del broker.
   function cruzarCierres(extracciones, positions, hist, vistos) {
-    const filas = [], claves = new Set(), usados = new Set()
+    const filas = [], claves = new Set(), usados = new Set(), crudas = []
+    const esFecha = x => /^\d{4}-\d{2}-\d{2}$/.test(x || '')
+    const hoy = fechaLocalISO()
+    // ── 1) Lectura fila a fila ──
     for (const ex of extracciones) {
       for (const c of ex.cierres || []) {
         const broker = ex.broker
@@ -300,8 +311,9 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
         const canon = resolverSimbolo(textos, simbolos)
         const t = (canon || c.ticker || c.nombre || '?').toUpperCase()
         const vars = new Set(textos.flatMap(variantes))
-        const invertido = c.invertido ?? (c.valor_cierre != null && c.gp != null ? c.valor_cierre - c.gp : null)
-        let valorCierre = c.valor_cierre ?? (c.invertido != null && c.gp != null ? c.invertido + c.gp : null)
+        const gp = c.gp != null && Number.isFinite(Number(c.gp)) ? Number(c.gp) : null
+        const invertido = c.invertido ?? (c.valor_cierre != null && gp != null ? c.valor_cierre - gp : null)
+        let valorCierre = c.valor_cierre ?? (c.invertido != null && gp != null ? c.invertido + gp : null)
         // El % de la fila (columna del broker) desempata una cifra mal leída (24/10/2026: SSL +194,40 leído 154,40):
         // si invertido × (1 + %) no cuadra con el valor leído, manda el %.
         const pctB = Number(c.gp_pct)
@@ -310,15 +322,14 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
           const vPct = Math.round(invertido * (1 + pctB / 100) * 100) / 100
           if (valorCierre == null || Math.abs(vPct - valorCierre) > Math.max(0.3, invertido * 0.0008)) { valorCierre = vPct; corregidoPct = true }
         }
-        const esFecha = x => /^\d{4}-\d{2}-\d{2}$/.test(x || '')
         let fecha = esFecha(c.fecha_cierre) ? c.fecha_cierre : ''
         let fApert = esFecha(c.fecha_apertura) ? c.fecha_apertura : ''
         // Fechas cruzadas (la IA tomó la de apertura por la de cierre, 24/10/2026): el cierre es la posterior.
         if (fecha && fApert && fecha < fApert) { const tmp = fecha; fecha = fApert; fApert = tmp }
-        const hoy = fechaLocalISO()
         fecha = arreglarAnio(fecha, diasAntes(hoy, 400), hoy)
         if (fApert) fApert = arreglarAnio(fApert, diasAntes(hoy, 3650), fecha || hoy)
-        const clave = `${broker}|${t}|${fecha}|${invertido == null ? '' : Math.round(invertido)}`
+        // Clave con volumen y precios: dos tramos del mismo lote el mismo día no son "la misma fila repetida".
+        const clave = `${broker}|${t}|${fecha}|${fApert}|${invertido == null ? '' : Math.round(invertido * 100)}|${c.volumen ?? ''}|${c.precio_cierre ?? ''}|${gp ?? ''}`
         if (claves.has(clave)) continue  // la misma fila en dos capturas solapadas
         claves.add(clave)
         const mismoTicker = tk => { const u = String(tk || '').toUpperCase(); return u === t || vars.has(u) }
@@ -335,56 +346,128 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
             Math.abs(Number(h.closed_value) - valorCierre) <= Math.max(1, Math.abs(valorCierre) * 0.01))
           if (h) { ya = true; corrige = { id: h.id, de: h.closed_date, a: fecha, sel: true } }
         }
-        // Posición abierta que cierra: mismo broker y ticker; si hay varias (lotes), la de invertido más cercano.
-        const cerca = p => invertido == null ? 0 : Math.abs(Number(p.invested) - invertido)
-        let pos = ya ? null : positions.filter(p => p.broker === broker && !usados.has(p.id) && mismoTicker(p.ticker))
-          .sort((x, y) => cerca(x) - cerca(y))[0] || null
-        // Broker mal leído (historial recortado de eToro leído como XTB, 24/10/2026): si en el broker leído no
-        // está, pero en otro hay una abierta con el mismo ticker y el mismo invertido (±0,5 %), es esa.
-        let brokerCorregido = false
-        if (!pos && !ya && invertido != null) {
-          pos = positions.find(p => p.broker !== broker && !usados.has(p.id) && mismoTicker(p.ticker) &&
-            Math.abs(Number(p.invested) - invertido) <= Math.max(0.5, Math.abs(invertido) * 0.005)) || null
-          brokerCorregido = !!pos
+        // Tramo de un lote ya sellado (08/11/2026): el histórico guarda el lote entero (SBLK: 6 + 23 acc. = un cierre),
+        // así que un tramo suelto no casa por invertido. Casa por lote: misma apertura y cierre en esa fecha o después.
+        if (!ya && fecha) ya = hist.some(h => h.broker === broker && mismoTicker(h.ticker) &&
+          (fApert ? h.entry_date === fApert && h.closed_date >= fecha && h.closed_date <= diasAntes(fecha, -10) : h.closed_date === fecha && invertido == null))
+        crudas.push({ c, broker, textos, t, mismoTicker, gp, invertido, valorCierre, corregidoPct, fecha, fApert, ya, corrige })
+      }
+    }
+    // ── 2) Cada fila a su lote ──
+    // Ya sellado en BTP (todo un cierre anterior con el mismo invertido) → no participa.
+    const vivas = crudas.filter(r => !r.ya)
+    const grupos = new Map()
+    for (const r of vivas) { const k = r.broker + '|' + r.t; if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(r) }
+    const asignadas = new Map()   // pos.id → [filas]
+    const sueltas = []
+    for (const rs of grupos.values()) {
+      const { broker, mismoTicker } = rs[0]
+      // Lotes candidatos: abiertos en BTP con ese valor y broker; primero los que YA NO salen en la captura de abiertas.
+      const cand = positions.filter(p => p.broker === broker && mismoTicker(p.ticker))
+      const fuera = cand.filter(p => !vistos.has(p.id))
+      const lotes = fuera.length ? fuera : cand
+      const aLote = new Map()
+      for (const r of rs) {
+        let p = null
+        if (lotes.length === 1) p = lotes[0]
+        else if (lotes.length > 1) {
+          p = (r.fApert && lotes.find(x => x.entry_date === r.fApert)) ||
+            (r.invertido != null ? [...lotes].sort((x, y) => Math.abs(Number(x.invested) - r.invertido) - Math.abs(Number(y.invested) - r.invertido))[0] : null)
+          // Varios lotes y una sola fila que es su SUMA (el broker o la IA los juntó): se reparte después.
+          if (rs.length === 1 && r.invertido != null && !lotes.some(x => x.entry_date === r.fApert)) {
+            const suma = lotes.reduce((a, x) => a + Number(x.invested), 0)
+            if (Math.abs(suma - r.invertido) <= Math.max(1, suma * 0.01)) p = { reparto: lotes }
+          }
         }
-        let porImporte = false
-        if (!pos && !ya && invertido != null) {
-          // Nombre no reconocido: una abierta del mismo broker que no salga en la captura, con el mismo invertido (±0,5 %).
-          pos = positions.find(p => p.broker === broker && !usados.has(p.id) && !vistos.has(p.id) &&
-            Math.abs(Number(p.invested) - invertido) <= Math.max(0.5, Math.abs(invertido) * 0.005)) || null
+        if (!p) { sueltas.push(r); continue }
+        if (p.reparto) {
+          const acc = x => Number(x.entry_price) > 0 ? Number(x.invested) / Number(x.entry_price) : Number(x.invested)
+          const tot = p.reparto.reduce((a, x) => a + acc(x), 0)
+          for (const x of p.reparto) {
+            const k = acc(x) / tot
+            const parte = { ...r, invertido: Number(x.invested), gp: r.gp != null ? r.gp * k : (r.valorCierre != null ? (r.valorCierre - r.invertido) * k : null), repartido: p.reparto.length }
+            parte.valorCierre = parte.gp != null ? Number(x.invested) + parte.gp : null
+            if (!aLote.has(x.id)) aLote.set(x.id, []); aLote.get(x.id).push(parte)
+          }
+          continue
+        }
+        if (!aLote.has(p.id)) aLote.set(p.id, []); aLote.get(p.id).push(r)
+      }
+      for (const [id, l] of aLote) asignadas.set(id, l)
+    }
+    // ── 3) Un cierre por lote (tramos sumados) ──
+    const r2 = x => Math.round(x * 100) / 100
+    const salida = []
+    for (const [id, rs] of asignadas) {
+      const pos = positions.find(p => p.id === id)
+      usados.add(pos.id)
+      const base = [...rs].sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)))[0]
+      const sigueAbierta = vistos.has(pos.id)
+      const todosGp = rs.every(r => r.gp != null)
+      const sumGp = rs.reduce((a, r) => a + (r.gp ?? 0), 0)
+      const sumInv = rs.every(r => r.invertido != null) ? rs.reduce((a, r) => a + r.invertido, 0) : null
+      const sumVal = rs.every(r => r.valorCierre != null) ? rs.reduce((a, r) => a + r.valorCierre, 0) : null
+      let invertido = sumInv, valorCierre = sumVal, porGp = false
+      if (!sigueAbierta) {
+        // El lote ya no está abierto: se cierra ENTERO. Invertido de BTP; valor = invertido + G/P real del broker
+        // (el historial de XTB no trae "valor de apertura" y en VBTC.DE los precios van en euros).
+        const inv = Number(pos.invested)
+        if (todosGp) { invertido = inv; valorCierre = r2(inv + sumGp); porGp = rs.length > 1 || base.invertido == null || Math.abs(base.invertido - inv) > Math.max(1, inv * 0.005) }
+        else if (sumInv != null && sumVal != null && Math.abs(sumInv - inv) <= Math.max(1, inv * 0.01)) { invertido = inv; valorCierre = r2(inv + sumVal - sumInv) }
+      }
+      salida.push({ ...base, pos, invertido: invertido == null ? null : r2(invertido), valorCierre: valorCierre == null ? null : r2(valorCierre),
+        gp: todosGp ? r2(sumGp) : base.gp, tramos: rs.length, porGp, repartido: base.repartido || 0,
+        motivoBroker: rs.map(r => r.c.motivo_broker).find(Boolean) || null })
+    }
+    // Filas sin lote del mismo broker y ticker: broker mal leído o nombre no reconocido (casan por invertido).
+    for (const r of sueltas) {
+      let pos = null, brokerCorregido = false, porImporte = false
+      if (r.invertido != null) {
+        pos = positions.find(p => p.broker !== r.broker && !usados.has(p.id) && r.mismoTicker(p.ticker) &&
+          Math.abs(Number(p.invested) - r.invertido) <= Math.max(0.5, Math.abs(r.invertido) * 0.005)) || null
+        brokerCorregido = !!pos
+        if (!pos) {
+          pos = positions.find(p => p.broker === r.broker && !usados.has(p.id) && !vistos.has(p.id) &&
+            Math.abs(Number(p.invested) - r.invertido) <= Math.max(0.5, Math.abs(r.invertido) * 0.005)) || null
           porImporte = !!pos
         }
-        if (pos) usados.add(pos.id)
-        const brokerF = pos ? pos.broker : broker
-        const lev = Number(c.apalancamiento) || Number(pos?.apalancamiento) || 1
-        // % de precio: de los precios de la fila si vienen (sin divisa ni apalancamiento); si no, del importe ÷ apalancamiento.
-        const pa = Number(c.precio_apertura), pc = Number(c.precio_cierre)
-        const pct = pa > 0 && pc > 0 ? (pc / pa - 1) * 100 : pctLev(invertido, valorCierre, lev)
-        // El distintivo SL/TP del broker manda sobre la deducción por precio.
-        const mb = String(c.motivo_broker || '').toUpperCase()
-        const motivoB = mb === 'TP' ? 'xTP' : mb === 'SL' ? 'xSL' : null
-        const reciente = !fecha || fecha >= desdeCierres
-        // Dudosa: importes que no cuadran, o una fecha de cierre anterior a la apertura de la posición que cierra.
-        const dudosa = (c.gp != null && invertido != null && valorCierre != null && Math.abs(invertido + c.gp - valorCierre) > 0.05) ||
-          (!!pos && !!fecha && !!pos.entry_date && fecha < pos.entry_date)
-        // Fecha de cierre imposible (24/10/2026: RR.L sellada con la de apertura, 24/08): sin fecha, anterior a la
-        // apertura, igual a la apertura leída, o una posición que seguía abierta en el último cierre y "cerró" antes.
-        // Bloquea el aplicar hasta que José la corrija o la confirme en el selector de fecha.
-        const fechaDudosa = !fecha || (!!fApert && fecha === fApert) ||
-          (!!pos && !!pos.entry_date && fecha <= pos.entry_date && pos.entry_date < diasAntes(hoy, 2)) ||
-          (!!pos && !!desde && fecha < diasAntes(desde, 1))
-        filas.push({
-          sel: !ya && (reciente || !!pos), ya, reciente, dudosa: dudosa && !corregidoPct, porImporte, brokerCorregido, motivoB, corregidoPct,
-          fechaDudosa, fechaEditada: false, corrige,
-          ticker: pos ? pos.ticker : t, broker: brokerF, textos,
-          invertido, valorCierre, fecha_cierre: fecha,
-          entry_date: fApert || pos?.entry_date || null,
-          apalancamiento: lev,
-          pct: invertido > 0 && valorCierre != null ? (valorCierre / invertido - 1) * 100 : null,
-          motivo: motivoB || motivoPropuesto(pos, pct) || 'manual',
-          mapear: pos ? String(pos.id) : '',
-        })
       }
+      if (pos) usados.add(pos.id)
+      salida.push({ ...r, pos, brokerCorregido, porImporte, tramos: 1, porGp: false, motivoBroker: r.c.motivo_broker || null })
+    }
+    for (const r of crudas.filter(r => r.ya)) salida.push({ ...r, pos: null, tramos: 1, porGp: false, motivoBroker: r.c.motivo_broker || null })
+
+    for (const r of salida) {
+      const { c, pos, fecha, fApert, invertido, valorCierre } = r
+      const brokerF = pos ? pos.broker : r.broker
+      const lev = Number(c.apalancamiento) || Number(pos?.apalancamiento) || 1
+      // % de precio: de los precios de la fila si vienen (sin divisa ni apalancamiento); si no, del importe ÷ apalancamiento.
+      const pa = Number(c.precio_apertura), pc = Number(c.precio_cierre)
+      const pct = pa > 0 && pc > 0 ? (pc / pa - 1) * 100 : pctLev(invertido, valorCierre, lev)
+      // El distintivo SL/TP del broker manda sobre la deducción por precio.
+      const mb = String(r.motivoBroker || '').toUpperCase()
+      const motivoB = mb === 'TP' ? 'xTP' : mb === 'SL' ? 'xSL' : null
+      const reciente = !fecha || fecha >= desdeCierres
+      // Dudosa: importes que no cuadran, o una fecha de cierre anterior a la apertura de la posición que cierra.
+      const dudosa = (!r.porGp && r.tramos === 1 && !r.repartido && r.gp != null && invertido != null && valorCierre != null && Math.abs(invertido + r.gp - valorCierre) > 0.05) ||
+        (!!pos && !!fecha && !!pos.entry_date && fecha < pos.entry_date)
+      // Fecha de cierre imposible (24/10/2026: RR.L sellada con la de apertura, 24/08): sin fecha, anterior a la
+      // apertura, igual a la apertura leída, o una posición que seguía abierta en el último cierre y "cerró" antes.
+      // Bloquea el aplicar hasta que José la corrija o la confirme en el selector de fecha.
+      const fechaDudosa = !fecha || (!!fApert && fecha === fApert) ||
+        (!!pos && !!pos.entry_date && fecha <= pos.entry_date && pos.entry_date < diasAntes(hoy, 2)) ||
+        (!!pos && !!desde && fecha < diasAntes(desde, 1))
+      filas.push({
+        sel: !r.ya && (reciente || !!pos), ya: r.ya, reciente, dudosa: dudosa && !r.corregidoPct, porImporte: !!r.porImporte, brokerCorregido: !!r.brokerCorregido, motivoB, corregidoPct: r.corregidoPct,
+        fechaDudosa, fechaEditada: false, corrige: r.corrige, tramos: r.tramos, porGp: r.porGp, repartido: r.repartido || 0,
+        ticker: pos ? pos.ticker : r.t, broker: brokerF, textos: r.textos,
+        invertido, valorCierre, fecha_cierre: fecha,
+        entry_date: pos?.entry_date || fApert || null,
+        apalancamiento: lev,
+        pct: invertido > 0 && valorCierre != null ? (valorCierre / invertido - 1) * 100 : null,
+        motivo: motivoB || motivoPropuesto(pos, pct) || 'manual',
+        mapear: pos ? String(pos.id) : '',
+      })
     }
     // Primero lo que hay que decidir; lo ya registrado o antiguo, al final.
     const abajo = f => (f.ya && !f.corrige) || (!f.ya && !f.reciente && !f.mapear)
@@ -542,12 +625,13 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
                     onChange={e => setItem(x.id, { tipo: e.target.value })}>
                     <option value="abiertas">abiertas</option>
                     <option value="cerradas">historial</option>
+                    <option value="mixta">abiertas + historial</option>
                   </select>
                   <select className="diff-sel" value={brokerDe(x)} title="Broker (corrígelo si la IA se equivoca)"
                     onChange={e => setItem(x.id, { broker: e.target.value })}>
                     {BROKERS_UI.map(b => <option key={b.id} value={b.id}>{b.label}</option>)}
                   </select>
-                  <span className="cap-n">{(x.res.extracciones || []).reduce((a, e) => a + (e.posiciones || e.cierres || []).length, 0)} filas</span>
+                  <span className="cap-n">{(x.res.extracciones || []).reduce((a, e) => a + (e.posiciones || []).length + (e.cierres || []).length, 0)} filas</span>
                 </>}
                 {x.err && <span className="auth-err" title={x.err}>{x.err.slice(0, 60)}</span>}
               </div>
@@ -715,6 +799,9 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
               </label>
               {c.porImporte && c.mapear && <span className="warn" title="El nombre no se reconoce, pero el invertido coincide con esta posición">mismo invertido</span>}
               {c.brokerCorregido && <span className="warn" title="La captura se leyó como de otro broker; se ha casado con la posición de este por ticker e invertido">broker corregido</span>}
+              {c.tramos > 1 && <span className="ok-cap" title="El broker lo cerró en varias líneas (tramos del mismo lote): se suman en un solo cierre">{c.tramos} tramos</span>}
+              {c.repartido > 1 && <span className="warn" title="Una sola línea del historial para varios lotes: se reparte por acciones">reparto de {c.repartido}</span>}
+              {c.porGp && <span className="ok-cap" title="Importe = invertido de BTP + beneficio neto del broker (el historial no trae valor de apertura)">invertido + G/P</span>}
               {c.corregidoPct && <span className="warn" title="El importe leído no cuadraba con el % de la fila: se ha recalculado con el %">importe por %</span>}
               {c.motivoB && <span className="ok-cap" title="Motivo marcado por el propio broker en la captura">✓{c.motivoB === 'xTP' ? 'TP' : 'SL'} broker</span>}
               {c.mapear && (() => { const p = positions.find(x => String(x.id) === c.mapear); return p && c.invertido != null && c.invertido < Number(p.invested) * 0.995
