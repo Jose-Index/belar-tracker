@@ -10,6 +10,8 @@
 // modo 'auto' (24/10/2026, ingesta única del cierre de semana) → UNA captura por llamada; la IA decide
 //   si es de posiciones abiertas o de historial y devuelve { tipo: 'abiertas'|'cerradas', extracciones } con
 //   el formato del modo correspondiente.
+// 08/11/2026: tipo 'mixta' (xStation con abiertas + historial en la misma captura: extracciones con
+//   posiciones Y cierres) y una fila por línea del historial, sin agregar (lotes y tramos los casa BTP).
 
 import { anthropic, jsonDe, MODEL_VISION } from './_anthropic.js'
 
@@ -52,7 +54,7 @@ Las capturas adjuntas son pantallas de POSICIONES CERRADAS / HISTORIAL de sus br
 Extrae TODOS los cierres visibles.
 
 Devuelve EXCLUSIVAMENTE un JSON con esta forma, sin texto adicional:
-{"extracciones":[{"broker":"etoro|xtb|ibkr","cierres":[{"nombre":"NVIDIA Corp","ticker":"NVDA","invertido":1717.08,"valor_cierre":1925.54,"gp":208.46,"fecha_cierre":"2026-08-11","fecha_apertura":"2026-04-15","gp_pct":12.14,"precio_apertura":149.75,"precio_cierre":184.95,"motivo_broker":"TP","apalancamiento":1}]}]}
+{"extracciones":[{"broker":"etoro|xtb|ibkr","cierres":[{"nombre":"NVIDIA Corp","ticker":"NVDA","volumen":8.6,"invertido":1717.08,"valor_cierre":1925.54,"gp":208.46,"fecha_cierre":"2026-08-11","fecha_apertura":"2026-04-15","gp_pct":12.14,"precio_apertura":149.75,"precio_cierre":184.95,"motivo_broker":"TP","apalancamiento":1}]}]}
 
 Reglas:
 - broker: dedúcelo por los RÓTULOS de las columnas y por el formato de las filas, no por los colores. eToro: filas "COMPRAR <ticker>" / "VENDER <ticker>" con un distintivo cuadrado "SL"/"TP" a la izquierda, importes en dólares con coma de miles y punto decimal ("$1,000.00"), unidades, precio y fecha+hora de apertura, precio y fecha+hora de cierre, beneficio en $ y en %; también "Historial"/"Cerradas", "Invertido", "Beneficio". Si ves "COMPRAR"/"VENDER" + ticker o el distintivo SL/TP, es eToro aunque no haya cabecera. XTB (xStation) "Historial de órdenes"/"Posiciones cerradas" con "Valor de apertura", "Beneficio neto", "Hora de cierre"; IBKR muestra "Realized P&L", "Trade History". Si no puedes decidirlo, pon el que más se parezca; José lo corrige en pantalla.
@@ -69,7 +71,9 @@ Reglas:
 - motivo_broker: "SL" si la fila lleva el distintivo/etiqueta de stop loss, "TP" si lleva el de take profit; si no hay distintivo, null. No lo deduzcas del resultado.
 - ticker: el símbolo si aparece; si solo hay nombre comercial, tu mejor conversión ("NVIDIA Corp"→"NVDA"). CopyTraders de eToro: el nombre del trader tal cual.
 - apalancamiento: x1 si no se indica.
-- AGREGACIÓN: varias sublíneas/lotes del mismo instrumento cerrados el mismo día = UN cierre con los importes totales. Cierres del mismo instrumento en fechas distintas = cierres separados.
+- UNA FILA POR LÍNEA DEL HISTORIAL (08/11/2026): NO agregues. Cada línea visible es un cierre aparte, aunque sea del mismo instrumento, del mismo lote o del mismo día (XTB parte un lote en tramos: "Micron 0.0206" y "Micron 0.8994" con el mismo ID son dos cierres). BTP las asigna a cada lote por la fecha de apertura y suma los tramos.
+- volumen: unidades/acciones de la línea si aparecen (XTB columna "Volumen"); si no, null.
+- XTB (historial "Posiciones cerradas"): NO trae valor de apertura. invertido = null salvo que la pantalla lo muestre; gp = "Beneficio neto" (en la moneda de la cuenta, USD) con su signo; valor_cierre = null. NO calcules invertido con volumen × precio: los precios pueden ir en EUR o GBP. Copia precio_apertura, precio_cierre, fecha_apertura ("Hora de apertura") y fecha_cierre ("Hora de cierre") de cada línea.
 - Si una cifra no se lee con certeza, null antes que inventarla.
 - CRÍTICO: transcribe cada importe dígito a dígito y reléelo antes de escribirlo. Ante ambigüedad visual, null.`
 
@@ -78,10 +82,12 @@ const PROMPT_AUTO = `Eres el extractor de datos de BTP (Belar Tracker Pro). Reci
 PASO 1 · Decide qué pantalla es:
 - "abiertas": cartera / posiciones abiertas (valor actual, G/P no realizada, "Mi Portafolio", "Posiciones abiertas", "Positions", "Portfolio").
 - "cerradas": historial / posiciones cerradas / operaciones cerradas (fecha u hora de CIERRE, beneficio REALIZADO, "Historial", "Cerradas", "Posiciones cerradas", "Historial de órdenes", "Realized P&L", "Trade History").
+- "mixta": la MISMA captura enseña a la vez un panel de posiciones abiertas Y un panel de historial/posiciones cerradas (xStation de XTB con varios paneles: "Posiciones abiertas" abajo y "Historial › Posiciones cerradas" arriba; o cualquier broker con las dos tablas a la vista). Mira TODA la imagen, todos los paneles, antes de decidir: un panel de historial en una esquina convierte la captura en "mixta".
 La captura puede venir RECORTADA, sin cabecera de columnas. Es "cerradas" si las filas llevan DOS fechas (apertura y cierre), un precio de cierre, o un distintivo "SL"/"TP" de cierre (eToro). Una cartera abierta lleva una sola fecha (o ninguna) por fila.
 PASO 2 · Extrae con las reglas del tipo elegido (abajo van las dos). Responde EXCLUSIVAMENTE un JSON:
 - si es "abiertas": {"tipo":"abiertas","extracciones":[...formato de ABIERTAS...]}
 - si es "cerradas": {"tipo":"cerradas","extracciones":[...formato de CERRADAS...]}
+- si es "mixta": {"tipo":"mixta","extracciones":[{"broker":"...","liquidez":...,"total_cuenta":...,"posiciones":[...formato de ABIERTAS...],"cierres":[...formato de CERRADAS...]}]} — las dos listas COMPLETAS, cada una con sus reglas. La tabla "Órdenes pendientes" (Stop Venta, Buy Limit…) no es ni abiertas ni cierres: ignórala.
 
 ===== REGLAS DE ABIERTAS =====
 ${PROMPT}
@@ -123,7 +129,14 @@ export default async function handler(req, res) {
     }
     res.setHeader('Cache-Control', 'no-store')
     const j = jsonDe(msg)
-    if (auto && j.tipo !== 'cerradas') j.tipo = 'abiertas'
+    if (auto) {
+      // Red de seguridad (08/11/2026): si trae las dos listas con filas, es mixta aunque la IA diga otra cosa.
+      const ex = j.extracciones || []
+      const hayA = ex.some(e => (e.posiciones || []).length), hayC = ex.some(e => (e.cierres || []).length)
+      if (hayA && hayC) j.tipo = 'mixta'
+      else if (j.tipo !== 'cerradas' && j.tipo !== 'mixta') j.tipo = 'abiertas'
+      else if (j.tipo === 'mixta') j.tipo = hayC ? 'cerradas' : 'abiertas'
+    }
     j._modelo = msg.model || MODEL_VISION
     res.status(200).json(j)
   } catch (e) {
