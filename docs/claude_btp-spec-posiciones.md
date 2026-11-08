@@ -130,3 +130,11 @@ Incidente: el cierre del 24/10 dejó BTP en 24.101,81 $ frente a 25.638,20 $ rea
   · alta sin fecha de apertura; cierre con fecha dudosa o sin importes.
 - CERRAR SEMANA: si alguna posición no ha recibido captura ni valor nuevo (ni se cierra), lo lista por bróker y pide pasar la captura que falta antes de sellar con el valor de la semana pasada.
 - Toda la tarjeta de la ingesta acepta capturas (también sobre la cola y en la revisión, que vuelve a la cola); soltar fuera no abre la imagen.
+
+## Captura doble de XTB y cierres por lote y tramo (08/11/2026)
+- Incidente del cierre de semana del 08/11: la captura de xStation traía a la vez "Posiciones abiertas" y "Historial › Posiciones cerradas". Se leyó como "abiertas" y los cierres de BTC (dos lotes VBTC.DE), JCI y MU (dos lotes) salieron en "no aparecen ni abiertas ni en el historial".
+- Tipo de captura `mixta` (abiertas + historial): la IA lo elige si ve los dos paneles; el servidor lo fuerza si la respuesta trae posiciones Y cierres; José puede ponerlo a mano en el selector ("abiertas + historial"). Cuenta como abiertas y como historial. La tabla "Órdenes pendientes" se ignora.
+- Historial: una fila por línea, sin agregar (XTB parte un lote en tramos con el mismo ID). En XTB `invertido` y `valor_cierre` van a null: no hay valor de apertura y los precios pueden ir en EUR/GBP.
+- `cruzarCierres`: 1) lee todas las filas; 2) cada fila va a su lote por `fecha_apertura` = `entry_date` (o al único lote abierto de ese valor; prioridad a los que ya no salen en la captura de abiertas); 3) los tramos de un lote se suman en un solo cierre con la fecha del último. Lote que ya no está abierto: se cierra entero con invertido de BTP y valor = invertido + Σ beneficio neto del broker (marca "invertido + G/P"; "N tramos"). Una fila que es la suma de varios lotes se reparte por acciones ("reparto de N").
+- Duplicados: un tramo de un lote ya sellado casa por lote (misma apertura y cierre en esa fecha o hasta 10 días después), no por invertido (SBLK 6 + 23 acc. = un cierre). `fetchCierresDesde` trae `entry_date`.
+- Banco con los datos del 08/11: BTC 21/09 → 472,58 · BTC 22/09 → 472,58 · JCI (2 tramos, 06/11) → 709,39 · MU 27/07 (2 tramos) → 602,60 · MU 04/08 → 65,89 · SBLK ya sellado.
