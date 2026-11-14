@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { extraerAuto } from '../lib/ia'
 import { MOTIVOS_CIERRE, motivoPropuesto, fetchCierresDesde, fechaLocalISO, corregirFechaCierre } from '../lib/posiciones-db'
-import { resolverSimbolo, aprenderAlias, variantes } from '../lib/quotes'
+import { resolverSimbolo, simbolosDe, aprenderAlias, variantes } from '../lib/quotes'
 import './ingesta.css'
 
 const fmt$ = v => v == null ? '—' : Number(v).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -332,7 +332,9 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
         const clave = `${broker}|${t}|${fecha}|${fApert}|${invertido == null ? '' : Math.round(invertido * 100)}|${c.volumen ?? ''}|${c.precio_cierre ?? ''}|${gp ?? ''}`
         if (claves.has(clave)) continue  // la misma fila en dos capturas solapadas
         claves.add(clave)
-        const mismoTicker = tk => { const u = String(tk || '').toUpperCase(); return u === t || vars.has(u) }
+        // Mismo activo con dos tickers en BTP (VBTC.DE sellado como BTC, 14/11/2026): cuentan todos los que casan.
+        const equiv = new Set(simbolosDe(textos, simbolos))
+        const mismoTicker = tk => { const u = String(tk || '').toUpperCase(); return u === t || vars.has(u) || equiv.has(u) }
         const casa = tol => h => h.broker === broker && mismoTicker(h.ticker) && (!fecha || h.closed_date === fecha) &&
           (invertido == null || Math.abs(Number(h.invested) - invertido) <= Math.max(1, Math.abs(invertido) * tol))
         let ya = hist.some(casa(0.005)) || (invertido != null && hist.some(h => h.broker !== broker && mismoTicker(h.ticker) &&
