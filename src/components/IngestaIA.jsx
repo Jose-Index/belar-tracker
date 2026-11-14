@@ -417,8 +417,20 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
         if (todosGp) { invertido = inv; valorCierre = r2(inv + sumGp); porGp = rs.length > 1 || base.invertido == null || Math.abs(base.invertido - inv) > Math.max(1, inv * 0.005) }
         else if (sumInv != null && sumVal != null && Math.abs(sumInv - inv) <= Math.max(1, inv * 0.01)) { invertido = inv; valorCierre = r2(inv + sumVal - sumInv) }
       }
+      // ¿Falta un tramo? (14/11/2026: NVDA cerró en 8 + 0,6 acc. y la captura solo enseñaba el de 0,6 → sellada a
+      // −1,7 % en vez de −25 %). Si el lote se cierra entero con el G/P del broker, ese G/P sobre el invertido tiene
+      // que parecerse al % de los precios de la fila (× apalancamiento). Margen ancho: divisa y comisiones.
+      let faltaTramo = null
+      if (!sigueAbierta && todosGp && Number(pos.invested) > 0) {
+        const pa = Number(base.c.precio_apertura), pc = Number(base.c.precio_cierre)
+        if (pa > 0 && pc > 0) {
+          const lev = Number(base.c.apalancamiento) || Number(pos.apalancamiento) || 1
+          const pctPrecio = (pc / pa - 1) * 100 * lev, pctGp = sumGp / Number(pos.invested) * 100
+          if (Math.abs(pctGp - pctPrecio) > Math.max(6, Math.abs(pctPrecio) * 0.4)) faltaTramo = { pctGp, pctPrecio }
+        }
+      }
       salida.push({ ...base, pos, invertido: invertido == null ? null : r2(invertido), valorCierre: valorCierre == null ? null : r2(valorCierre),
-        gp: todosGp ? r2(sumGp) : base.gp, tramos: rs.length, porGp, repartido: base.repartido || 0,
+        faltaTramo, gp: todosGp ? r2(sumGp) : base.gp, tramos: rs.length, porGp, repartido: base.repartido || 0,
         motivoBroker: rs.map(r => r.c.motivo_broker).find(Boolean) || null })
     }
     // Filas sin lote del mismo broker y ticker: broker mal leído o nombre no reconocido (casan por invertido).
@@ -461,7 +473,7 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
         (!!pos && !!desde && fecha < diasAntes(desde, 1))
       filas.push({
         sel: !r.ya && (reciente || !!pos), ya: r.ya, reciente, dudosa: dudosa && !r.corregidoPct, porImporte: !!r.porImporte, brokerCorregido: !!r.brokerCorregido, motivoB, corregidoPct: r.corregidoPct,
-        fechaDudosa, fechaEditada: false, corrige: r.corrige, tramos: r.tramos, porGp: r.porGp, repartido: r.repartido || 0,
+        fechaDudosa, fechaEditada: false, faltaTramo: r.faltaTramo || null, tramoOk: false, corrige: r.corrige, tramos: r.tramos, porGp: r.porGp, repartido: r.repartido || 0,
         ticker: pos ? pos.ticker : r.t, broker: brokerF, textos: r.textos,
         invertido, valorCierre, fecha_cierre: fecha,
         entry_date: pos?.entry_date || fApert || null,
@@ -510,6 +522,7 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
     for (const c of d.cierres) if (c.sel && !c.ya) {
       if (c.fechaDudosa && !c.fechaEditada) f.push(`${c.ticker}: fecha de cierre dudosa — corrígela o confírmala`)
       if (c.invertido == null || c.valorCierre == null) f.push(`${c.ticker}: importes del cierre`)
+      if (c.faltaTramo && !c.tramoOk) f.push(`${c.ticker}: el G/P leído (${c.faltaTramo.pctGp.toFixed(1)} %) no cuadra con los precios (${c.faltaTramo.pctPrecio.toFixed(1)} %) — ¿falta un tramo en la captura? Sube el historial completo o confírmalo`)
     }
     for (const x of d.faltantes) if (!cubiertaEn(d, x)) {
       if (!x.decision) f.push(`${x.pos.ticker} (${x.pos.broker}): no sale ni abierta ni en el historial — ¿sigue abierta o se cerró?`)
@@ -810,6 +823,8 @@ export default function IngestaIA({ positions, simbolos = [], onAplicar, desde =
                 ? <span className="warn" title="Se cierra menos de lo invertido: la posición se reduce, no se borra">parcial</span> : null })()}
               {!c.reciente && <span className="warn" title="Fecha de cierre anterior al último cierre de semana: compruébala">fecha antigua</span>}
               {c.dudosa && <span className="down" title="Invertido + G/P no cuadra con el valor de cierre: compruébalo en la captura">⚠ revisar</span>}
+              {c.faltaTramo && <a className={c.tramoOk ? 'ok-cap' : 'down'} title="El beneficio leído del broker no cuadra con los precios de apertura y cierre: puede faltar un tramo de este cierre en la captura (fila cortada). Sube el historial completo; si el importe es correcto, pulsa para confirmarlo"
+                onClick={e => { e.preventDefault(); setDiff({ ...d, cierres: d.cierres.map((x, j) => j === i ? { ...x, tramoOk: !x.tramoOk } : x) }) }}>{c.tramoOk ? '✓ tramo confirmado' : '⚠ ¿falta un tramo? · confirmar'}</a>}
             </>}
           </div>
         )
