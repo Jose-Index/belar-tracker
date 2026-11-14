@@ -103,6 +103,16 @@ export function resolverSimbolo(textos, simbolos) {
   return hits.length === 1 ? hits[0].ticker.toUpperCase() : null
 }
 
+// Todos los tickers de BTP que casan EXACTO con lo leído (14/11/2026). Un mismo activo puede vivir en BTP con
+// dos tickers: el ETN de bitcoin de XTB se lee "VBTC.DE · Bitcoin ETN" y casa con VBTC.DE (ticker) y con BTC
+// (alias "BITCOIN ETN"). resolverSimbolo devuelve solo el primero; para saber si un cierre YA está en el
+// histórico hay que mirar todos, o el sellado como BTC no se reconoce y se pide de nuevo.
+export function simbolosDe(textos, simbolos) {
+  const cands = (textos || []).filter(Boolean).flatMap(variantes)
+  if (!cands.length) return []
+  return (simbolos || []).filter(s => clavesDe(s).flatMap(variantes).some(k => cands.includes(k))).map(s => s.ticker.toUpperCase())
+}
+
 // Guarda en symbols los nombres con los que un broker llama a este ticker,
 // para que la próxima captura lo reconozca sola. Idempotente.
 export async function aprenderAlias(ticker, textos) {
