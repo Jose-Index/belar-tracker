@@ -133,3 +133,11 @@ button.rd-dato:hover { background: #FAFAFA; }
 .cb-rsi-ley { margin: 8px 0 10px; }
 .cb-rsi { height: 150px; }
 .pt-svg .cero.disc { stroke-dasharray: 5 5; }
+
+/* Gurús */
+.gu-fila { align-items: flex-start; }
+.gu-gestor { width: 200px; font-weight: 600; display: flex; flex-direction: column; gap: 2px; }
+.gu-tipo { font-weight: 400; font-size: 13px; }
+.gu-det { display: block; margin: 4px 0; font-size: 14px; color: var(--texto-sec); }
+.gu-toca { border-color: var(--texto); color: var(--texto); }
+.gu-url { font-size: 13px; color: var(--texto); text-decoration: underline; text-underline-offset: 3px; }

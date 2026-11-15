@@ -3,6 +3,7 @@ import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
 import Portada from './pages/Portada.jsx'
 import Rendimiento from './pages/Rendimiento.jsx'
 import Combo from './pages/Combo.jsx'
+import Gurus from './pages/Gurus.jsx'
 import Inicio from './pages/Inicio.jsx'
 import Historico from './pages/Historico.jsx'
 import Tesis from './pages/Tesis.jsx'
@@ -32,13 +33,14 @@ const Icono = ({ id }) => (
   </svg>
 )
 
-// Menú de BTP v4 (15/11/2026). `sec`: entradas de apoyo, más discretas. Gurús entrará cuando exista su página.
+// Menú de BTP v4 (15/11/2026). `sec`: entradas de apoyo, más discretas.
 const MENU = [
   { to: '/', label: 'Posiciones', end: true, icono: 'inicio', movil: true },
   { to: '/rendimiento', label: 'Rendimiento' },
   { to: '/buscador', label: 'Buscador', icono: 'buscador', movil: true },
   { to: '/alertas', label: 'Alertas', icono: 'alertas', movil: true },
   { to: '/calendario', label: 'Calendario', icono: 'calendario', movil: true },
+  { to: '/gurus', label: 'Gurús' },
   { to: '/reparto', label: 'Reparto' },
   { to: '/repositorio', label: 'Log' },
   { to: '/tesis', label: 'Tesis', sec: true },
@@ -88,6 +90,7 @@ export default function App() {
           <Route path="/gestion" element={<Inicio vista="cierre" />} />
           <Route path="/rendimiento" element={<><Rendimiento /><Inicio vista="rendimiento" /><Historico /><Patrimonio /></>} />
           <Route path="/combo" element={<Combo />} />
+          <Route path="/gurus" element={<Gurus />} />
           <Route path="/reparto" element={<Inicio vista="reparto" />} />
           <Route path="/buscador" element={<Buscador />} />
           <Route path="/tesis" element={<Tesis />} />

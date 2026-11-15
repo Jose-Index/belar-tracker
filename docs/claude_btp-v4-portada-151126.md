@@ -53,3 +53,9 @@ José pidió un cambio estético, eligió dirección clara y sobria y, de tres p
 
 Precio diario de BTC con su media de 200 sesiones, RSI(14) de Wilder con los umbrales de la regla, régimen y condición de
 entrada o salida de la última vela cerrada. Datos de BTC-USD (Yahoo). El aviso al móvil lo da el Vigía (ver docs/belar-api.md).
+
+## Gurús (`src/pages/Gurus.jsx`, ruta `/gurus`, 15/11/2026)
+
+Lista por fecha de la actividad de los gestores seguidos, con filtro por gestor y marca cuando toca un valor en cartera.
+La escribe la tarea programada "Belar gurús (BTP)" en `app_state.gurus_feed`. Calendario: la portada ya no enseña eventos
+de posiciones cerradas; añadidas la Fed del 09/12, el cierre de año y la fecha de los 13F.

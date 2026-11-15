@@ -97,7 +97,9 @@ export default function Portada() {
     const wallet = w.qty > 0 ? { qty: w.qty, usd: precio ? w.qty * precio : null, inv: w.invertido || null } : null
     const inv = suma(P, 'inv'), val = suma(P, 'val')
     const hoy = new Date(new Date().toISOString().slice(0, 10))
-    const cal = (data.eventos || []).map(e => ({ ...e, dias: Math.round((new Date(e.event_date) - hoy) / DIA) })).filter(e => e.dias >= 0 && e.dias <= 14)
+    const abiertos = new Set(P.map(p => p.ticker))
+    // Solo lo que te afecta: eventos de valores en cartera y los generales (Fed, BCE, fechas propias). Los de posiciones ya cerradas no salen.
+    const cal = (data.eventos || []).map(e => ({ ...e, dias: Math.round((new Date(e.event_date) - hoy) / DIA) })).filter(e => e.dias >= 0 && e.dias <= 14 && (!e.ticker || abiertos.has(e.ticker)))
     return { P, grupos, caja, wallet, total: val + caja + (wallet?.usd || 0), abierto: inv ? (val - inv) / inv * 100 : null, cal, cierre: data.lastClose?.date || null }
   }, [data, agrupar, orden, qBtc])
 
