@@ -208,6 +208,33 @@ async function pasada(req, res, topic, dry) {
     }
   } catch (e) { errores.push('combo: ' + String(e.message).slice(0, 120)) }
 
+  // Latido de las tareas programadas de Belar (15/11/2026): si el parte diario (L-V 22:35) o la revisión de gurús (cada
+  // día 07:47) no han corrido cuando tocaba, un aviso por hueco. Se mira a partir de las 10:00 de Madrid.
+  let latido = estado.latido || {}
+  try {
+    const mad = t => new Date(t).toLocaleString('sv-SE', { timeZone: 'Europe/Madrid' })   // 'AAAA-MM-DD HH:MM:SS'
+    const aqui = mad(ahora), hoyM = aqui.slice(0, 10)
+    if (aqui.slice(11, 16) >= '10:00') {
+      const d = new Date(hoyM + 'T12:00:00Z')
+      do { d.setUTCDate(d.getUTCDate() - 1) } while ([0, 6].includes(d.getUTCDay()))
+      const tocaba = d.toISOString().slice(0, 10)
+      const atD = di?.[0]?.value?.at, diaD = atD ? mad(atD).slice(0, 10) : ''
+      if (diaD < tocaba && latido.diario !== tocaba) {
+        eventos.push({ tipo: 'latido', id: 'latido-diario', ticker: 'BTP', sev: 'media', prioridad: 4, tags: ['warning'],
+          titulo: `Belar diario no ha corrido: falta el parte del ${tocaba.slice(8)}/${tocaba.slice(5, 7)}`,
+          txt: `Último parte: ${diaD || 'ninguno'}. La cartera no se ha revisado esa noche; abre sesión con Belar para ver por qué.` })
+        latido = { ...latido, diario: tocaba }
+      }
+      const [gu] = await rest2('app_state?select=value&key=eq.gurus_feed') || []
+      const atG = gu?.value?.actualizado, diaG = atG ? (String(atG).length > 10 ? mad(atG).slice(0, 10) : String(atG)) : ''
+      if (hoyM >= '2026-11-16' && diaG < hoyM && latido.gurus !== hoyM) {
+        eventos.push({ tipo: 'latido', id: 'latido-gurus', ticker: 'BTP', sev: 'baja', prioridad: 3, tags: ['warning'],
+          titulo: 'Belar gurús no ha corrido hoy', txt: `Última revisión: ${diaG || 'ninguna'}.` })
+        latido = { ...latido, gurus: hoyM }
+      }
+    }
+  } catch (e) { errores.push('latido: ' + String(e.message).slice(0, 120)) }
+
   let enviados = 0
   if (!dry) {
     for (const e of eventos) {
@@ -222,7 +249,7 @@ async function pasada(req, res, topic, dry) {
     const ids = new Set((pos || []).map(p => String(p.id)))
     for (const k of Object.keys(disparos)) if (!ids.has(k.split(':')[0])) delete disparos[k]
     await rest2('app_state?on_conflict=key', { method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal',
-      body: { key: 'vigia', value: { last_run: ahora, last_ok: errores.length ? estado.last_ok || null : ahora, vigiladas: vistas.length, errores, disparos, combo }, updated_at: ahora } })
+      body: { key: 'vigia', value: { last_run: ahora, last_ok: errores.length ? estado.last_ok || null : ahora, vigiladas: vistas.length, errores, disparos, combo, latido }, updated_at: ahora } })
   }
   res.status(200).json({ ok: true, dry, at: ahora, vigiladas: vistas.length, eventos: eventos.map(e => e.titulo), enviados, push: topic ? 'ntfy' : 'FALTA NTFY_TOPIC', errores, vistas })
 }

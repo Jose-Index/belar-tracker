@@ -102,3 +102,8 @@ el editor web con Chrome queda como plan B.
 - `POST /api/ia-capturas` (lectura de capturas con la clave de Anthropic del servidor) exige desde el 15/11/2026 la sesión de la app
   (JWT de Supabase) o el token de Belar; sin credenciales responde 401. Antes estaba abierta. El cliente la envía desde `src/lib/ia.js`.
 - Rutas que siguen abiertas porque solo sirven datos de mercado: `quotes`, `history`, `universo` y `activos`.
+
+
+## Latido de las tareas programadas (15/11/2026)
+
+El Vigía avisa (Radar + push, una vez por hueco, a partir de las 10:00 de Madrid) si `app_state.belar_diario.at` es anterior al último día hábil o si `app_state.gurus_feed.actualizado` no es de hoy. Estado en `app_state.vigia.latido`.
