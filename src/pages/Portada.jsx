@@ -12,6 +12,8 @@ import { fetchPosiciones, fetchSnapsBloques, fetchCierresBloques } from '../lib/
 import { getSimbolos, yahooDe, fetchQuotes, fetchHistory } from '../lib/quotes'
 import { eventosProximos } from '../lib/ia'
 import { BLOQUES, BLOQUE_DE_ID, bloqueDe, esPuente, pesosBloques, serieTWRBloques } from '../lib/bloques'
+import { serieTWRDesglose } from '../lib/twr'
+import { loaderRend, enEuros } from './Rendimiento.jsx'
 import './portada.css'
 
 const BROKERS = { etoro: 'eToro', xtb: 'XTB', ibkr: 'IBKR' }
@@ -103,6 +105,14 @@ export default function Portada() {
     return { P, grupos, caja, wallet, total: val + caja + (wallet?.usd || 0), abierto: inv ? (val - inv) / inv * 100 : null, cal, cierre: data.lastClose?.date || null }
   }, [data, agrupar, orden, qBtc])
 
+  // Agrupado por bróker: rentabilidad de cada cuenta por cierres de semana, en euros (misma medida que Rendimiento)
+  const { data: rend } = useCache('rendimiento', loaderRend, { ttl: 5 * 60e3, persist: true, activo: agrupar === 'broker' })
+  const seriesBroker = useMemo(() => {
+    if (!rend) return {}
+    const E = enEuros(rend.weeks, rend.contribs), filas = serieTWRDesglose(E.weeks, E.contribs), out = {}
+    for (const k of Object.keys(BROKERS)) out[k] = filas.filter(r => r[k] != null).map(r => ({ fecha: r.fecha, pct: r[k] - 100 }))
+    return out
+  }, [rend])
   const seriesTesis = useMemo(() => (data ? serieTWRBloques(data.snaps, data.positions || [], data.cierres || []) : {}), [data])
 
   if (!v) return <div className="pt"><p className="pt-estado">{error ? 'No se han podido cargar las posiciones: ' + String(error?.message || error) : 'Cargando posiciones…'}</p></div>
@@ -144,7 +154,7 @@ export default function Portada() {
                   <span className={'r pt-gpp ' + tono(g.gp)}>{pct(g.gpp)}</span>
                 </button>
               )}
-              {g.k && sel === 'g:' + g.k && <Ficha grupo={g} agrupar={agrupar} serieGrupo={agrupar === 'tesis' ? seriesTesis[g.k] : null} {...fichaProps} />}
+              {g.k && sel === 'g:' + g.k && <Ficha grupo={g} agrupar={agrupar} serieGrupo={agrupar === 'tesis' ? seriesTesis[g.k] : agrupar === 'broker' ? seriesBroker[g.k] : null} {...fichaProps} />}
               {g.ps.map(p => (
                 <div key={p.id}>
                   <button type="button" className="pt-fila pt-pos" aria-expanded={sel === 'p:' + p.id} onClick={() => abrir('p:' + p.id)}>

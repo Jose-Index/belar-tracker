@@ -18,7 +18,7 @@ const pct = v => (v == null || !Number.isFinite(v) ? '—' : sig(v) + num(Math.a
 const tono = v => (v > 0 ? 'pt-sube' : v < 0 ? 'pt-baja' : '')
 const fecha = iso => (iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(2, 4) : '—')
 
-async function loaderRend() {
+export async function loaderRend() {
   const [w, c, yr] = await Promise.all([
     supabase.from('weekly_snapshots').select('*').order('week_end'),
     supabase.from('contributions').select('fecha,broker,importe_eur,importe_usd'),
@@ -51,7 +51,7 @@ function anoObjetivo(anuales, hoy) {
 }
 // Todo en euros: cada cierre de semana y cada aportación, al cambio de su semana. José aporta y mide en euros;
 // en dólares la cifra incluye lo que se mueva el cambio (2025: +18,9 % en € frente a casi +40 % en $).
-function enEuros(weeks, contribs) {
+export function enEuros(weeks, contribs) {
   const K = ['etoro', 'xtb', 'ibkr', 'btc_usd']
   const ws = weeks.filter(w => Number(w.eurusd) > 0).map(w => {
     const fx = Number(w.eurusd), d = w.desglose || w.legacy?.data || {}
@@ -103,11 +103,13 @@ export default function Rendimiento() {
     if (!fin || !semana) return null
     const base = ini || tw[0]
     const fx = eurusdEn(data.weeks, semana.week_end)
+    const fx0 = eurusdEn(data.weeks, d0), spUsd = pctIndice(hSp, d0, fin.fecha)
+    const spEur = spUsd == null ? null : fx0 && fx ? ((1 + spUsd / 100) * fx0 / fx - 1) * 100 : null
     return {
-      ano, hasta: fin.fecha, parcial: !ini, sellable: hoy >= d1, twE, twU, usd: pctAno(twU, ano),
+      ano, hasta: fin.fecha, parcial: !ini, sellable: hoy >= d1, twE, twU, usd: pctAno(twU, ano), spUsd,
       fila: {
         year: ano, rentabilidad_pct: +((fin.idx / base.idx - 1) * 100).toFixed(2),
-        sp500_pct: (v => (v == null ? null : +v.toFixed(2)))(pctIndice(hSp, d0, fin.fecha)),
+        sp500_pct: spEur == null ? null : +spEur.toFixed(2),
         ibex_pct: (v => (v == null ? null : +v.toFixed(2)))(pctIndice(hIbex, d0, fin.fecha)),
         valor_cierre_usd: +Number(semana.total_value).toFixed(2),
         eurusd_cierre: fx || null, valor_cierre_eur: fx ? +(Number(semana.total_value) / fx).toFixed(2) : null,
@@ -119,7 +121,7 @@ export default function Rendimiento() {
     if (!curso || !curso.sellable) return
     setSello('guardando')
     const previa = data.anuales.find(a => Number(a.year) === curso.ano)
-    const legacy = { ...(previa?.legacy || {}), sellado: hoy, metodo: 'TWR por cierres de semana, en euros', hasta: curso.hasta, usd_pct: curso.usd == null ? null : +curso.usd.toFixed(2) }
+    const legacy = { ...(previa?.legacy || {}), sellado: hoy, metodo: 'TWR por cierres de semana, en euros', hasta: curso.hasta, usd_pct: curso.usd == null ? null : +curso.usd.toFixed(2), sp500_usd_pct: curso.spUsd == null ? null : +curso.spUsd.toFixed(2) }
     const fila = { ...curso.fila, legacy }
     const q = previa ? supabase.from('yearly_results').update(fila).eq('id', previa.id) : supabase.from('yearly_results').insert(fila)
     const { error } = await q
@@ -216,7 +218,7 @@ export default function Rendimiento() {
       <section aria-label="Por años" className="rd-bloque">
         <h2 className="pt-gnombre">Por años</h2>
         <div className="rd-tabla">
-          <div className="rd-fila rd-anos rd-cab"><span>Año</span><span className="r">Cartera €</span><span className="r">Cartera $</span><span className="r">S&P 500</span><span className="r">Ibex 35</span><span className="r">Cierre</span></div>
+          <div className="rd-fila rd-anos rd-cab"><span>Año</span><span className="r">Cartera €</span><span className="r">Cartera $</span><span className="r">S&P 500 €</span><span className="r">Ibex 35</span><span className="r">Cierre</span></div>
           {data.anuales.filter(a => !(curso && Number(a.year) === curso.ano && !(a.legacy && a.legacy.sellado))).concat(curso && !data.anuales.some(a => Number(a.year) === curso.ano && a.legacy && a.legacy.sellado) ? [{ ...curso.fila, enCurso: true }] : []).map(a => (
             <div key={a.year} className="rd-fila rd-anos rd-dato">
               <span className="rd-nombre">{a.year}{a.enCurso && <span className="pt-mini"> · hasta {fecha(curso.hasta)}</span>}</span>
@@ -238,7 +240,7 @@ export default function Rendimiento() {
             {sello && sello !== 'ok' && sello !== 'guardando' && <span className="pt-pie pt-baja">No se pudo sellar: {sello}</span>}
           </div>
         )}
-        <p className="pt-pie">Cartera: rentabilidad sin contar las aportaciones. La columna en euros es la que cuenta para ti; la de dólares sale de los cierres de semana y solo existe desde que los brókers están en ellos. Año en curso por cierres de semana{curso?.parcial ? ' (sin cierre del año anterior: cuenta desde el primer cierre disponible)' : ''}. Índices en su moneda, sin dividendos. 2024 y 2025 conservan en euros la cifra que ya tenían.</p>
+        <p className="pt-pie">Cartera: rentabilidad sin contar las aportaciones. La columna en euros es la que cuenta para ti; la de dólares sale de los cierres de semana y solo existe desde que los brókers están en ellos. Año en curso por cierres de semana{curso?.parcial ? ' (sin cierre del año anterior: cuenta desde el primer cierre disponible)' : ''}. Índices sin dividendos; el S&P 500, pasado a euros para que compare igual que tu cartera. 2024 y 2025 conservan en euros la cifra que ya tenían.</p>
       </section>
     </div>
   )
