@@ -107,3 +107,8 @@ el editor web con Chrome queda como plan B.
 ## Latido de las tareas programadas (15/11/2026)
 
 El Vigía avisa (Radar + push, una vez por hueco, a partir de las 10:00 de Madrid) si `app_state.belar_diario.at` es anterior al último día hábil o si `app_state.gurus_feed.actualizado` no es de hoy. Estado en `app_state.vigia.latido`.
+
+
+## Aportaciones por la API (15/11/2026)
+
+`POST /api/belar-escritura` admite `contributions` con `insert` (fecha, broker, importe_eur, importe_usd, notes). Fuente: la hoja INVERSIÓN de José.
