@@ -85,3 +85,6 @@ Protocolo: al inicio de sesión Belar lee `?que=todo`. Positions solo se escribe
 - Token en tiempo constante; sin token válido → 401 sin detalle.
 - La clave secreta no sale del servidor. La publicable sigue en el frontend con RLS intacto.
 - Lista blanca de tablas; nada de SQL libre; DDL sigue siendo solo por el editor SQL (regla de oro nº4).
+- `POST /api/ia-capturas` (lectura de capturas con la clave de Anthropic del servidor) exige desde el 15/11/2026 la sesión de la app
+  (JWT de Supabase) o el token de Belar; sin credenciales responde 401. Antes estaba abierta. El cliente la envía desde `src/lib/ia.js`.
+- Rutas que siguen abiertas porque solo sirven datos de mercado: `quotes`, `history`, `universo` y `activos`.

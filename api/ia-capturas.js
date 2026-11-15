@@ -14,6 +14,7 @@
 //   posiciones Y cierres) y una fila por línea del historial, sin agregar (lotes y tramos los casa BTP).
 
 import { anthropic, jsonDe, MODEL_VISION } from './_anthropic.js'
+import { autorizarUsuario } from './_belar.js'
 
 export const config = { api: { bodyParser: { sizeLimit: '25mb' } } }
 
@@ -106,6 +107,9 @@ function textoConocidas(conocidas) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') { res.status(405).json({ error: 'POST' }); return }
+  // 15/11/2026: solo la app con sesión iniciada (o Belar con su token). Antes la ruta estaba abierta.
+  const noAuth = await autorizarUsuario(req)
+  if (noAuth) { res.status(401).json({ error: noAuth }); return }
   try {
     const { images, modo, conocidas } = req.body || {}
     if (!images?.length) { res.status(400).json({ error: 'images requerido' }); return }

@@ -22,12 +22,20 @@ export function leerImagen(file) {
   })
 }
 
+// La ruta /api/ia-capturas exige la sesión de la app (15/11/2026): sin ella, cualquiera que conociera la
+// dirección podía mandarle imágenes y gastar la clave de Anthropic del servidor.
+async function cabeceras() {
+  const { data } = await supabase.auth.getSession()
+  const t = data?.session?.access_token || ''
+  return { 'content-type': 'application/json', ...(t ? { Authorization: 'Bearer ' + t } : {}) }
+}
+
 // conocidas: posiciones ya registradas [{broker, ticker, invertido}] para que la lectura use los
 // tickers reales en vez de inventar nombres parecidos (RR.L leído como "XRP", 01/10/2026).
 export async function extraerCapturas(files, conocidas = []) {
   const images = await Promise.all([...files].map(leerImagen))
   const r = await fetch('/api/ia-capturas', {
-    method: 'POST', headers: { 'content-type': 'application/json' },
+    method: 'POST', headers: await cabeceras(),
     body: JSON.stringify({ images, conocidas }),
   })
   const j = await r.json()
@@ -40,7 +48,7 @@ export async function extraerCapturas(files, conocidas = []) {
 export async function extraerCierres(files) {
   const images = await Promise.all([...files].map(leerImagen))
   const r = await fetch('/api/ia-capturas', {
-    method: 'POST', headers: { 'content-type': 'application/json' },
+    method: 'POST', headers: await cabeceras(),
     body: JSON.stringify({ images, modo: 'cerradas' }),
   })
   const j = await r.json()
@@ -53,7 +61,7 @@ export async function extraerCierres(files) {
 export async function extraerAuto(file, conocidas = []) {
   const images = [await leerImagen(file)]
   const r = await fetch('/api/ia-capturas', {
-    method: 'POST', headers: { 'content-type': 'application/json' },
+    method: 'POST', headers: await cabeceras(),
     body: JSON.stringify({ images, modo: 'auto', conocidas }),
   })
   const txt = await r.text()
