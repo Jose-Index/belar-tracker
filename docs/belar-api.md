@@ -62,6 +62,10 @@ para no perder toques entre pasadas) y, solo con el mercado del símbolo abierto
 - cruce del nivel → alerta en el Radar (`autor: vigia`, severidad alta) + push ntfy (prioridad máxima);
 - precio a ≤2 % del nivel → alerta y push de aviso (una vez).
 Cada aviso se da una sola vez por posición, tipo y nivel (`app_state.vigia.disparos`); si el nivel cambia, se rearma.
+- **BTP v4 (15/11/2026):** vigila todas las posiciones con stop u objetivo, no solo las marcadas 🔔 (en esas el cierre es manual;
+  en el resto el aviso es informativo). Distancia de aviso por volatilidad: un ATR (aviso 1) y medio ATR (aviso 2), con el ATR de
+  `app_state.belar_diario.niveles`; sin ATR, 2 %. Una vez al día comprueba la BTC Combo MA200 sobre la última vela cerrada
+  (BTC-USD de Yahoo) y avisa cuando la señal cambia; su estado queda en `app_state.vigia.combo`.
 - `GET /api/vigia` pasada normal · `?dry=1` simula sin escribir ni notificar · `?test=1` manda un push de prueba.
 - `POST /api/vigia?aviso=1` `{ titulo, mensaje, prioridad?: 3|4|5, tags?: [] }` → manda ese aviso al móvil por el canal del Vigía (15/11/2026).
   Lo usa la pasada diaria de Belar programado: desde la nube de Claude ntfy rechaza la publicación directa (cuota por IP compartida).

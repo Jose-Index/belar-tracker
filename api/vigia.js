@@ -74,6 +74,26 @@ async function rest2(path, opts) {
 }
 
 const fx = n => Number(n).toLocaleString('es-ES', { maximumFractionDigits: 4 })
+// BTC Combo MA200 sobre velas diarias: régimen por MA200 y RSI(14) de Wilder. dentro = hay posición de la Combo abierta.
+async function comboBTC(dentro) {
+  const r = await fetch('https://query1.finance.yahoo.com/v8/finance/chart/BTC-USD?range=2y&interval=1d', { headers: H })
+  if (!r.ok) throw new Error('BTC-USD: HTTP ' + r.status)
+  const res0 = (await r.json())?.chart?.result?.[0], ts = res0?.timestamp || [], cl = res0?.indicators?.quote?.[0]?.close || []
+  const corte = Math.floor(Date.now() / 86400000) * 86400          // 00:00 UTC de hoy: la vela de hoy está en curso
+  const P = ts.map((t, i) => ({ t, v: cl[i] })).filter(x => x.v != null && x.t < corte)
+  if (P.length < 215) return null
+  const C = P.map(x => x.v), n = C.length
+  let g = 0, p = 0
+  for (let i = 1; i <= 14; i++) { const d = C[i] - C[i - 1]; g += Math.max(d, 0); p += Math.max(-d, 0) }
+  g /= 14; p /= 14
+  const R = new Array(15).fill(null); R[14] = p ? 100 - 100 / (1 + g / p) : 100
+  for (let i = 15; i < n; i++) { const d = C[i] - C[i - 1]; g = (g * 13 + Math.max(d, 0)) / 14; p = (p * 13 + Math.max(-d, 0)) / 14; R.push(p ? 100 - 100 / (1 + g / p) : 100) }
+  const ma200 = C.slice(n - 200).reduce((a, x) => a + x, 0) / 200, cierre = C[n - 1], rsi = R[n - 1], prev = R[n - 2], mom = cierre > ma200
+  const senal = dentro ? ((prev >= 50 && rsi < 50) || rsi >= 67.5 ? 'salida' : null) : ((mom && prev < 70 && rsi >= 70) || (!mom && rsi <= 27.5) ? 'entrada' : null)
+  return { fecha: new Date(P[n - 1].t * 1000).toISOString().slice(0, 10), cierre: Math.round(cierre), ma200: Math.round(ma200), regimen: mom ? 'sobre la MA200' : 'bajo la MA200',
+    rsi: Math.round(rsi * 10) / 10, rsiPrevio: Math.round(prev * 10) / 10, dentro, senal }
+}
+
 // Distancia al SL en % del precio: (px − sl) / px · 100 (misma fórmula que la tabla de Posiciones)
 const aSL = (px, sl) => (px - sl) / px * 100
 
@@ -113,38 +133,56 @@ export default async function handler(req, res) {
 
 async function pasada(req, res, topic, dry) {
   const ahora = new Date().toISOString()
-  const [pos, sims, st] = await Promise.all([
-    rest2('positions?select=id,ticker,broker,sl_price,tp_price,sl_type,bloque&sl_type=eq.ALERTA'),
+  // BTP v4 (15/11/2026): se vigilan TODAS las posiciones con stop u objetivo, no solo las marcadas 🔔. En las marcadas
+  // (sl_type = ALERTA) el bróker no tiene la orden y el cierre es manual; en el resto el aviso es informativo.
+  // La distancia de aviso depende de la volatilidad: un ATR (aviso 1) y medio ATR (aviso 2), con el ATR que deja la pasada
+  // diaria de Belar en app_state.belar_diario.niveles; sin ATR, el 2 % de siempre.
+  const [pos, sims, st, di, cb] = await Promise.all([
+    rest2('positions?select=id,ticker,broker,sl_price,tp_price,sl_type,bloque&or=(sl_price.not.is.null,tp_price.not.is.null)'),
     rest2('symbols?select=ticker,yahoo_symbol'),
     rest2('app_state?select=value&key=eq.vigia'),
+    rest2('app_state?select=value&key=eq.belar_diario'),
+    rest2('positions?select=id&bloque=eq.BTC_COMBO'),
   ])
+  const niveles = di?.[0]?.value?.niveles || []
+  const atrDe = p => { const n = niveles.find(x => x.t === p.ticker && x.br === p.broker); return n && Number(n.atr) > 0 ? Number(n.atr) : null }
   const estado = st?.[0]?.value || {}
   const disparos = { ...(estado.disparos || {}) }
   const yahooDe = t => { const s = (sims || []).find(x => x.ticker === t); return s ? s.yahoo_symbol : t }
 
   const eventos = [], errores = [], vistas = []
-  for (const p of pos || []) {
+  // Cotizaciones en paralelo (son una veintena de valores; en serie no cabrían en el tiempo de la función)
+  const cots = await Promise.all((pos || []).map(async p => {
     const sym = yahooDe(p.ticker)
-    if (!sym) { errores.push(`${p.ticker}: sin símbolo cotizable`); continue }
-    let q
-    try { q = await cotizacion(sym) } catch (e) { errores.push(e.message); continue }
+    if (!sym) return { p, sym, error: `${p.ticker}: sin símbolo cotizable` }
+    try { return { p, sym, q: await cotizacion(sym) } } catch (e) { return { p, sym, error: e.message } }
+  }))
+  for (const { p, sym, q, error } of cots) {
+    if (error) { if (p.sl_type === 'ALERTA') errores.push(error); continue }     // sin precio (p. ej. un copy trader): solo es error si era una vigilada 🔔
     const sl = p.sl_price != null ? Number(p.sl_price) : null
     const tp = p.tp_price != null ? Number(p.tp_price) : null
-    vistas.push({ id: p.id, ticker: p.ticker, simbolo: sym, precio: q.precio, abierto: q.abierto, sl, tp,
-      a_sl: sl ? aSL(q.precio, sl) : null, a_tp: tp ? (tp / q.precio - 1) * 100 : null })
+    const atr = atrDe(p), cerca = atr || CERCA, manual = p.sl_type === 'ALERTA'
+    const dSL = sl ? aSL(q.precio, sl) : null, dTP = tp ? (tp / q.precio - 1) * 100 : null
+    vistas.push({ id: p.id, ticker: p.ticker, simbolo: sym, precio: q.precio, abierto: q.abierto, sl, tp, a_sl: dSL, a_tp: dTP, atr })
     if (!q.abierto) continue                         // fuera de sesión no se dispara nada (evita precios de pre/post)
+    const en = d => (atr ? `${(d / atr).toFixed(1)} ATR (${d.toFixed(1)} %)` : `${d.toFixed(1)} %`)
+    const cola = manual ? `${p.broker}: el bróker no tiene la orden, cierre manual.` : `${p.broker}: la orden está en el bróker; aviso informativo.`
     const checks = []
     if (sl) {
       if (q.minimo <= sl) checks.push({ tipo: 'sl', nivel: sl, sev: 'alta', prioridad: 5, tags: ['rotating_light'],
-        titulo: `${p.ticker}: tocó el suelo/SL ${fx(sl)}`, txt: `Precio ${fx(q.precio)} ${q.moneda} (mínimo del día ${fx(q.minimo)}). ${p.broker}: cierre manual según su invalidación.` })
-      else if (aSL(q.precio, sl) <= CERCA) checks.push({ tipo: 'cerca-sl', nivel: sl, sev: 'media', prioridad: 4, tags: ['warning'],
-        titulo: `${p.ticker}: a ${aSL(q.precio, sl).toFixed(1)} % del suelo/SL`, txt: `Precio ${fx(q.precio)} ${q.moneda}; nivel ${fx(sl)}. ${p.broker}.` })
+        titulo: `${p.ticker}: tocó el stop ${fx(sl)}`, txt: `Precio ${fx(q.precio)} ${q.moneda} (mínimo del día ${fx(q.minimo)}). ${cola}` })
+      else if (atr && dSL <= atr / 2) checks.push({ tipo: 'cerca2-sl', nivel: sl, sev: 'media', prioridad: 4, tags: ['warning'],
+        titulo: `${p.ticker}: a ${en(dSL)} del stop`, txt: `Segundo aviso. Precio ${fx(q.precio)} ${q.moneda}; stop ${fx(sl)}. ${cola}` })
+      else if (dSL <= cerca) checks.push({ tipo: 'cerca-sl', nivel: sl, sev: 'media', prioridad: 4, tags: ['warning'],
+        titulo: `${p.ticker}: a ${en(dSL)} del stop`, txt: `Precio ${fx(q.precio)} ${q.moneda}; stop ${fx(sl)}. ${cola}` })
     }
     if (tp) {
       if (q.maximo >= tp) checks.push({ tipo: 'tp', nivel: tp, sev: 'alta', prioridad: 5, tags: ['moneybag'],
-        titulo: `${p.ticker}: tocó el TP ${fx(tp)}`, txt: `Precio ${fx(q.precio)} ${q.moneda} (máximo del día ${fx(q.maximo)}). ${p.broker}: cierre manual del TP.` })
-      else if ((tp / q.precio - 1) * 100 <= CERCA) checks.push({ tipo: 'cerca-tp', nivel: tp, sev: 'baja', prioridad: 3, tags: ['chart_with_upwards_trend'],
-        titulo: `${p.ticker}: a ${((tp / q.precio - 1) * 100).toFixed(1)} % del TP`, txt: `Precio ${fx(q.precio)} ${q.moneda}; TP ${fx(tp)}. ${p.broker}.` })
+        titulo: `${p.ticker}: tocó el objetivo ${fx(tp)}`, txt: `Precio ${fx(q.precio)} ${q.moneda} (máximo del día ${fx(q.maximo)}). ${cola}` })
+      else if (atr && dTP <= atr / 2) checks.push({ tipo: 'cerca2-tp', nivel: tp, sev: 'baja', prioridad: 3, tags: ['chart_with_upwards_trend'],
+        titulo: `${p.ticker}: a ${en(dTP)} del objetivo`, txt: `Segundo aviso. Precio ${fx(q.precio)} ${q.moneda}; objetivo ${fx(tp)}. ${cola}` })
+      else if (dTP <= cerca) checks.push({ tipo: 'cerca-tp', nivel: tp, sev: 'baja', prioridad: 3, tags: ['chart_with_upwards_trend'],
+        titulo: `${p.ticker}: a ${en(dTP)} del objetivo`, txt: `Precio ${fx(q.precio)} ${q.moneda}; objetivo ${fx(tp)}. ${cola}` })
     }
     for (const c of checks) {
       const k = `${p.id}:${c.tipo}`
@@ -153,6 +191,22 @@ async function pasada(req, res, topic, dry) {
       disparos[k] = { nivel: c.nivel, at: ahora, precio: q.precio }
     }
   }
+
+  // BTC Combo MA200: una comprobación al día sobre la última vela diaria CERRADA (BTC-USD de Yahoo; TradingView manda).
+  // Avisa solo cuando la señal cambia respecto a la última guardada (la primera vez guarda sin avisar).
+  let combo = estado.combo || null
+  try {
+    const hoyUTC = ahora.slice(0, 10)
+    if (!combo || combo.revisado !== hoyUTC) {
+      const c = await comboBTC((cb || []).length > 0)
+      if (c) {
+        if (combo && c.senal && c.senal !== combo.senal) eventos.push({ tipo: 'combo', id: 'combo', ticker: 'BTC', sev: 'alta', prioridad: 5, tags: ['bell'],
+          titulo: `BTC Combo: señal de ${c.senal} al cierre del ${c.fecha}`,
+          txt: `Cierre ${fx(c.cierre)} $, MA200 ${fx(c.ma200)} (${c.regimen}), RSI ${c.rsi} (anterior ${c.rsiPrevio}). Confirmar en TradingView antes de ejecutar.` })
+        combo = { ...c, revisado: hoyUTC }
+      }
+    }
+  } catch (e) { errores.push('combo: ' + String(e.message).slice(0, 120)) }
 
   let enviados = 0
   if (!dry) {
@@ -168,7 +222,7 @@ async function pasada(req, res, topic, dry) {
     const ids = new Set((pos || []).map(p => String(p.id)))
     for (const k of Object.keys(disparos)) if (!ids.has(k.split(':')[0])) delete disparos[k]
     await rest2('app_state?on_conflict=key', { method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal',
-      body: { key: 'vigia', value: { last_run: ahora, last_ok: errores.length ? estado.last_ok || null : ahora, vigiladas: vistas.length, errores, disparos }, updated_at: ahora } })
+      body: { key: 'vigia', value: { last_run: ahora, last_ok: errores.length ? estado.last_ok || null : ahora, vigiladas: vistas.length, errores, disparos, combo }, updated_at: ahora } })
   }
   res.status(200).json({ ok: true, dry, at: ahora, vigiladas: vistas.length, eventos: eventos.map(e => e.titulo), enviados, push: topic ? 'ntfy' : 'FALTA NTFY_TOPIC', errores, vistas })
 }
