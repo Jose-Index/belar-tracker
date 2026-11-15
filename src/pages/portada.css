@@ -106,3 +106,22 @@ button.pt-fila { appearance: none; font: inherit; color: inherit; background: tr
   .pt-svg { height: 180px; }
   .pt-cal { padding-top: 44px; }
 }
+
+/* Rendimiento (misma identidad) */
+.rd { padding-top: 12px; }
+.rd-leyenda { margin: 0 0 14px; align-items: baseline; }
+.rd-grande { font-size: 40px; letter-spacing: -0.03em; margin-left: 6px; }
+.rd-svg { height: 300px; }
+.rd-ejes { margin: 6px 0 20px; }
+.rd-comp { margin: 0; }
+.rd-bloque { padding: 64px 0 0; }
+.rd-bloque h2 { margin: 0 0 16px; }
+.rd-tabla { border-top: 2px solid var(--texto); overflow-x: auto; }
+.rd-fila { display: grid; grid-template-columns: minmax(110px, 1.6fr) repeat(6, minmax(64px, 1fr)); gap: 12px; align-items: center; min-width: 560px; }
+.rd-fila.rd-anos { grid-template-columns: minmax(110px, 1.6fr) repeat(4, minmax(80px, 1fr)); }
+.rd-cab { padding: 12px 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--texto-sec); }
+.rd-dato { border: 0; border-top: 1px solid var(--borde); min-height: 48px; font-size: 15px; background: transparent; color: inherit; font-family: inherit; text-align: left; width: 100%; padding: 0; }
+button.rd-dato { cursor: pointer; appearance: none; }
+button.rd-dato:hover { background: #FAFAFA; }
+.rd-dato.on .rd-nombre { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 5px; }
+.rd-nombre { font-weight: 600; }

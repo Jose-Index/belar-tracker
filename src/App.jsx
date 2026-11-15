@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
 import Portada from './pages/Portada.jsx'
+import Rendimiento from './pages/Rendimiento.jsx'
 import Inicio from './pages/Inicio.jsx'
 import Historico from './pages/Historico.jsx'
 import Tesis from './pages/Tesis.jsx'
@@ -83,7 +84,7 @@ export default function App() {
           <Route path="/" element={<Portada />} />
           <Route path="/posiciones" element={<Portada />} />
           <Route path="/gestion" element={<Inicio vista="cierre" />} />
-          <Route path="/rendimiento" element={<><Inicio vista="rendimiento" /><Historico /><Patrimonio /></>} />
+          <Route path="/rendimiento" element={<><Rendimiento /><Inicio vista="rendimiento" /><Historico /><Patrimonio /></>} />
           <Route path="/reparto" element={<Inicio vista="reparto" />} />
           <Route path="/buscador" element={<Buscador />} />
           <Route path="/tesis" element={<Tesis />} />
