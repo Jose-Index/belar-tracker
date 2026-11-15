@@ -141,3 +141,7 @@ button.rd-dato:hover { background: #FAFAFA; }
 .gu-det { display: block; margin: 4px 0; font-size: 14px; color: var(--texto-sec); }
 .gu-toca { border-color: var(--texto); color: var(--texto); }
 .gu-url { font-size: 13px; color: var(--texto); text-decoration: underline; text-underline-offset: 3px; }
+
+/* Cierre de año */
+.rd-sello { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 16px 0 4px; }
+.rd-sello .pt-gestion:disabled { opacity: .45; cursor: default; }

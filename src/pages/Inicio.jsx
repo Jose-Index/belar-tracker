@@ -10,7 +10,7 @@ import { fechaLocalISO } from '../lib/fechas'
 import { useCache, useSondeo, invalidar } from '../lib/cache'
 import { walletDe } from '../lib/bloques'
 import Bloques from '../components/Bloques.jsx'
-import Evolucion, { BROKER_COLS, BROKER_LBL } from '../components/Evolucion.jsx'
+import { BROKER_COLS, BROKER_LBL } from '../components/Evolucion.jsx'
 import Posiciones from './Posiciones.jsx'
 import './inicio.css'
 
@@ -173,7 +173,6 @@ export default function Inicio({ vista = 'cierre' }) {
         </div>
       </div>}
 
-      {vista === 'rendimiento' && <Evolucion />}
 
       {vista === 'cierre' && <Posiciones embed onCambio={posicionesCambiaron} seleccionInicial={altaInicial} wallet={{ qty: btcQty, usd: btcUsd, precio: btcPrecio, invertido: data?.btcInv || null }} />}
 

@@ -59,3 +59,10 @@ entrada o salida de la última vela cerrada. Datos de BTC-USD (Yahoo). El aviso 
 Lista por fecha de la actividad de los gestores seguidos, con filtro por gestor y marca cuando toca un valor en cartera.
 La escribe la tarea programada "Belar gurús (BTP)" en `app_state.gurus_feed`. Calendario: la portada ya no enseña eventos
 de posiciones cerradas; añadidas la Fed del 09/12, el cierre de año y la fecha de los 13F.
+
+## Cierre de año (15/11/2026, noche)
+
+- Rendimiento → "Por años": la fila del año en curso se calcula sola con cada cierre de semana (cartera por TWR de cierres de semana; S&P 500 e Ibex 35 por su último cierre diario) y sustituye en pantalla a la fila guardada sin sellar.
+- Botón "Sellar el cierre de AAAA": activo desde el 31/12. Guarda en `yearly_results` rentabilidad, índices, valor de cierre en $ y €, cambio, y marca `legacy.sellado`. En enero-marzo, si el año anterior no está sellado, el año que se ofrece es ese.
+- Se quita de la página la gráfica "Evolución" antigua (duplicaba la nueva). Siguen debajo las cajas de cifras, cuentas, cierres, histórico semanal y aportaciones.
+- La rentabilidad de 2026 depende de que `contributions` tenga las aportaciones de octubre y noviembre.

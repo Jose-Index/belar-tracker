@@ -4,7 +4,7 @@
 import { useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useCache } from '../lib/cache'
-import { serieTWR, serieTWRDesglose } from '../lib/twr'
+import { serieTWR, serieTWRDesglose, eurusdEn } from '../lib/twr'
 import { fetchHistory } from '../lib/quotes'
 import './portada.css'
 
@@ -22,7 +22,7 @@ async function loaderRend() {
   const [w, c, yr] = await Promise.all([
     supabase.from('weekly_snapshots').select('*').order('week_end'),
     supabase.from('contributions').select('fecha,broker,importe_eur,importe_usd'),
-    supabase.from('yearly_results').select('year,rentabilidad_pct,sp500_pct,ibex_pct,valor_cierre_usd').order('year'),
+    supabase.from('yearly_results').select('id,year,rentabilidad_pct,sp500_pct,ibex_pct,valor_cierre_usd,legacy').order('year'),
   ])
   return { weeks: w.data || [], contribs: c.data || [], anuales: yr.data || [] }
 }
@@ -43,12 +43,63 @@ function tramo(serie, per) {
   return (serie[serie.length - 1].v / serie[i0].v - 1) * 100
 }
 
+// Cierre de año (15/11/2026): el año que toca sellar es el anterior mientras no esté sellado y estemos en el primer
+// trimestre; si no, el año en curso. Todo sale de cierres de semana (TWR) y del último cierre diario de cada índice.
+function anoObjetivo(anuales, hoy) {
+  const y = Number(hoy.slice(0, 4)), prev = anuales.find(a => Number(a.year) === y - 1)
+  return Number(hoy.slice(5, 7)) <= 3 && !(prev && prev.legacy && prev.legacy.sellado) ? y - 1 : y
+}
+function pctIndice(h, d0, d1) {
+  const c = (h?.points || []).filter(x => x.v != null)
+  if (!c.length) return null
+  const en = lim => { let v = null; for (const x of c) { if (x.t <= lim) v = x.v; else break } return v }
+  const a = en(Date.parse(d0 + 'T23:59:59Z')), b = en(Date.parse(d1 + 'T23:59:59Z'))
+  return a && b ? (b / a - 1) * 100 : null
+}
+
 export default function Rendimiento() {
-  const { data } = useCache('rendimiento', loaderRend, { ttl: 5 * 60e3, persist: true })
+  const { data, recargar } = useCache('rendimiento', loaderRend, { ttl: 5 * 60e3, persist: true })
   const [cuenta, setCuenta] = useState('total')
   const [per, setPer] = useState('todo')
   const [comp, setComp] = useState('')
   const { data: hComp } = useCache('ph2:' + comp, () => fetchHistory(comp, '3y'), { ttl: 15 * 60e3, activo: !!comp })
+  const { data: hSp } = useCache('ph2:^GSPC', () => fetchHistory('^GSPC', '3y'), { ttl: 15 * 60e3 })
+  const { data: hIbex } = useCache('ph2:^IBEX', () => fetchHistory('^IBEX', '3y'), { ttl: 15 * 60e3 })
+  const [sello, setSello] = useState(null) // null | 'guardando' | 'ok' | texto de error
+
+  const hoy = new Date().toISOString().slice(0, 10)
+  const curso = useMemo(() => {
+    if (!data) return null
+    const ano = anoObjetivo(data.anuales, hoy), d0 = `${ano - 1}-12-31`, d1 = `${ano}-12-31`
+    const tw = serieTWR(data.weeks, data.contribs).filter(p => p.fecha <= d1)
+    const ini = [...tw].reverse().find(p => p.fecha <= d0), fin = tw[tw.length - 1]
+    const semana = [...data.weeks].reverse().find(w => w.week_end <= d1 && Number(w.total_value) > 0)
+    if (!fin || !semana) return null
+    const base = ini || tw[0]
+    const fx = eurusdEn(data.weeks, semana.week_end)
+    return {
+      ano, hasta: fin.fecha, parcial: !ini, sellable: hoy >= d1,
+      fila: {
+        year: ano, rentabilidad_pct: +((fin.idx / base.idx - 1) * 100).toFixed(2),
+        sp500_pct: (v => (v == null ? null : +v.toFixed(2)))(pctIndice(hSp, d0, fin.fecha)),
+        ibex_pct: (v => (v == null ? null : +v.toFixed(2)))(pctIndice(hIbex, d0, fin.fecha)),
+        valor_cierre_usd: +Number(semana.total_value).toFixed(2),
+        eurusd_cierre: fx || null, valor_cierre_eur: fx ? +(Number(semana.total_value) / fx).toFixed(2) : null,
+      },
+    }
+  }, [data, hSp, hIbex, hoy])
+
+  async function sellar() {
+    if (!curso || !curso.sellable) return
+    setSello('guardando')
+    const previa = data.anuales.find(a => Number(a.year) === curso.ano)
+    const legacy = { ...(previa?.legacy || {}), sellado: hoy, metodo: 'TWR por cierres de semana', hasta: curso.hasta }
+    const fila = { ...curso.fila, legacy }
+    const q = previa ? supabase.from('yearly_results').update(fila).eq('id', previa.id) : supabase.from('yearly_results').insert(fila)
+    const { error } = await q
+    if (error) { setSello(error.message); return }
+    setSello('ok'); recargar && recargar()
+  }
 
   const series = useMemo(() => {
     if (!data) return null
@@ -133,9 +184,9 @@ export default function Rendimiento() {
         <h2 className="pt-gnombre">Por años</h2>
         <div className="rd-tabla">
           <div className="rd-fila rd-anos rd-cab"><span>Año</span><span className="r">Cartera</span><span className="r">S&P 500</span><span className="r">Ibex 35</span><span className="r">Cierre</span></div>
-          {data.anuales.map(a => (
+          {data.anuales.filter(a => !(curso && Number(a.year) === curso.ano && !(a.legacy && a.legacy.sellado))).concat(curso && !data.anuales.some(a => Number(a.year) === curso.ano && a.legacy && a.legacy.sellado) ? [{ ...curso.fila, enCurso: true }] : []).map(a => (
             <div key={a.year} className="rd-fila rd-anos rd-dato">
-              <span className="rd-nombre">{a.year}</span>
+              <span className="rd-nombre">{a.year}{a.enCurso && <span className="pt-mini"> · hasta {fecha(curso.hasta)}</span>}</span>
               <span className={'r ' + tono(a.rentabilidad_pct)}>{pct(a.rentabilidad_pct == null ? null : Number(a.rentabilidad_pct))}</span>
               <span className={'r ' + tono(a.sp500_pct)}>{pct(a.sp500_pct == null ? null : Number(a.sp500_pct))}</span>
               <span className={'r ' + tono(a.ibex_pct)}>{pct(a.ibex_pct == null ? null : Number(a.ibex_pct))}</span>
@@ -144,7 +195,16 @@ export default function Rendimiento() {
           ))}
           {!data.anuales.length && <p className="pt-estado">Aún no hay años cerrados.</p>}
         </div>
-        <p className="pt-pie">Años ya cerrados. El año en curso está en las cifras de abajo; su cierre se sellará a 31 de diciembre.</p>
+        {curso && !data.anuales.some(a => Number(a.year) === curso.ano && a.legacy && a.legacy.sellado) && (
+          <div className="rd-sello">
+            <button type="button" className="pt-gestion" disabled={!curso.sellable || sello === 'guardando' || sello === 'ok'} onClick={sellar}>
+              {sello === 'guardando' ? 'Sellando…' : sello === 'ok' ? `${curso.ano} sellado` : `Sellar el cierre de ${curso.ano}`}
+            </button>
+            <span className="pt-pie">{curso.sellable ? `Guarda la fila de ${curso.ano} con el último cierre de semana del año (${fecha(curso.hasta)}). Hazlo después del cierre de semana que incluya el 31/12.` : `Disponible a partir del 31/12/${curso.ano}. Hasta entonces la fila de ${curso.ano} se calcula sola con cada cierre de semana.`}</span>
+            {sello && sello !== 'ok' && sello !== 'guardando' && <span className="pt-pie pt-baja">No se pudo sellar: {sello}</span>}
+          </div>
+        )}
+        <p className="pt-pie">Cartera: rentabilidad sin contar las aportaciones, por cierres de semana{curso?.parcial ? ' (sin cierre del año anterior: cuenta desde el primer cierre disponible)' : ''}. Índices en su moneda, sin dividendos. Los años anteriores a 2026 conservan la cifra que ya tenían.</p>
       </section>
     </div>
   )
