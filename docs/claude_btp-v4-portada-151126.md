@@ -32,3 +32,11 @@ José pidió un cambio estético, eligió dirección clara y sobria y, de tres p
   distancia al SL y al TP de todas las posiciones; la portada los lee de ahí.
 - Gráfica de grupo por bróker y resultado del año (página Rendimiento).
 - Menú definitivo de ocho entradas: Posiciones, Rendimiento, Buscador, Alertas, Calendario, Gurús, Reparto, Log.
+
+## Paso 2b (15/11/2026)
+
+- Portada: botón "Nueva posición" (AltaDialog) y, en la ficha, "Editar niveles, tesis y notas" (PanelDetalle de Posiciones.jsx).
+- Menú: Posiciones, Rendimiento, Buscador, Alertas, Calendario, Reparto, Log; y, más discretas, Tesis, Cierre de semana, Fuentes y
+  Ajustes (antes Herramientas). Gurús entrará cuando exista su página. Histórico y Patrimonio € ya no tienen entrada propia.
+- `Inicio.jsx` se reparte con la prop `vista`: `/rendimiento` (cifras, evolución y cuentas, seguido de Histórico y Patrimonio €),
+  `/reparto` (pesos por tesis) y `/gestion` (tabla de gestión con el cierre de semana). El bloque Mercados deja de mostrarse.

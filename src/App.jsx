@@ -30,18 +30,19 @@ const Icono = ({ id }) => (
   </svg>
 )
 
+// Menú de BTP v4 (15/11/2026). `sec`: entradas de apoyo, más discretas. Gurús entrará cuando exista su página.
 const MENU = [
   { to: '/', label: 'Posiciones', end: true, icono: 'inicio', movil: true },
+  { to: '/rendimiento', label: 'Rendimiento' },
   { to: '/buscador', label: 'Buscador', icono: 'buscador', movil: true },
   { to: '/alertas', label: 'Alertas', icono: 'alertas', movil: true },
   { to: '/calendario', label: 'Calendario', icono: 'calendario', movil: true },
-  { to: '/tesis', label: 'Tesis' },
-  { to: '/historico', label: 'Histórico' },
+  { to: '/reparto', label: 'Reparto' },
   { to: '/repositorio', label: 'Log' },
-  { to: '/patrimonio', label: 'Patrimonio €' },
-  { to: '/fuentes', label: 'Fuentes' },
-  { to: '/herramientas', label: 'Herramientas' },
-  { to: '/gestion', label: 'Gestión' },      // vista anterior: cierre de semana, altas, capturas, Reparto (hasta migrar sus funciones)
+  { to: '/tesis', label: 'Tesis', sec: true },
+  { to: '/gestion', label: 'Cierre de semana', sec: true },
+  { to: '/fuentes', label: 'Fuentes', sec: true },
+  { to: '/herramientas', label: 'Ajustes', sec: true },
 ]
 const PRINCIPALES = MENU.filter(m => m.movil)
 const SECUNDARIOS = MENU.filter(m => !m.movil)
@@ -64,7 +65,7 @@ export default function App() {
         </div>
         {MENU.map(m => (
           <NavLink key={m.to} to={m.to} end={m.end}
-            className={({ isActive }) => 'item' + (isActive ? ' active' : '')}>
+            className={({ isActive }) => 'item' + (m.sec ? ' sec' : '') + (isActive ? ' active' : '')}>
             {m.label}
           </NavLink>
         ))}
@@ -81,7 +82,9 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Portada />} />
           <Route path="/posiciones" element={<Portada />} />
-          <Route path="/gestion" element={<Inicio />} />
+          <Route path="/gestion" element={<Inicio vista="cierre" />} />
+          <Route path="/rendimiento" element={<><Inicio vista="rendimiento" /><Historico /><Patrimonio /></>} />
+          <Route path="/reparto" element={<Inicio vista="reparto" />} />
           <Route path="/buscador" element={<Buscador />} />
           <Route path="/tesis" element={<Tesis />} />
           <Route path="/historico" element={<Historico />} />

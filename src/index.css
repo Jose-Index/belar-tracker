@@ -50,6 +50,7 @@ a:hover { color: var(--azul-hover); }
 .menu a.item { padding: 8px 0; color: var(--texto); font-weight: 400; font-size: 14px; }
 .menu a.item:hover { color: var(--azul-belar); }
 .menu a.item.active { font-weight: 600; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 6px; }
+.menu a.item.sec { color: var(--texto-sec); font-size: 13px; }
 .menu-pie { margin-left: 8px; }
 
 .content {

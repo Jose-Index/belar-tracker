@@ -9,7 +9,6 @@ import { filtroPlatt, precioEnUnidadNivel } from '../lib/riesgo'
 import { fechaLocalISO } from '../lib/fechas'
 import { useCache, useSondeo, invalidar } from '../lib/cache'
 import { walletDe } from '../lib/bloques'
-import Mercados from '../components/Mercados.jsx'
 import Bloques from '../components/Bloques.jsx'
 import Evolucion, { BROKER_COLS, BROKER_LBL } from '../components/Evolucion.jsx'
 import Posiciones from './Posiciones.jsx'
@@ -48,7 +47,9 @@ async function loaderPlatt(tickers) {
   return Object.fromEntries(tickers.map(t => [t, q[ys[t]] || null]))
 }
 
-export default function Inicio() {
+// vista (BTP v4, 15/11/2026): 'rendimiento' = cifras, evolución y cuentas · 'reparto' = pesos por tesis ·
+// 'cierre' = tabla de gestión con el cierre de semana. La portada es Portada.jsx.
+export default function Inicio({ vista = 'cierre' }) {
   const { data } = useCache('inicio', loaderInicio, { ttl: 60e3, persist: true })
   const { data: qBtc } = useSondeo('quotes:BTC-USD', loaderBtc, { intervalo: intervaloPrecios, persist: true })
   const weeks = data?.weeks || null
@@ -133,9 +134,7 @@ export default function Inicio() {
 
   return (
     <div className="inicio">
-      <Mercados />
-
-      <div className="boxes resumen num">
+      {vista === 'rendimiento' && <div className="boxes resumen num">
         <div className="card box box-total">
           <span className="box-t">Valor total cuenta</span>
           <span className="box-v">${fmt$(totalCuenta)}</span>
@@ -172,15 +171,15 @@ export default function Inicio() {
             {platt.sinDatos ? ` · ${platt.sinDatos} posiciones sin datos` : ''}
           </span>
         </div>
-      </div>
+      </div>}
 
-      <Evolucion />
+      {vista === 'rendimiento' && <Evolucion />}
 
-      <Posiciones embed onCambio={posicionesCambiaron} seleccionInicial={altaInicial} wallet={{ qty: btcQty, usd: btcUsd, precio: btcPrecio, invertido: data?.btcInv || null }} />
+      {vista === 'cierre' && <Posiciones embed onCambio={posicionesCambiaron} seleccionInicial={altaInicial} wallet={{ qty: btcQty, usd: btcUsd, precio: btcPrecio, invertido: data?.btcInv || null }} />}
 
-      <Bloques positions={positions} liquidez={liquidez} objetivos={objetivos} wallet={{ qty: btcQty, usd: btcUsd, precio: btcPrecio, invertido: data?.btcInv || null }} />
+      {vista === 'reparto' && <Bloques positions={positions} liquidez={liquidez} objetivos={objetivos} wallet={{ qty: btcQty, usd: btcUsd, precio: btcPrecio, invertido: data?.btcInv || null }} />}
 
-      <div className="boxes cuentas num">
+      {vista === 'rendimiento' && <div className="boxes cuentas num">
         {cuentas.map(c => (
           <div key={c.b} className="card box">
             <span className="box-t" style={{ color: BROKER_COLS[c.b] }}>{BROKER_LBL[c.b]}</span>
@@ -195,7 +194,7 @@ export default function Inicio() {
           <span className="box-s">{btcQty} ₿ {btcPrecio ? '× $' + fmtK(btcPrecio) : '· sin precio'}</span>
           <Periodos per={perBtc} />
         </div>
-      </div>
+      </div>}
     </div>
   )
 }
