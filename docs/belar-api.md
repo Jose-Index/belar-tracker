@@ -112,3 +112,7 @@ El Vigía avisa (Radar + push, una vez por hueco, a partir de las 10:00 de Madri
 ## Aportaciones por la API (15/11/2026)
 
 `POST /api/belar-escritura` admite `contributions` con `insert` (fecha, broker, importe_eur, importe_usd, notes). Fuente: la hoja INVERSIÓN de José.
+
+## Niveles de aviso manuales (15/11/2026)
+
+`positions.niveles` (jsonb, nulo si no hay): `[{precio, sentido: "sube"|"baja", nota, simbolo?}]`. `simbolo` es un símbolo de Yahoo cuando el nivel es de otro activo (p. ej. `GC=F` para la posición de oro). El Vigía avisa al acercarse (un ATR, o 2 % sin ATR) y al tocar; una vez por nivel. Son avisos, no órdenes, y no cuentan en el Platt. Se editan en el panel de la posición ("Niveles de aviso") o por la API de escritura.

@@ -901,6 +901,50 @@ function tituloVigia(p) {
   return 'Vigía BTP: ' + (partes.join(' · ') || 'sin niveles: pon SL y/o TP en Precios del ticket') + (px ? ` · precio ${fmtPx(px)}` : '')
 }
 
+// Niveles de aviso manuales (BTP v4, 15/11/2026): precios que José quiere vigilar aunque no sean una orden.
+// Cada uno: precio, sentido (avisar al bajar o al subir), nota y, si el nivel es de otro activo (p. ej. GC=F para el
+// oro), su símbolo de Yahoo. El Vigía avisa al acercarse y al tocarlo. No cuentan en el Platt ni cierran nada.
+function NivelesAviso({ p, onChange }) {
+  const [lista, setLista] = useState(Array.isArray(p.niveles) ? p.niveles : [])
+  const [n, setN] = useState({ precio: '', sentido: 'baja', nota: '', simbolo: '' })
+  const [msg, setMsg] = useState(null)
+  async function guardar(nueva) {
+    const { error } = await updatePosicion(p.id, { niveles: nueva.length ? nueva : null })
+    if (error) { setMsg('No se pudo guardar: ' + error.message); return }
+    setMsg(null); setLista(nueva); onChange()
+  }
+  function anadir(e) {
+    e.preventDefault()
+    const precio = Number(String(n.precio).replace(',', '.'))
+    if (!(precio > 0)) { setMsg('Pon un precio válido'); return }
+    const fila = { precio, sentido: n.sentido, nota: n.nota.trim() }
+    if (n.simbolo.trim()) fila.simbolo = n.simbolo.trim().toUpperCase()
+    guardar([...lista, fila]); setN({ precio: '', sentido: 'baja', nota: '', simbolo: '' })
+  }
+  return (
+    <div className="niveles-aviso">
+      <div className="ia-head"><h3>Niveles de aviso</h3></div>
+      {lista.map((x, i) => (
+        <div key={i} className="nivel-fila num">
+          <span><b>{x.sentido === 'sube' ? '↑' : '↓'} {fmtPx(x.precio)}</b>{x.simbolo ? ` · ${x.simbolo}` : ''}{x.nota ? ` · ${x.nota}` : ''}</span>
+          <button type="button" title="Quitar este nivel" onClick={() => guardar(lista.filter((_, j) => j !== i))}>✕</button>
+        </div>
+      ))}
+      <form className="nivel-form" onSubmit={anadir}>
+        <input value={n.precio} inputMode="decimal" placeholder="Precio" aria-label="Precio del nivel" onChange={e => setN({ ...n, precio: e.target.value })} />
+        <select value={n.sentido} aria-label="Avisar al" onChange={e => setN({ ...n, sentido: e.target.value })}>
+          <option value="baja">al bajar</option><option value="sube">al subir</option>
+        </select>
+        <input value={n.simbolo} placeholder="Otro símbolo (opc.)" aria-label="Símbolo de Yahoo si el nivel es de otro activo" title="Solo si el nivel es de otro activo, p. ej. GC=F para el oro" onChange={e => setN({ ...n, simbolo: e.target.value })} />
+        <input className="nivel-nota" value={n.nota} placeholder="Qué significa" aria-label="Nota" onChange={e => setN({ ...n, nota: e.target.value })} />
+        <button type="submit" className="btn-sec">Añadir</button>
+      </form>
+      <p className="vigia-info">Solo avisos al móvil: al acercarse y al tocar el precio. No son órdenes.</p>
+      {msg && <p className="auth-err" style={{ margin: '4px 0 0', fontSize: 12 }}>{msg}</p>}
+    </div>
+  )
+}
+
 // Estado del Vigía en la leyenda: última pasada y aviso si lleva parado más de 20 min en horario de mercado
 function EstadoVigia({ v, n }) {
   if (!n && !v) return null
@@ -1114,6 +1158,7 @@ export function PanelDetalle({ p, onClose, onChange, onCerrar }) {
           ))}
         </div>
         {pxMsg && <p className="auth-err" style={{ margin: '4px 0 0', fontSize: 12 }}>{pxMsg}</p>}
+        <NivelesAviso p={p} onChange={onChange} />
       </div>
 
       <div className="estrategia-bloque">

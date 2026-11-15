@@ -397,3 +397,11 @@
 /* Cierre de semana (BTP v4): guía de pasos y sin la gráfica por tesis, que ya está en la portada */
 .pos-guia { margin: 4px 0 12px; font-size: 13px; color: var(--texto-sec); max-width: 760px; flex-basis: 100%; }
 .pos-layout.embed .serie-bloque { display: none; }
+
+/* Niveles de aviso manuales */
+.niveles-aviso { margin-top: 14px; }
+.nivel-fila { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; padding: 5px 0; border-bottom: 1px solid var(--borde, #E4E4E4); }
+.nivel-fila button { border: none; background: none; cursor: pointer; color: var(--texto-neutro); }
+.nivel-form { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 8px; }
+.nivel-form input, .nivel-form select { min-width: 0; font-size: 13px; padding: 6px 8px; }
+.nivel-form .nivel-nota { grid-column: 1 / 3; }

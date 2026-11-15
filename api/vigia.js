@@ -97,6 +97,21 @@ async function comboBTC(dentro) {
 // Distancia al SL en % del precio: (px − sl) / px · 100 (misma fórmula que la tabla de Posiciones)
 const aSL = (px, sl) => (px - sl) / px * 100
 
+// Aviso de un nivel manual: tocado (alta) o cerca (a un ATR, o al 2 % si no hay ATR). Avisos informativos.
+function nivelManual(p, nv, q, atr) {
+  const nivel = Number(nv.precio), sube = nv.sentido === 'sube'
+  if (!(nivel > 0)) return []
+  const que = `${nv.simbolo || p.ticker} ${fx(nivel)}`, nota = nv.nota ? ` ${nv.nota}.` : ''
+  const d = sube ? (nivel / q.precio - 1) * 100 : (q.precio - nivel) / q.precio * 100
+  const tocado = sube ? q.maximo >= nivel : q.minimo <= nivel
+  const id = `nv${sube ? 's' : 'b'}${nivel}${nv.simbolo || ''}`
+  if (tocado) return [{ tipo: 'toca-' + id, nivel, sev: 'alta', prioridad: 5, tags: ['bell'],
+    titulo: `${p.ticker}: tocó tu nivel ${que}`, txt: `Precio ${fx(q.precio)} ${q.moneda}.${nota} Nivel de aviso, no es una orden.` }]
+  if (d <= (atr || CERCA)) return [{ tipo: 'cerca-' + id, nivel, sev: 'media', prioridad: 4, tags: ['warning'],
+    titulo: `${p.ticker}: a ${d.toFixed(1)} % de tu nivel ${que}`, txt: `Precio ${fx(q.precio)} ${q.moneda}.${nota} Nivel de aviso, no es una orden.` }]
+  return []
+}
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store, max-age=0')
   const err = await autorizarUsuario(req)
@@ -138,7 +153,7 @@ async function pasada(req, res, topic, dry) {
   // La distancia de aviso depende de la volatilidad: un ATR (aviso 1) y medio ATR (aviso 2), con el ATR que deja la pasada
   // diaria de Belar en app_state.belar_diario.niveles; sin ATR, el 2 % de siempre.
   const [pos, sims, st, di, cb] = await Promise.all([
-    rest2('positions?select=id,ticker,broker,sl_price,tp_price,sl_type,bloque&or=(sl_price.not.is.null,tp_price.not.is.null)'),
+    rest2('positions?select=id,ticker,broker,sl_price,tp_price,sl_type,bloque,niveles&or=(sl_price.not.is.null,tp_price.not.is.null,niveles.not.is.null)'),
     rest2('symbols?select=ticker,yahoo_symbol'),
     rest2('app_state?select=value&key=eq.vigia'),
     rest2('app_state?select=value&key=eq.belar_diario'),
@@ -184,6 +199,8 @@ async function pasada(req, res, topic, dry) {
       else if (dTP <= cerca) checks.push({ tipo: 'cerca-tp', nivel: tp, sev: 'baja', prioridad: 3, tags: ['chart_with_upwards_trend'],
         titulo: `${p.ticker}: a ${en(dTP)} del objetivo`, txt: `Precio ${fx(q.precio)} ${q.moneda}; objetivo ${fx(tp)}. ${cola}` })
     }
+    // Niveles de aviso manuales del propio valor (los de otro símbolo van aparte, más abajo)
+    for (const nv of (Array.isArray(p.niveles) ? p.niveles : []).filter(x => !x.simbolo)) checks.push(...nivelManual(p, nv, q, atr))
     for (const c of checks) {
       const k = `${p.id}:${c.tipo}`
       if (disparos[k]?.nivel === c.nivel) continue   // ya avisado para este nivel
@@ -191,6 +208,24 @@ async function pasada(req, res, topic, dry) {
       disparos[k] = { nivel: c.nivel, at: ahora, precio: q.precio }
     }
   }
+
+  // Niveles manuales referidos a otro símbolo (p. ej. GC=F para la posición de oro): una cotización por símbolo
+  try {
+    const otros = []
+    for (const p of pos || []) for (const nv of (Array.isArray(p.niveles) ? p.niveles : [])) if (nv.simbolo) otros.push({ p, nv })
+    const qs = {}
+    await Promise.all([...new Set(otros.map(o => o.nv.simbolo))].map(async s => { try { qs[s] = await cotizacion(s) } catch (e) { errores.push('nivel ' + e.message) } }))
+    for (const { p, nv } of otros) {
+      const q = qs[nv.simbolo]
+      if (!q || !q.abierto) continue
+      for (const c of nivelManual(p, nv, q, null)) {
+        const k = `${p.id}:${c.tipo}`
+        if (disparos[k]?.nivel === c.nivel) continue
+        eventos.push({ ...c, id: p.id, ticker: p.ticker })
+        disparos[k] = { nivel: c.nivel, at: ahora, precio: q.precio }
+      }
+    }
+  } catch (e) { errores.push('niveles: ' + String(e.message).slice(0, 120)) }
 
   // BTC Combo MA200: una comprobación al día sobre la última vela diaria CERRADA (BTC-USD de Yahoo; TradingView manda).
   // Avisa solo cuando la señal cambia respecto a la última guardada (la primera vez guarda sin avisar).
