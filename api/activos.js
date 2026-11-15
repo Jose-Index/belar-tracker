@@ -30,7 +30,7 @@ export function metricas(close) {
     price: r2(ult), perf_1m: r2(pct(ult, atras(21))), perf_3m: r2(pct(ult, atras(63))), perf_6m: r2(pct(ult, atras(126))),
     perf_1y: r2(pct(ult, c[0])), dist_ma50: r2(pct(ult, ma50)), dist_ma200: r2(pct(ult, ma200)),
     dist_high52: r2(pct(ult, max52)), high52: r2(max52),
-    atr_pct: r2(cambios.reduce((a, v) => a + v, 0) / cambios.length), rsi14: r2(rsi),
+    atr_pct: r2(1.9 * cambios.reduce((a, v) => a + v, 0) / cambios.length), rsi14: r2(rsi),
   }
 }
 

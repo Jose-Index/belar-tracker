@@ -174,7 +174,7 @@ export default function Ficha({ valor: v, onClose, lista = null, indice = -1, on
   async function aLaSombra() {
     const nota = `sombra · ${fmtPx(precio)} ${v.currency || ''} · ${new Date().toLocaleDateString('es-ES')} · Buscador`
     // estado RADAR + nota "SOMBRA ·" hasta que repositorio_estado_check admita SOMBRA (DDL pendiente de José)
-    const { error } = await supabase.from('repositorio').insert({ ticker: v.symbol, estado: 'RADAR', nota: 'SOMBRA · ' + nota })
+    const { error } = await supabase.from('repositorio').insert({ ticker: v.symbol, estado: 'SOMBRA', nota })
     setMsg(error ? 'No se pudo guardar en la sombra: ' + error.message : `${v.symbol} a la cartera sombra a ${fmtPx(precio)}`)
   }
   function entrada() {

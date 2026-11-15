@@ -74,7 +74,7 @@ export default function BuscadorActivos({ tipo, estrellas, onEstrella, vix }) {
     { id: 'perf_1m', l: '1M' }, { id: 'perf_3m', l: '3M' }, { id: 'perf_6m', l: '6M' }, { id: 'perf_1y', l: '1A' },
     { id: 'dist_ma50', l: 'vs MA50' }, { id: 'dist_ma200', l: 'vs MA200' },
     { id: 'dist_high52', l: 'vs MÁX52', t: 'Distancia al máximo de 52 semanas (≤ 0)' },
-    { id: 'atr_pct', l: 'ATR', t: 'Variación diaria media de 14 sesiones (%)' },
+    { id: 'atr_pct', l: 'ATR', t: 'ATR estimado a 14 sesiones (%), a partir de los cierres' },
     { id: 'corr', l: 'CORR. CART.', t: 'Correlación semanal (1 año) con tu cartera abierta, ponderada por importe. < 0,15 diversifica; > 0,35 se parece a lo que ya tienes' },
   ]
   const ordenar = c => setOrden(o => o.col === c ? { col: c, desc: !o.desc } : { col: c, desc: !['name', 'categoria', 'replica', 'etf_ucits', 'corr', 'currency'].includes(c) })

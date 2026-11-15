@@ -20,7 +20,9 @@ export function tendencia(close) {
   const ma20 = ma(20)
   const cambios = []
   for (let i = Math.max(1, c.length - 14); i < c.length; i++) cambios.push(Math.abs(c[i] / c[i - 1] - 1) * 100)
-  const atr = cambios.length ? cambios.reduce((a, v) => a + v, 0) / cambios.length : null
+  // ATR estimado (15/11/2026, Radar #122): con solo cierres, la media del |cambio diario| queda en torno a la mitad del
+  // ATR real de Wilder (con máximos y mínimos). Calibrado con 20 valores × 3 fechas: mediana 1,93 → factor 1,9.
+  const atr = cambios.length ? 1.9 * cambios.reduce((a, v) => a + v, 0) / cambios.length : null
   const distMa20Atr = ma20 && atr ? ((ult / ma20 - 1) * 100) / atr : null
   const perf3d = pct(ult, atras(3))
   return {
