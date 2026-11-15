@@ -28,7 +28,7 @@ José pidió un cambio estético, eligió dirección clara y sobria y, de tres p
 
 ## Pendiente del paso 2
 
-- Nombres de los valores en la fila (hoy solo los que tienen `display_name` en `symbols`).
-- Niveles en ATR para todas las posiciones (que la pasada diaria guarde todos, no solo los seis más cercanos).
+- (Hecho el 15/11, `publicar.py` v3) La pasada diaria guarda en `app_state.belar_diario.niveles` el nombre, el ATR y la
+  distancia al SL y al TP de todas las posiciones; la portada los lee de ahí.
 - Gráfica de grupo por bróker y resultado del año (página Rendimiento).
 - Menú definitivo de ocho entradas: Posiciones, Rendimiento, Buscador, Alertas, Calendario, Gurús, Reparto, Log.

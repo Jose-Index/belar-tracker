@@ -41,18 +41,20 @@ async function loaderPortada() {
   return { ...pos, simbolos, eventos, snaps, cierres, diario: estado.belar_diario || null, objetivos: estado.bloques_objetivo || null }
 }
 
-// Nivel más cercano (stop u objetivo). El precio se estima con la última captura: entrada × valor ÷ invertido.
-// Si la pasada diaria de Belar dejó la distancia en ATR para ese nivel, se muestra en ATR; si no, en %.
-function nivelDe(p, cercanos) {
+// Nivel más cercano (stop u objetivo). Si la pasada diaria de Belar midió la posición (app_state.belar_diario.niveles:
+// distancia al SL y al TP en % y en ATR, al último cierre), manda ese dato. Si no, se estima en % con la última captura.
+function nivelDe(p, n) {
+  if (n && (n.sl || n.tp)) {
+    const ds = [n.sl ? { nom: 'Stop', atr: n.sl[1] } : null, n.tp ? { nom: 'Objetivo', atr: n.tp[1] } : null].filter(Boolean).sort((a, b) => a.atr - b.atr)
+    const m = ds[0]
+    return m.atr <= 0 ? { txt: m.nom + ' tocado', aviso: true } : { txt: m.nom + ' a ' + num(m.atr, 1) + ' ATR', aviso: m.atr <= 1 }
+  }
   const e = Number(p.entry_price), sl = Number(p.sl_price), tp = Number(p.tp_price), inv = Number(p.invested), val = Number(p.current_value ?? p.invested)
   if (!(e > 0) || !(inv > 0) || Number(p.apalancamiento || 1) !== 1) return { txt: sl > 0 || tp > 0 ? 'Nivel puesto' : 'Sin nivel', aviso: false }
   const px = e * val / inv
-  const ds = [sl > 0 ? { k: 'SL', n: 'Stop', d: (px - sl) / px * 100 } : null, tp > 0 ? { k: 'TP', n: 'Objetivo', d: (tp - px) / px * 100 } : null].filter(Boolean)
+  const ds = [sl > 0 ? { nom: 'Stop', d: (px - sl) / px * 100 } : null, tp > 0 ? { nom: 'Objetivo', d: (tp - px) / px * 100 } : null].filter(Boolean).sort((a, b) => a.d - b.d)
   if (!ds.length) return { txt: 'Sin nivel', aviso: false }
-  const m = ds.sort((a, b) => a.d - b.d)[0]
-  if (m.d <= 0) return { txt: m.n + ' tocado', aviso: true }
-  const c = (cercanos || []).find(x => x.ticker === p.ticker && x.nivel === m.k)
-  return c && c.atr > 0 ? { txt: m.n + ' a ' + num(c.atr, 1) + ' ATR', aviso: c.atr <= 1 } : { txt: m.n + ' a ' + num(m.d, 1) + ' %', aviso: m.d <= 3 }
+  return ds[0].d <= 0 ? { txt: ds[0].nom + ' tocado', aviso: true } : { txt: ds[0].nom + ' a ' + num(ds[0].d, 1) + ' %', aviso: ds[0].d <= 3 }
 }
 
 export default function Portada() {
@@ -71,8 +73,9 @@ export default function Portada() {
     if (!data) return null
     const P = (data.positions || []).map(p => {
       const inv = Number(p.invested) || 0, val = Number(p.current_value ?? p.invested) || 0
-      return { ...p, inv, val, gp: val - inv, gpp: inv ? (val - inv) / inv * 100 : null, te: bloqueDe(p), puente: esPuente(p), niv: nivelDe(p, data.diario?.cercanos),
-        nombre: (data.simbolos || []).find(x => x.ticker === p.ticker)?.display_name || '' }
+      const n = (data.diario?.niveles || []).find(x => x.t === p.ticker && x.br === p.broker)
+      return { ...p, inv, val, gp: val - inv, gpp: inv ? (val - inv) / inv * 100 : null, te: bloqueDe(p), puente: esPuente(p), niv: nivelDe(p, n), atr: n?.atr ?? null,
+        nombre: n?.n || (data.simbolos || []).find(x => x.ticker === p.ticker)?.display_name || '' }
     })
     const cmp = orden === 'rend' ? (a, b) => (b.gpp ?? -1e9) - (a.gpp ?? -1e9) : orden === 'fecha' ? (a, b) => ((a.entry_date || '') < (b.entry_date || '') ? 1 : -1) : (a, b) => b.val - a.val
     const claves = agrupar === 'tesis' ? BLOQUES.map(b => b.id) : agrupar === 'broker' ? Object.keys(BROKERS) : ['']
@@ -154,7 +157,7 @@ export default function Portada() {
             </div>
           )}
         </div>
-        <p className="pt-pie">Valores de tu última captura. El nivel más cercano se estima con ese valor; en ATR cuando lo ha medido la pasada diaria de Belar.</p>
+        <p className="pt-pie">Valores de tu última captura. La distancia al nivel más cercano es la del último cierre, en ATR (lo que el valor se mueve en un día normal), medida por la pasada diaria de Belar.</p>
       </section>
 
       <section className="pt-cal" aria-label="Próximos 14 días">
@@ -210,7 +213,7 @@ function Ficha({ pos, grupo, agrupar, serieGrupo, comp, setComp, per, setPer, si
   const x = pos || grupo
   const det = pos
     ? [['Valor', usd(pos.val)], ['Invertido', usd(pos.inv)], ['G/P', gpd(pos.gp) + ' · ' + pct(pos.gpp)], ['Entrada', fecha(pos.entry_date) + ' · ' + (BROKERS[pos.broker] || pos.broker)],
-        ['Precio de entrada', pos.entry_price ? num(pos.entry_price, 2) : '—'], ['Stop', pos.sl_price ? num(pos.sl_price, 2) : 'Sin stop'], ['Objetivo', pos.tp_price ? num(pos.tp_price, 2) : 'Sin objetivo'],
+        ['Precio de entrada', pos.entry_price ? num(pos.entry_price, 2) : '—'], ['Stop', pos.sl_price ? num(pos.sl_price, 2) : 'Sin stop'], ...(pos.atr != null ? [['ATR de 14 sesiones', num(pos.atr, 1) + ' %']] : []), ['Objetivo', pos.tp_price ? num(pos.tp_price, 2) : 'Sin objetivo'],
         ['Tesis', BLOQUE_DE_ID[pos.te]?.label || '—'], ['Origen', pos.fuente === 'GURU' ? 'GURÚ' : pos.fuente || '—']]
     : [['Valor', usd(x.val)], ['Invertido', usd(x.inv)], ['G/P', gpd(x.gp) + ' · ' + pct(x.gpp)], ['Posiciones', String(x.ps.length)],
         ...(x.peso ? [['Peso', num(x.peso.real, 1) + ' % · objetivo ' + num(x.peso.objetivo) + ' %']] : [])]
