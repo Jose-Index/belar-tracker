@@ -145,3 +145,11 @@ button.rd-dato:hover { background: #FAFAFA; }
 /* Cierre de año */
 .rd-sello { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 16px 0 4px; }
 .rd-sello .pt-gestion:disabled { opacity: .45; cursor: default; }
+
+/* Panel de edición abierto desde la portada: cajón lateral en escritorio, hoja inferior en móvil.
+   (Fuera de .pos-layout el panel quedaba al final de la página, sin verse.) */
+.pt .pos-panel-fondo { display: block; position: fixed; inset: 0; z-index: 60; background: rgba(17, 17, 17, .3); }
+.pt .pos-panel { position: fixed !important; z-index: 61; top: 0; right: 0; bottom: 0; width: min(440px, 100vw) !important; margin: 0; overflow-y: auto; border-radius: 0; border-left: 1px solid var(--pt-linea, #E4E4E4); box-shadow: -8px 0 24px rgba(17, 17, 17, .08); }
+@media (max-width: 900px) {
+  .pt .pos-panel { top: auto; left: 0; width: 100% !important; max-height: 86vh; border-left: 0; border-top: 1px solid var(--pt-linea, #E4E4E4); box-shadow: 0 -8px 24px rgba(17, 17, 17, .1); padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+}
