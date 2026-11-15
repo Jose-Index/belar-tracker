@@ -15,7 +15,7 @@ const fmtPx = v => v == null ? '—' : Number(v).toLocaleString('es-ES', { minim
 const norm = t => String(t ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 
 const AYUDA = {
-  ETF: 'Vehículos para los bloques NÚCLEO, O/MERCADOS y ORO. Sin entrada de Tesis: los ETF operados como táctica están vetados (20 % de acierto).',
+  ETF: 'Vehículos para SP500, O/ETFs y ORO. Sin entrada de Tesis: los ETF operados como táctica están vetados (20 % de acierto).',
   INDICE: 'Contexto de mercado: no se operan. Cada índice indica el ETF UCITS con el que se replica.',
   CRIPTO: 'Solo BTC: núcleo sin SL o regla RSI-BTC 70/50. La cripto operada está vetada (19 operaciones, 21 % de acierto).',
 }

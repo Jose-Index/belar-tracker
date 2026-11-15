@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
+import Portada from './pages/Portada.jsx'
 import Inicio from './pages/Inicio.jsx'
 import Historico from './pages/Historico.jsx'
 import Tesis from './pages/Tesis.jsx'
@@ -30,16 +31,17 @@ const Icono = ({ id }) => (
 )
 
 const MENU = [
-  { to: '/', label: 'Inicio', end: true, icono: 'inicio', movil: true },
+  { to: '/', label: 'Posiciones', end: true, icono: 'inicio', movil: true },
   { to: '/buscador', label: 'Buscador', icono: 'buscador', movil: true },
   { to: '/alertas', label: 'Alertas', icono: 'alertas', movil: true },
   { to: '/calendario', label: 'Calendario', icono: 'calendario', movil: true },
   { to: '/tesis', label: 'Tesis' },
   { to: '/historico', label: 'Histórico' },
-  { to: '/repositorio', label: 'Repositorio' },
+  { to: '/repositorio', label: 'Log' },
   { to: '/patrimonio', label: 'Patrimonio €' },
   { to: '/fuentes', label: 'Fuentes' },
   { to: '/herramientas', label: 'Herramientas' },
+  { to: '/gestion', label: 'Gestión' },      // vista anterior: cierre de semana, altas, capturas, Reparto (hasta migrar sus funciones)
 ]
 const PRINCIPALES = MENU.filter(m => m.movil)
 const SECUNDARIOS = MENU.filter(m => !m.movil)
@@ -77,8 +79,9 @@ export default function App() {
 
       <main className="content">
         <Routes>
-          <Route path="/" element={<Inicio />} />
-          <Route path="/posiciones" element={<Inicio />} />
+          <Route path="/" element={<Portada />} />
+          <Route path="/posiciones" element={<Portada />} />
+          <Route path="/gestion" element={<Inicio />} />
           <Route path="/buscador" element={<Buscador />} />
           <Route path="/tesis" element={<Tesis />} />
           <Route path="/historico" element={<Historico />} />

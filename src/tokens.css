@@ -1,39 +1,40 @@
-/* BTP · Identidad v1 — tokens (fuente de verdad de color y tipografía)
-   Regla dura: verde/rojo/ámbar SOLO con significado de mercado. La marca es azul. */
+/* BTP · Identidad v2, diseño A "Suizo" (15/11/2026) — tokens (fuente de verdad de color y tipografía)
+   Blanco, tinta negra, líneas finas, esquinas rectas, un solo acento azul cobalto.
+   Regla dura: verde/rojo/ámbar SOLO con significado de mercado. */
 :root {
   /* Marca */
-  --azul-belar: #2E6BF6;
-  --azul-hover: #1F56D6;
+  --azul-belar: #1F4FD8;
+  --azul-hover: #173FB0;
   --cian-apoyo: #3BC9F5;
 
   /* Superficies (modo claro) */
-  --tinta: #0D1420;
+  --tinta: #111111;
   --tinta-2: #141D2E;
-  --papel: #F6F8FB;
+  --papel: #FFFFFF;
   --superficie: #FFFFFF;
-  --borde: #E3E8F0;
+  --borde: #E4E4E4;
   --flotante: #333F52;          /* gris oscuro de identidad: tooltips y etiquetas */
   --flotante-borde: #46536A;
 
   /* Texto */
-  --texto: #17202E;
-  --texto-sec: #5B6472;
-  --texto-neutro: #8A93A6;
+  --texto: #111111;
+  --texto-sec: #5A5A5A;
+  --texto-neutro: #767676;
 
   /* Semánticos de mercado — uso EXCLUSIVO */
-  --alza: #16A34A;
-  --baja: #E5484D;
-  --aviso: #F0A020;
+  --alza: #0B7A43;
+  --baja: #C22F24;
+  --aviso: #8A5200;
 
   /* Tipografía */
-  --font-marca: 'Space Grotesk', system-ui, sans-serif;
+  --font-marca: 'Inter', system-ui, sans-serif;
   --font-ui: 'Inter', system-ui, sans-serif;
-  --font-datos: 'JetBrains Mono', ui-monospace, monospace;
+  --font-datos: 'Inter', system-ui, sans-serif;
 
   /* Densidades */
   --fs-datos: 13px;        /* modo Compacta (por defecto en escritorio) */
   --fs-ui: 14px;
-  --radius: 10px;
+  --radius: 0px;
 }
 
 [data-density="comoda"] {

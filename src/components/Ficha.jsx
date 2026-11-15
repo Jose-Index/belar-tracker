@@ -182,7 +182,7 @@ export default function Ficha({ valor: v, onClose, lista = null, indice = -1, on
     const k = esPeniques(v.currency) ? 0.01 : 1
     const r4 = x => x == null ? null : Math.round(x * k * 10000) / 10000
     const alta = { ticker: v.symbol, nombre: v.name, entry_price: r4(precio), sl_price: r4(sl), tp_price: r4(tp), bloque: 'TESIS', clase: 'TACTICA', fuente: 'YO' }
-    nav('/?alta=' + encodeURIComponent(JSON.stringify(alta)))
+    nav('/gestion?alta=' + encodeURIComponent(JSON.stringify(alta)))
   }
 
   return (
@@ -311,7 +311,7 @@ export default function Ficha({ valor: v, onClose, lista = null, indice = -1, on
 // Qué regla aplica a cada tipo de activo que no es acción (02/10/2026)
 function contextoActivo(modo, v) {
   if (modo === 'ETF') return v.ucits
-    ? 'Sin entrada de Tesis (ETF operados como táctica: vetados). Vehículo para NÚCLEO, O/MERCADOS u ORO: se compra por bloque, sin SL de Tesis.'
+    ? 'Sin entrada de Tesis (ETF operados como táctica: vetados). Vehículo para SP500, O/ETFs u ORO: se compra para aguantar, sin SL de Tesis.'
     : 'ETF americano: un minorista europeo no puede comprarlo (PRIIPs), solo como CFD. Úsalo como referencia y busca su equivalente UCITS.'
   if (modo === 'INDICE') return `No se opera: contexto de mercado.${v.etf_ucits ? ' Se replica con ' + v.etf_ucits + ' (UCITS).' : ''}`
   if (modo === 'CRIPTO') {
