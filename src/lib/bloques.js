@@ -1,26 +1,37 @@
-// BTP · Cartera v3 (adoptada 30/09/2026): seis bloques con peso objetivo + caja.
+// BTP · Cartera v3.2 (adoptada 15/11/2026): diez tesis con peso objetivo (nueve + caja).
 // Fuente de verdad de la estructura de cartera. Los pesos objetivo se pueden
 // sobrescribir desde app_state (key 'bloques_objetivo') sin tocar código.
-// Regla §7.3: un bloque a más de +5 puntos de su objetivo no recibe entradas nuevas.
+// Regla §7.3: una tesis a más de +5 puntos de su objetivo no recibe entradas nuevas.
+// La wallet BTC personal queda FUERA de la base de los pesos (15/11/2026).
+// En el código y en la base se siguen llamando "bloques"; en pantalla, "tesis".
 
 export const BLOQUES = [
-  { id: 'BTC',       label: 'BTC',                 corto: 'BTC',        objetivo: 10, color: '#17202E',
-    ayuda: 'Cuatro estrategias, cada posición etiquetada: Base (eToro, sin salida, horizonte 2036, 110 €/mes), Wallet (BTC propio), Combo MA200 v1 (VBTC.DE, entra y sale por la regla) y Táctica (VBTC.DE, con stop).' },
-  { id: 'ORO',       label: 'ORO',                 corto: 'ORO',        objetivo: 8,  color: '#B08D2F',
-    ayuda: 'IGLN físico. Compras solo en retroceso: nunca a <5 % del máximo de 52 semanas ni tras +15 % en 3 meses. Sin SL, invalidación escrita.' },
-  { id: 'NUCLEO',    label: 'NÚCLEO',              corto: 'NÚCLEO',     objetivo: 24, color: '#2E6BF6',
-    ayuda: '16 % ETF S&P 500 UCITS de acumulación (CSPX) con la aportación IBKR + 8 % en 3-5 convicciones (NVDA, GOOGL, MU…) con invalidación escrita. ETF sin salida; convicciones −25 % estructural, revisión semestral.' },
-  { id: 'DELEGADA',  label: 'COPY TRADING',         corto: 'COPY',   objetivo: 10, color: '#7C5CFF',
-    ayuda: 'BRK.B 7 % (contado, IBKR) + UN solo copy trader de eToro 3 %. Sin SL. Sustitución si 12 meses seguidos por detrás del S&P.' },
-  { id: 'OMERCADOS', label: 'O/MERCADOS',          corto: 'O/MERCADOS', objetivo: 10, color: '#3BC9F5',
-    ayuda: 'Grandes corporaciones no USA aguantadas meses (Samsung, SoftBank, Kawasaki), EWY. China ≤5 %. Francia excluida. Salida −20/−25 % o revisión semestral.' },
-  { id: 'TESIS',     label: 'Tesis JOSE −11/+23,5', corto: 'TESIS',     objetivo: 25, color: '#0F2A6B',
-    ayuda: 'Renta variable táctica. Máx. 8 líneas, ticket ≤4 % (small caps 2 %), hasta 4 entradas al mes, decisión en vista de 2 años. SL −11 / TP +23,5 fijos en el ticket, no se tocan.' },
-  { id: 'SATELITE',  label: 'SATÉLITE',            corto: 'SATÉLITE',   objetivo: 5,  color: '#F07D2E',
-    ayuda: 'Estrategia libre (01/10/2026): disruptivas/loterías declaradas el día de compra y cohetes ascendidos desde la Tesis SOLO en ganancia (≥ +23,5). Peso 5 %, techo 8 %, máx. 4 líneas. Invalidación escrita por línea: ascendidas, suelo fijo +10 % sobre entrada puesto una vez (no sube); loterías, pérdida máxima asumida. Revisión semestral.' },
+  { id: 'TESIS',      label: 'Tesis JOSE −11/+23,5', corto: 'TESIS',      objetivo: 32, color: '#0F2A6B',
+    ayuda: 'Renta variable táctica. Máx. 8 líneas (8 × 4 %), ticket ≤4 % (small caps 2 %), hasta 4 entradas al mes, decisión en vista de 2 años. SL −11 / TP +23,5 fijos en el ticket, no se tocan.' },
+  { id: 'SP500',      label: 'SP500',                corto: 'SP500',      objetivo: 18, color: '#2E6BF6',
+    ayuda: 'ETF S&P 500 UCITS de acumulación (CSPX.L en XTB, SPXS en IBKR) con la aportación de IBKR. Sin salida; horizonte ~10 años.' },
+  { id: 'CONVICCION', label: 'CONVICCIÓN',           corto: 'CONVICCIÓN', objetivo: 14, color: '#3BC9F5',
+    ayuda: 'Máx. 5 líneas, tope del 3 % por línea. Empresas y mercados que José conoce por su profesión, ideas de cartas y 13F de gestores (tras Análisis Oportunidad ≥6/8) y grandes corporaciones no USA aguantadas meses. Invalidación escrita el día de entrada; revisión semestral; sin operarlas.' },
+  { id: 'ORO',        label: 'ORO',                  corto: 'ORO',        objetivo: 12, color: '#B08D2F',
+    ayuda: 'IGLN físico, en tramos y solo en retroceso. Sin SL. Invalidación: cierre semanal de GC=F < 3.000 $ o bancos centrales vendedores netos dos trimestres seguidos.' },
+  { id: 'BTC_LARGO',  label: 'BTC largo',            corto: 'BTC LARGO',  objetivo: 5,  color: '#17202E',
+    ayuda: 'BTC en eToro con la aportación de 110 €/mes. Sin salida; horizonte 2036.' },
+  { id: 'BTC_COMBO',  label: 'BTC Combo MA200',      corto: 'BTC COMBO',  objetivo: 5,  color: '#5B6B82',
+    ayuda: 'Táctica por señal (régimen por MA200 y RSI). Entra y sale solo por la regla; stop catastrófico −10 %. Mientras está fuera de mercado, su peso es caja.' },
+  { id: 'COPY',       label: 'COPYTRADING',          corto: 'COPY',       objetivo: 4,  color: '#7C5CFF',
+    ayuda: 'ONLYINVESTMENTS y SMUDLICZEK. Techo 5 %. Sin SL. Corte el 07/04/2027: el peor frente al S&P sale y queda uno.' },
+  { id: 'EXPECT',     label: 'EXPECT',               corto: 'EXPECT',     objetivo: 4,  color: '#F07D2E',
+    ayuda: 'Convicción a la espera de despegue. Techo 6 %, máx. 4 líneas, ticket pequeño. Declaradas el día de compra (pérdida máxima escrita) o ascendidas desde la Tesis SOLO en ganancia ≥ +23,5 (suelo fijo +10 % sobre la entrada). Sin trailing. Revisión semestral.' },
+  { id: 'OETFS',      label: 'O/ETFs',               corto: 'O/ETFs',     objetivo: 3,  color: '#2FA36B',
+    ayuda: '1-2 ETF UCITS temáticos comprados en retroceso y para aguantar al menos 6 meses. Invalidación escrita; sin stop de ticket.' },
 ]
-export const CAJA = { id: 'CAJA', label: 'Caja', corto: 'CAJA', objetivo: 8, color: '#C7D0E0',
-  ayuda: '8 % mientras se construye el NÚCLEO; después 5 %.' }
+export const CAJA = { id: 'CAJA', label: 'Caja', corto: 'CAJA', objetivo: 3, color: '#C7D0E0',
+  ayuda: 'Liquidez de los tres brókers. El peso de la BTC Combo es caja mientras está fuera de mercado.' }
+// Wallet BTC personal: no es una tesis ni cuenta en los pesos; en Posiciones va en su propio grupo, al final.
+export const WALLET_BQ = { id: 'WALLET', label: 'BTC wallet · fuera de la base', corto: 'WALLET', color: '#17202E',
+  ayuda: 'Monedero BTC personal. Importe fijo, sin estudio ni revisión: no cuenta en los pesos. Se valora a precio de mercado y sus aportaciones dan coste y G/P.' }
+// Origen de cada entrada (columna `fuente`)
+export const ORIGENES = [['YO', 'YO'], ['BELAR', 'BELAR'], ['MIXTA', 'MIXTA'], ['GURU', 'GURÚ']]
 
 export const BLOQUE_IDS = BLOQUES.map(b => b.id)
 export const BLOQUE_DE_ID = Object.fromEntries(BLOQUES.map(b => [b.id, b]))
@@ -31,34 +42,37 @@ export const TESIS_TP = 23.5
 export const tesisSL = entry => entry ? Math.round(entry * (1 + TESIS_SL / 100) * 10000) / 10000 : null
 export const tesisTP = entry => entry ? Math.round(entry * (1 + TESIS_TP / 100) * 10000) / 10000 : null
 
-// Bloque efectivo de una posición: el asignado o, si aún no tiene, uno por defecto
-// (transición 30/09/2026: las 25 abiertas se asignan por API; lo nuevo entra por el alta).
-const NUCLEO_TK = new Set(['NVDA', 'GOOGL', 'GOOG', 'MU', 'CSPX', 'CSPX.L', 'CSPX.UK', 'CSPX.DE'])
-const OMERC_TK = new Set(['EWY', 'SMSN.UK', 'SMSN.IL', '7012.T', 'CSKR.UK', '9984.T', 'KWEB', 'FXI', 'MCHI'])
-const DELEG_TK = new Set(['BRK.B', 'BRK-B', 'BRKB', 'BRK.B.US'])
+// Tesis efectiva de una posición o de un cierre: la asignada o, si no tiene, una por defecto.
+// Nombres de bloque de la v3 (hasta el 15/11/2026): siguen en el histórico de cierres y en lo que quede sin
+// migrar. Se traducen al leer y nunca se escriben.
+export const ETF_SP500 = /^(CSPX|SPXS|SXR8|VUAA|VUSA|IUSA)(\.|$)/i
+const V3 = {
+  NUCLEO: p => ETF_SP500.test(p?.ticker || '') ? 'SP500' : 'CONVICCION',
+  OMERCADOS: () => 'CONVICCION',
+  DELEGADA: () => 'COPY',
+  SATELITE: () => 'EXPECT',
+  BTC: p => (p?.clase === 'MOMENTUM' || p?.clase === 'TACTICA') ? 'BTC_COMBO' : 'BTC_LARGO',
+}
+const CONV_TK = new Set(['NVDA', 'GOOGL', 'GOOG', 'MU', 'EWY', 'SMSN.UK', 'SMSN.IL', '7012.T', 'CSKR.UK', '9984.T', 'KWEB', 'FXI', 'MCHI',
+  'BRK.B', 'BRK-B', 'BRKB', 'BRK.B.US'])
 export function bloquePorDefecto(p) {
   const t = String(p?.ticker || '').toUpperCase()
-  if (t === 'BTC' || t.startsWith('VBTC') || t === 'BTC-USD') return 'BTC'
+  if (t === 'BTC' || t === 'BTC-USD') return 'BTC_LARGO'
+  if (t.startsWith('VBTC')) return 'BTC_COMBO'
   if (t === 'IGLN' || t === 'IGLN.L' || t.startsWith('XAU') || t === 'GC=F') return 'ORO'
-  if (NUCLEO_TK.has(t)) return 'NUCLEO'
-  if (DELEG_TK.has(t) || /INVESTMENTS|COPY|TRADER/.test(t)) return 'DELEGADA'
-  if (OMERC_TK.has(t)) return 'OMERCADOS'
+  if (ETF_SP500.test(t)) return 'SP500'
+  if (/INVESTMENTS|COPY|TRADER/.test(t)) return 'COPY'
+  if (CONV_TK.has(t)) return 'CONVICCION'
   return 'TESIS'
 }
-export const bloqueDe = p => (p?.bloque && BLOQUE_DE_ID[p.bloque]) ? p.bloque : bloquePorDefecto(p)
-
-// Estrategias dentro del bloque BTC (01/10/2026). Sin DDL: se guardan en `clase`, cuyo CHECK
-// solo admite NUCLEO/MOMENTUM/TACTICA/DISRUPTIVA → NUCLEO = Base, MOMENTUM = Combo MA200 v1,
-// TACTICA = Táctica. La Wallet no es una posición (vive en app_state.btc_wallet).
-export const BTC_ESTRATEGIAS = [
-  { clase: 'NUCLEO',   id: 'BASE',    label: 'Base' },
-  { clase: 'MOMENTUM', id: 'COMBO',   label: 'Combo MA200 v1' },
-  { clase: 'TACTICA',  id: 'TACTICA', label: 'Táctica' },
-]
-export const estrategiaBTC = p => {
-  if (bloqueDe(p) !== 'BTC') return null
-  return BTC_ESTRATEGIAS.find(e => e.clase === p?.clase) || (p?.broker === 'etoro' ? BTC_ESTRATEGIAS[0] : BTC_ESTRATEGIAS[2])
+export const bloqueDe = p => {
+  const b = p?.bloque
+  if (b && BLOQUE_DE_ID[b]) return b
+  if (b && V3[b]) return V3[b](p)
+  return bloquePorDefecto(p)
 }
+// `clase` es una columna heredada con CHECK (NUCLEO/MOMENTUM/TACTICA/DISRUPTIVA): se deriva de la tesis.
+export const claseDe = bq => bq === 'TESIS' ? 'TACTICA' : bq === 'BTC_COMBO' ? 'MOMENTUM' : bq === 'EXPECT' ? 'DISRUPTIVA' : 'NUCLEO'
 
 // Tesis PUENTE (01/10/2026): posiciones del bloque Tesis abiertas ANTES de adoptar la regla (30/09/2026).
 // Se gestionan con las reglas de la Tesis (SL/TP fijos) pero NO se miden como Tesis nativa en el panel mensual.
@@ -84,30 +98,27 @@ export const DESVIO_ROJO = 5
 export const DESVIO_AMBAR = 3
 export const semaforoDesvio = pp => pp == null ? '' : Math.abs(pp) > DESVIO_ROJO ? 'rojo' : Math.abs(pp) > DESVIO_AMBAR ? 'ambar' : 'ok'
 
-// Pesos reales por bloque. Base = posiciones + liquidez de brókers + wallet BTC personal
-// (decisión de José del 30/09/2026: la wallet entra en la base y suma al bloque BTC núcleo).
-// wallet = { qty, usd, invertido? } — usd ya valorado a precio de mercado; sin precio, usd = 0 y no cuenta.
+// Pesos reales por tesis. Base = posiciones + liquidez de brókers. La wallet BTC personal queda FUERA de la base
+// desde el 15/11/2026 (decisión de José): no suma a ninguna tesis y se informa aparte en `walletUsd`.
+// wallet = { qty, usd, invertido? } — usd ya valorado a precio de mercado.
 export function pesosBloques(positions, liquidez, objetivos, wallet) {
   const val = p => Number(p.current_value ?? p.invested) || 0
   const totalPos = (positions || []).reduce((a, p) => a + val(p), 0)
   const caja = Object.values(liquidez || {}).reduce((a, v) => a + (Number(v) || 0), 0)
   const walletUsd = Number(wallet?.usd) > 0 ? Number(wallet.usd) : 0
-  const base = totalPos + caja + walletUsd
+  const base = totalPos + caja
   const obj = { ...Object.fromEntries(BLOQUES.map(b => [b.id, b.objetivo])), CAJA: CAJA.objetivo, ...(objetivos || {}) }
   const filas = BLOQUES.map(b => {
     const ps = (positions || []).filter(p => bloqueDe(p) === b.id)
-    const extra = b.id === 'BTC' ? walletUsd : 0            // la wallet suma al bloque BTC
-    const walletInv = b.id === 'BTC' && extra && Number(wallet?.invertido) > 0 ? Number(wallet.invertido) : 0
-    const valor = ps.reduce((a, p) => a + val(p), 0) + extra
-    const invertido = ps.reduce((a, p) => a + (Number(p.invested) || 0), 0) + walletInv
-    const gp = valor - (walletInv ? 0 : extra) - invertido   // con coste de la wallet registrado, entra en el G/P
+    const valor = ps.reduce((a, p) => a + val(p), 0)
+    const invertido = ps.reduce((a, p) => a + (Number(p.invested) || 0), 0)
+    const gp = valor - invertido
     const real = base ? valor / base * 100 : null
     const objetivo = Number(obj[b.id]) || 0
     const desvio = real == null ? null : real - objetivo
     return {
-      ...b, objetivo, n: ps.length + (extra ? 1 : 0), valor, invertido, gp,
+      ...b, objetivo, n: ps.length, valor, invertido, gp,
       gpPct: invertido ? gp / invertido * 100 : null,
-      wallet: extra || 0, walletConCoste: !!walletInv,
       real, desvio, usd: real == null ? null : (objetivo - real) / 100 * base, // $ que faltan (+) o sobran (−)
       semaforo: semaforoDesvio(desvio),
     }
@@ -163,7 +174,7 @@ export function serieTWRBloques(snaps, positions = [], cierres = []) {
     cierresDe.get(k).push(c)
   }
   for (const l of cierresDe.values()) l.sort((a, b) => (a.closed_date < b.closed_date ? -1 : 1))
-  const bloqueCierre = c => (c.bloque && BLOQUE_DE_ID[c.bloque]) ? c.bloque : bloquePorDefecto(c)
+  const bloqueCierre = c => bloqueDe(c)      // traduce también los nombres de la v3
   const puenteCierre = c => bloqueCierre(c) === 'TESIS' && !!c.entry_date && c.entry_date < TESIS_ADOPCION
 
   // Vida a la que pertenece un cierre semanal → { bq, puente } (null = se descarta)

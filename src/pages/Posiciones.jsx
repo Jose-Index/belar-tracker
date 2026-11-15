@@ -10,7 +10,7 @@ import { AreaChart, Area, YAxis, XAxis, Tooltip, ResponsiveContainer, ReferenceL
 import { getSimbolos, yahooDe, fetchQuotes, pctDia, pctSem, diasAbiertos, frescura, intervaloPrecios } from '../lib/quotes'
 import { useCache, useSondeo, cargar, fijar } from '../lib/cache'
 import { eventosProximos } from '../lib/ia'
-import { BLOQUES, BLOQUE_IDS, BLOQUE_DE_ID, BTC_ESTRATEGIAS, estrategiaBTC, esPuente, bloqueDe, bloquePorDefecto, pesosBloques, TESIS_SL, TESIS_TP, tesisSL, tesisTP, serieTWRBloques, tesisNiveles } from '../lib/bloques'
+import { BLOQUES, BLOQUE_IDS, BLOQUE_DE_ID, WALLET_BQ, ORIGENES, ETF_SP500, claseDe, esPuente, bloqueDe, bloquePorDefecto, pesosBloques, TESIS_SL, TESIS_TP, tesisSL, tesisTP, serieTWRBloques, tesisNiveles } from '../lib/bloques'
 import IngestaIA from '../components/IngestaIA.jsx'
 import { useMovil, useSinScroll, useArrastreCierre } from '../lib/movil'
 import './posiciones.css'
@@ -122,7 +122,7 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
   }
 
   // Wallet BTC personal: cantidad de app_state (raw.btcQty) valorada al precio vivo de BTC-USD
-  // (o al que traiga la portada). Entra en la base de los pesos y en el bloque BTC (30/09/2026).
+  // (o al que traiga la portada). Desde el 15/11/2026 queda fuera de la base de los pesos y va en su propio grupo.
   const wallet = useMemo(() => {
     const qty = Number(raw?.btcQty) || 0
     const precio = quotes['BTC-USD']?.price || walletProp?.precio || null
@@ -137,7 +137,7 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
   const rows = useMemo(() => {
     if (!raw) return null
     const { positions, liquidez } = raw
-    // Peso sobre posiciones + liquidez de brókers + wallet BTC (misma base que el panel de bloques)
+    // Peso sobre posiciones + liquidez de brókers (misma base que el Reparto; la wallet BTC queda fuera)
     const base = pesosBloques(positions, liquidez, null, wallet).base
     return positions.map(p => {
       const val = Number(p.current_value ?? p.invested)
@@ -220,11 +220,13 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
     const w = pesosBloques(raw.positions, raw.liquidez, null, wallet)
     const orden = ordenBq || raw.bloquesOrden || BLOQUE_IDS
     const pos = id => { const i = orden.indexOf(id); return i < 0 ? 99 + BLOQUE_IDS.indexOf(id) : i }
-    return [...BLOQUES].sort((a, b) => pos(a.id) - pos(b.id)).map(b => ({
-      b, peso: w.filas.find(f => f.id === b.id), rows: sorted.filter(r => r.bloqueEf === b.id),
-      wallet: b.id === 'BTC' && wallet.qty > 0 ? { ...wallet, peso: w.base ? wallet.usd / w.base * 100 : null } : null,
+    const gs = [...BLOQUES].sort((a, b) => pos(a.id) - pos(b.id)).map(b => ({
+      b, peso: w.filas.find(f => f.id === b.id), rows: sorted.filter(r => r.bloqueEf === b.id), wallet: null,
       serie: seriesBloque[b.id] || [],
-    })).filter(g => g.rows.length || g.wallet)
+    })).filter(g => g.rows.length)
+    // Wallet BTC personal: fuera de la base de los pesos (15/11/2026); va en su propio grupo, siempre al final
+    if (wallet.qty > 0) gs.push({ b: WALLET_BQ, peso: null, rows: [], wallet: { ...wallet, peso: null }, serie: [] })
+    return gs
   }, [sorted, raw, wallet, ordenBq, seriesBloque])
 
   // Arrastrar y soltar bloques (ratón y dedo): se agarra el asa ⠿ de la cabecera; al soltar se guarda el orden.
@@ -246,7 +248,7 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
     const soltar = async () => {
       window.removeEventListener('pointermove', mover); window.removeEventListener('pointerup', soltar); window.removeEventListener('pointercancel', soltar)
       setArrastrando(null)
-      const completo = [...orden, ...BLOQUE_IDS.filter(x => !orden.includes(x))]
+      const completo = [...orden, ...BLOQUE_IDS.filter(x => !orden.includes(x))].filter(x => BLOQUE_IDS.includes(x))   // sin el grupo de la wallet
       const { error } = await guardarOrdenBloques(completo)
       if (error) setMsg('No se pudo guardar el orden de bloques: ' + error.message)
       else fijar('posiciones', { ...raw, bloquesOrden: completo })
@@ -603,7 +605,7 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
         <p className="pos-fuente">
           {cierre
             ? 'Modo cierre: edita VALOR/INVERTIDO (Enter salta a la siguiente fila), ✕ cierra posición, y CERRAR SEMANA sella todo.'
-            : 'Agrupadas por bloque (Cartera v3). PESO = valor sobre posiciones + liquidez + wallet BTC · %/día = G/P% ÷ días abiertos · vari/sem = precio vivo Yahoo vs cierre de la semana anterior'}
+            : 'Agrupadas por tesis (Cartera v3.2). PESO = valor sobre posiciones + liquidez de brókers; la wallet BTC queda fuera de la base · %/día = G/P% ÷ días abiertos · vari/sem = precio vivo Yahoo vs cierre de la semana anterior'}
         </p>
         {!cierre && (
           <div className="pos-leyenda num">
@@ -660,7 +662,7 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
   return (
     <div className={'card pos-tabla-wrap bloque-card' + (lista ? ' lista' : '') + (arrastrando ? ' arrastrando' : '')} data-bq={b.id}>
       <div className="bloque-cab" title={b.ayuda}>
-        <span className="bq-asa" onPointerDown={onAsa} title="Arrastra para cambiar el orden de los bloques" aria-label="Mover bloque">⠿</span>
+        {b.id !== 'WALLET' && <span className="bq-asa" onPointerDown={onAsa} title="Arrastra para cambiar el orden de las tesis" aria-label="Mover tesis">⠿</span>}
         <span className="bq-dot" style={{ background: b.color }} />
         <span className="bloque-nombre">{lista ? b.corto : b.label}</span>
         <span className="bloque-n num">{rows.length + (wallet ? 1 : 0)}</span>
@@ -680,7 +682,7 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
               <div className="pl-izq">
                 <div className="pl-l1">
                   <span className="ticker">{p.ticker}</span>
-                  {estrategiaBTC(p) && <span className="chip-estr">{estrategiaBTC(p).label}</span>}
+                  
                   {esPuente(p) && <span className="chip-estr chip-puente" title="Tesis PUENTE: abierta antes de adoptar la regla (30/09/2026). Se gestiona con SL/TP de la Tesis pero no cuenta en la medición de la Tesis nativa.">Puente</span>}
                   {p.sl_type === 'ALERTA' && <span className="vigia-bell" title={tituloVigia(p)}>🔔</span>}
                   {p.evs.length > 0 && <span className={'ev-dot' + (p.evUrgente ? ' urgente' : '') + (p.evConfirmado ? '' : ' estimado')}>{p.evConfirmado ? '●' : '○'}</span>}
@@ -761,7 +763,7 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
               </>
             )}
             <th title="Apalancamiento (x1 = sin apalancar; máximo de la casa x2)">APAL</th>
-            <th title="Peso de la posición sobre posiciones + liquidez + wallet BTC">PESO</th>
+            <th title="Peso de la posición sobre posiciones + liquidez de brókers (la wallet BTC queda fuera de la base)">PESO</th>
             {cierre && <th></th>}
           </tr>
         </thead>
@@ -771,7 +773,7 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
                 className={selId === p.id && !cierre ? 'sel' : ''}>
               <td className="tl ticker">
                 {p.ticker}
-                {estrategiaBTC(p) && <span className="chip-estr">{estrategiaBTC(p).label}</span>}
+                
                 {esPuente(p) && <span className="chip-estr chip-puente" title="Tesis PUENTE: abierta antes de adoptar la regla (30/09/2026). Se gestiona con SL/TP de la Tesis pero no cuenta en la medición de la Tesis nativa.">Puente</span>}
                 {p.sl_type === 'ALERTA' && <span className="vigia-bell" title={tituloVigia(p)}>🔔</span>}
                 {p.ingest_badge === 'NEW' && <span className="badge new">NEW</span>}
@@ -854,7 +856,7 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
             <td className="col-clave col-ini">{fmt$(val)}</td>
             <td className={'col-clave col-fin ' + pctClass(gp)}>{fmt$(gp)}</td>
             <td colSpan={esTesis ? 5 : 6}></td>
-            <td>{pesoSum.toFixed(1)}%</td>
+            <td>{b.id === 'WALLET' ? '—' : pesoSum.toFixed(1) + '%'}</td>
             {cierre && <td></td>}
           </tr>
           {pu && (
@@ -877,14 +879,14 @@ function TablaBloque({ g, cierre, draft, setDraft, keyNav, selId, onSel, onBorra
   )
 }
 
-// Bloques/estrategias que por regla no llevan SL (§9.2): devuelve el motivo, o null si sí debe llevarlo
-const ETF_NUCLEO = /^(CSPX|SXR8|VUAA|IUSA)/i
+// Tesis que por regla no llevan SL (§9.2): devuelve el motivo, o null si sí debe llevarlo
 function sinSL(p) {
   const bq = bloqueDe(p)
   if (bq === 'ORO') return 'ORO: sin SL por regla; sale por invalidación escrita'
-  if (bq === 'DELEGADA') return 'COPY TRADING: sin SL por regla; sustitución si 12 meses seguidos por detrás del S&P'
-  if (bq === 'BTC' && estrategiaBTC(p)?.id === 'BASE') return 'BTC Base: sin SL, horizonte 2036'
-  if (bq === 'NUCLEO' && ETF_NUCLEO.test(p.ticker || '')) return 'ETF del NÚCLEO: sin salida'
+  if (bq === 'COPY') return 'COPYTRADING: sin SL por regla; corte el 07/04/2027'
+  if (bq === 'BTC_LARGO') return 'BTC largo: sin SL, horizonte 2036'
+  if (bq === 'SP500' || (bq === 'CONVICCION' && ETF_SP500.test(p.ticker || ''))) return 'SP500: ETF sin salida, horizonte ~10 años'
+  if (bq === 'OETFS') return 'O/ETFs: sin stop de ticket; sale por invalidación escrita'
   return null
 }
 
@@ -1032,7 +1034,7 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
   return (
     <aside className="pos-panel card" {...arrastre}>
       <div className="pos-panel-head">
-        <h2>{p.ticker} <span className="broker">{p.broker}</span>{estrategiaBTC(p) && <span className="chip-estr">{estrategiaBTC(p).label}</span>}{esPuente(p) && <span className="chip-estr chip-puente" title="Tesis PUENTE: abierta antes de adoptar la regla (30/09/2026). Se gestiona con SL/TP de la Tesis pero no cuenta en la medición de la Tesis nativa.">Puente</span>}</h2>
+        <h2>{p.ticker} <span className="broker">{p.broker}</span>{esPuente(p) && <span className="chip-estr chip-puente" title="Tesis PUENTE: abierta antes de adoptar la regla (30/09/2026). Se gestiona con SL/TP de la Tesis pero no cuenta en la medición de la Tesis nativa.">Puente</span>}</h2>
         <span className="cab-acciones">
           <button className="btn-cerrar-posicion" onClick={onCerrar} title="Cierra la posición y la pasa al histórico (pide confirmación)">Cerrar posición</button>
           <button className="btn-x" onClick={onClose} aria-label="Cerrar detalle" title="Cerrar detalle">✕</button>
@@ -1070,24 +1072,25 @@ function PanelDetalle({ p, onClose, onChange, onCerrar }) {
         </div>
       )}
       <div className="attr-selects">
-        <label title={BLOQUE_DE_ID[bloque]?.ayuda || ''}>Bloque
-          <select value={bloque} onChange={e => {
+        <label title={BLOQUE_DE_ID[bloque]?.ayuda || ''}>Tesis
+          <select value={bloque} onChange={async e => {
             const v = e.target.value
-            // Regla SATÉLITE: desde la Tesis solo se asciende en ganancia (≥ +23,5); nunca para esquivar un stop
-            if (v === 'SATELITE' && bloque === 'TESIS' && !(p.ret >= TESIS_TP) &&
-                !window.confirm(`${p.ticker} va ${fmtPct(p.ret)}: la regla solo permite pasar de Tesis a SATÉLITE en ganancia (≥ +23,5 %). ¿Pasarla igualmente?`)) return
-            setAttr('bloque', v)
+            // Regla EXPECT: desde la Tesis solo se asciende en ganancia (≥ +23,5); nunca para esquivar un stop
+            if (v === 'EXPECT' && bloque === 'TESIS' && !(p.ret >= TESIS_TP) &&
+                !window.confirm(`${p.ticker} va ${fmtPct(p.ret)}: la regla solo permite pasar de Tesis a EXPECT en ganancia (≥ +23,5 %). ¿Pasarla igualmente?`)) return
+            const { error } = await updatePosicion(p.id, { bloque: v, clase: claseDe(v) })   // `clase` se deriva de la tesis
+            if (error) { setPxMsg('No se pudo guardar: ' + error.message); return }
+            onChange()
           }}>
             {BLOQUES.map(b => <option key={b.id} value={b.id} title={b.ayuda}>{b.corto}</option>)}
           </select>
         </label>
-        {bloque === 'BTC' && (
-          <label title="Estrategia BTC de esta posición">Estrategia
-            <select value={estrategiaBTC(p)?.clase} onChange={e => setAttr('clase', e.target.value)}>
-              {BTC_ESTRATEGIAS.map(x => <option key={x.clase} value={x.clase}>{x.label}</option>)}
-            </select>
-          </label>
-        )}
+        <label title="De quién fue la idea de esta entrada">Origen
+          <select value={p.fuente || 'YO'} onChange={e => setAttr('fuente', e.target.value)}>
+            {ORIGENES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            {p.fuente && !ORIGENES.some(([v]) => v === p.fuente) && <option value={p.fuente}>{p.fuente}</option>}
+          </select>
+        </label>
       </div>
 
       <div className="precios-ticket num">
@@ -1212,7 +1215,7 @@ function PanelWallet({ wallet, onClose, onChange }) {
 export function AltaDialog({ inicial = {}, onClose, onDone }) {
   const [f, setF] = useState({
     ticker: '', broker: 'xtb', entry_date: fechaLocalISO(),
-    invested: '', current_value: '', clase: 'TACTICA', estado: 'OK', fuente: 'YO', estrBtc: 'TACTICA',
+    invested: '', current_value: '', clase: 'TACTICA', estado: 'OK', fuente: 'YO',
     apalancamiento: 1, entry_price: '', sl_price: '', tp_price: '', bloque: 'TESIS',
     ...Object.fromEntries(Object.entries(inicial || {}).filter(([, v]) => v != null)),
   })
@@ -1236,7 +1239,7 @@ export function AltaDialog({ inicial = {}, onClose, onDone }) {
     const { error } = await altaPosicion({
       ticker: f.ticker.trim().toUpperCase(), broker: f.broker, entry_date: f.entry_date,
       invested: inv, current_value: num(f.current_value) || inv,
-      clase: f.bloque === 'BTC' ? f.estrBtc : f.bloque === 'TESIS' ? 'TACTICA' : f.bloque === 'SATELITE' ? 'DISRUPTIVA' : 'NUCLEO', estado: 'OK', fuente: 'YO', bloque: f.bloque,
+      clase: claseDe(f.bloque), estado: 'OK', fuente: ORIGENES.some(([v]) => v === f.fuente) ? f.fuente : 'YO', bloque: f.bloque,
       apalancamiento: num(f.apalancamiento) || 1,
       entry_price: num(f.entry_price), sl_price: num(f.sl_price), tp_price: num(f.tp_price),
     })
@@ -1254,13 +1257,13 @@ export function AltaDialog({ inicial = {}, onClose, onDone }) {
           <label>Fecha<input type="date" value={f.entry_date} onChange={e => set('entry_date', e.target.value)} /></label>
           <label>Invertido $<input value={f.invested} onChange={e => set('invested', e.target.value)} /></label>
           <label>Valor $<input placeholder="= invertido" value={f.current_value} onChange={e => set('current_value', e.target.value)} /></label>
-          <label>Bloque<select value={f.bloque} onChange={e => set('bloque', e.target.value)}>
+          <label>Tesis<select value={f.bloque} onChange={e => set('bloque', e.target.value)}>
             {BLOQUES.map(b => <option key={b.id} value={b.id} title={b.ayuda}>{b.corto}</option>)}</select></label>
+          <label>Origen<select value={f.fuente} onChange={e => set('fuente', e.target.value)}>
+            {ORIGENES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
           <label>P. entrada<input placeholder="por acción" value={f.entry_price} onChange={e => set('entry_price', e.target.value)} onBlur={entradaBlur} /></label>
           <label>SL<input placeholder={f.bloque === 'TESIS' ? '−11 %' : 'opcional'} value={f.sl_price} onChange={e => set('sl_price', e.target.value)} /></label>
           <label>TP<input placeholder={f.bloque === 'TESIS' ? '+23,5 %' : 'opcional'} value={f.tp_price} onChange={e => set('tp_price', e.target.value)} /></label>
-          {f.bloque === 'BTC' && <label>Estrategia<select value={f.estrBtc} onChange={e => set('estrBtc', e.target.value)}>
-            {BTC_ESTRATEGIAS.map(x => <option key={x.clase} value={x.clase}>{x.label}</option>)}</select></label>}
           <label>Apal.<input value={f.apalancamiento} onChange={e => set('apalancamiento', e.target.value)} /></label>
         </div>
         {f.bloque === 'TESIS' && <p className="alta-nota">Tesis JOSE −11/+23,5: SL y TP se ponen en el mismo ticket, en el acto de la compra, y no se tocan. Máx. 8 líneas, ticket ≤4 % (small caps 2 %).</p>}
