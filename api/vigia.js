@@ -11,6 +11,7 @@
 // GET/POST /api/vigia            → pasada normal
 //          /api/vigia?dry=1      → simula: no escribe ni notifica, devuelve lo que haría
 //          /api/vigia?test=1     → manda una notificación de prueba y sale
+//     POST /api/vigia?aviso=1    → manda al móvil el aviso del cuerpo { titulo, mensaje, prioridad?: 3|4|5, tags?: [] } y sale (15/11/2026)
 //
 // Estado en app_state.vigia = { last_run, last_ok, vigiladas, errores, disparos: { "<id>:<tipo>": { nivel, at, precio } } }.
 // Un disparo es de una sola vez por posición, tipo y nivel: si cambias el nivel, se rearma.
@@ -86,6 +87,18 @@ export default async function handler(req, res) {
   if (req.query.test === '1') {
     const ok = await push(topic, { titulo: 'BTP · Vigía: prueba', mensaje: 'Si lees esto, las alertas del Vigía te llegan al móvil.', prioridad: 3, tags: ['white_check_mark'] })
     res.status(ok ? 200 : 500).json({ ok, topic: topic ? 'configurado' : 'FALTA NTFY_TOPIC' })
+    return
+  }
+
+  // Aviso suelto (15/11/2026): lo usa la pasada diaria de Belar programado. Desde la nube de Claude no se puede publicar
+  // en ntfy (la cuota es por IP y esa IP es compartida), así que el aviso sale desde aquí, por el mismo canal del Vigía.
+  if (req.query.aviso === '1') {
+    const b = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {})
+    const titulo = String(b.titulo || '').slice(0, 120), mensaje = String(b.mensaje || '').slice(0, 900)
+    if (req.method !== 'POST' || !titulo || !mensaje) { res.status(400).json({ error: 'POST con titulo y mensaje' }); return }
+    const ok = await push(topic, { titulo, mensaje, prioridad: [3, 4, 5].includes(b.prioridad) ? b.prioridad : 3,
+      tags: Array.isArray(b.tags) && b.tags.length ? b.tags.slice(0, 3).map(String) : ['bell'] })
+    res.status(ok ? 200 : 502).json({ ok, topic: topic ? 'configurado' : 'FALTA NTFY_TOPIC' })
     return
   }
 

@@ -63,6 +63,8 @@ para no perder toques entre pasadas) y, solo con el mercado del símbolo abierto
 - precio a ≤2 % del nivel → alerta y push de aviso (una vez).
 Cada aviso se da una sola vez por posición, tipo y nivel (`app_state.vigia.disparos`); si el nivel cambia, se rearma.
 - `GET /api/vigia` pasada normal · `?dry=1` simula sin escribir ni notificar · `?test=1` manda un push de prueba.
+- `POST /api/vigia?aviso=1` `{ titulo, mensaje, prioridad?: 3|4|5, tags?: [] }` → manda ese aviso al móvil por el canal del Vigía (15/11/2026).
+  Lo usa la pasada diaria de Belar programado: desde la nube de Claude ntfy rechaza la publicación directa (cuota por IP compartida).
 - Auth: `Bearer CRON_SECRET` | `Bearer BELAR_TOKEN` | sesión Supabase.
 - Lanzador: cron-job.org cada 5 minutos con cabecera `Authorization: Bearer <CRON_SECRET>` (el plan Hobby de Vercel solo permite un cron diario).
 - Push: variable `NTFY_TOPIC` en Vercel → Preview (canal privado de ntfy; app ntfy en el iPhone suscrita a ese canal). Sin ella, solo Radar.
@@ -80,6 +82,14 @@ curl -s -X POST -H "Authorization: Bearer $BELAR_TOKEN" -H "Content-Type: applic
 ```
 Protocolo: al inicio de sesión Belar lee `?que=todo`. Positions solo se escribe en cierre de semana
 (sobrescritura desde capturas) o para sellar cierres; alerts y calendar_events son de escritura libre de Belar.
+
+### Belar diario (15/11/2026) — tarea programada de Claude, no es código de este repositorio
+De lunes a viernes a las 22:35 (Madrid) una sesión de Claude revisa todas las posiciones abiertas (niveles en ATR, tendencia,
+noticias y expertos, BTC Combo, oro, fechas de resultados) y deja lo material en `alerts` (título "DIARIO dd/mm · …"),
+`calendar_events` (`source: belar`) y el parte del día en `app_state.belar_diario`. Sus dos programas viven en
+`app_state.belar_diario_codigo` (`datos`, `publicar`); la tarea comprueba su SHA-256 antes de ejecutarlos.
+Los commits de Belar se hacen desde el 15/11/2026 por `git push` con la conexión de GitHub de Claude (autor: el correo de José);
+el editor web con Chrome queda como plan B.
 
 ## Seguridad
 - Token en tiempo constante; sin token válido → 401 sin detalle.
