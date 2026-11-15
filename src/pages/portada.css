@@ -125,3 +125,11 @@ button.rd-dato { cursor: pointer; appearance: none; }
 button.rd-dato:hover { background: #FAFAFA; }
 .rd-dato.on .rd-nombre { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 5px; }
 .rd-nombre { font-weight: 600; }
+
+/* BTC Combo */
+.cb-prev { font-size: 14px; font-weight: 400; color: var(--texto-sec); letter-spacing: 0; }
+.cb-senal { margin: 0 0 32px; padding: 14px 16px; border: 1px solid var(--borde); font-size: 15px; }
+.cb-senal.on { border: 2px solid var(--texto); font-weight: 600; }
+.cb-rsi-ley { margin: 8px 0 10px; }
+.cb-rsi { height: 150px; }
+.pt-svg .cero.disc { stroke-dasharray: 5 5; }

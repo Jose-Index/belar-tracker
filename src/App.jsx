@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
 import Portada from './pages/Portada.jsx'
 import Rendimiento from './pages/Rendimiento.jsx'
+import Combo from './pages/Combo.jsx'
 import Inicio from './pages/Inicio.jsx'
 import Historico from './pages/Historico.jsx'
 import Tesis from './pages/Tesis.jsx'
@@ -41,6 +42,7 @@ const MENU = [
   { to: '/reparto', label: 'Reparto' },
   { to: '/repositorio', label: 'Log' },
   { to: '/tesis', label: 'Tesis', sec: true },
+  { to: '/combo', label: 'BTC Combo', sec: true },
   { to: '/gestion', label: 'Cierre de semana', sec: true },
   { to: '/fuentes', label: 'Fuentes', sec: true },
   { to: '/herramientas', label: 'Ajustes', sec: true },
@@ -85,6 +87,7 @@ export default function App() {
           <Route path="/posiciones" element={<Portada />} />
           <Route path="/gestion" element={<Inicio vista="cierre" />} />
           <Route path="/rendimiento" element={<><Rendimiento /><Inicio vista="rendimiento" /><Historico /><Patrimonio /></>} />
+          <Route path="/combo" element={<Combo />} />
           <Route path="/reparto" element={<Inicio vista="reparto" />} />
           <Route path="/buscador" element={<Buscador />} />
           <Route path="/tesis" element={<Tesis />} />

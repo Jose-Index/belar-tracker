@@ -48,3 +48,8 @@ José pidió un cambio estético, eligió dirección clara y sobria y, de tres p
 - Tabla por periodos de las cinco series y tabla por años (`yearly_results`).
 - Debajo siguen, con su maquetación anterior, las cifras (`Inicio vista="rendimiento"`), Histórico y Patrimonio €.
 - Pendiente: sellar el cierre de año (alta en `yearly_results` a 31/12) y retirar los bloques antiguos que queden duplicados.
+
+## BTC Combo (`src/pages/Combo.jsx`, ruta `/combo`, 15/11/2026)
+
+Precio diario de BTC con su media de 200 sesiones, RSI(14) de Wilder con los umbrales de la regla, régimen y condición de
+entrada o salida de la última vela cerrada. Datos de BTC-USD (Yahoo). El aviso al móvil lo da el Vigía (ver docs/belar-api.md).
