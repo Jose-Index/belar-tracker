@@ -13,7 +13,8 @@
 .pt-resumen { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 24px 64px; padding: 28px 0 36px; }
 .pt-total { font-size: 68px; font-weight: 600; letter-spacing: -0.035em; line-height: 1; }
 .pt-cifra { font-size: 28px; font-weight: 600; letter-spacing: -0.02em; }
-.pt-gestion { margin-left: auto; align-self: center; font-size: 14px; color: var(--texto); border: 1px solid var(--texto); padding: 11px 16px; }
+.pt-acciones { margin-left: auto; align-self: center; display: flex; flex-wrap: wrap; gap: 10px; }
+.pt-gestion { appearance: none; background: var(--superficie); cursor: pointer; font: inherit; font-size: 14px; color: var(--texto); border: 1px solid var(--texto); padding: 11px 16px; border-radius: 0; }
 .pt-gestion:hover { background: var(--texto); color: var(--superficie); }
 
 /* Controles */
@@ -68,7 +69,7 @@ button.pt-fila { appearance: none; font: inherit; color: inherit; background: tr
 .pt-det > div { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid #D9D9D9; font-size: 14px; }
 .pt-det dt { color: var(--texto-sec); }
 .pt-det dd { margin: 0; font-weight: 600; text-align: right; }
-.pt-enlace { margin: 16px 0 0; font-size: 14px; color: var(--texto); text-decoration: underline; text-underline-offset: 4px; }
+.pt-enlace { appearance: none; background: none; border: 0; padding: 0; cursor: pointer; font: inherit; text-align: left; margin: 16px 0 0; font-size: 14px; color: var(--texto); text-decoration: underline; text-underline-offset: 4px; }
 
 /* Calendario */
 .pt-cal { padding: 72px 0 0; }
@@ -85,7 +86,7 @@ button.pt-fila { appearance: none; font: inherit; color: inherit; background: tr
   .pt-resumen { gap: 16px 32px; padding: 12px 0 24px; }
   .pt-total { font-size: 44px; }
   .pt-cifra { font-size: 22px; }
-  .pt-gestion { margin-left: 0; }
+  .pt-acciones { margin-left: 0; }
   .pt-controles { gap: 12px 20px; padding-bottom: 20px; }
   .pt-chip { padding: 11px 12px; font-size: 13px; }
   .pt-cab { display: none; }

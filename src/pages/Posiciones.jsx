@@ -960,7 +960,7 @@ function BarraTesis({ p, etiqueta = false }) {
 }
 
 // ─── Panel de detalle: atributos editables + notas fechadas ─────────────
-function PanelDetalle({ p, onClose, onChange, onCerrar }) {
+export function PanelDetalle({ p, onClose, onChange, onCerrar }) {
   const arrastre = useArrastreCierre(onClose)   // móvil: cerrar la hoja arrastrando hacia abajo
   const [notas, setNotas] = useState([])
   const [nueva, setNueva] = useState('')

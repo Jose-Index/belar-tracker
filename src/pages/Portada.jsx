@@ -1,11 +1,13 @@
 // BTP v4 · Portada (15/11/2026): solo posiciones, con el diseño A ("Suizo") que eligió José.
 // Agrupa por tesis, bróker o sin agrupar; ordena por rendimiento, fecha o valor; al pulsar una posición o un
 // grupo abre su ficha con la gráfica en % y, como mucho, UN comparador. Al pie, los próximos 14 días.
-// Es de solo lectura: el cierre de semana, las altas, las capturas y la edición de niveles siguen en /gestion.
+// Alta de posición y edición (niveles, tesis, origen, notas) con las piezas de Posiciones.jsx; el cierre de semana
+// con capturas y el cierre de posiciones siguen en /gestion.
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { useCache } from '../lib/cache'
+import { useCache, invalidar } from '../lib/cache'
+import { PanelDetalle, AltaDialog } from './Posiciones.jsx'
 import { fetchPosiciones, fetchSnapsBloques, fetchCierresBloques } from '../lib/posiciones-db'
 import { getSimbolos, yahooDe, fetchQuotes, fetchHistory } from '../lib/quotes'
 import { eventosProximos } from '../lib/ia'
@@ -58,7 +60,11 @@ function nivelDe(p, n) {
 }
 
 export default function Portada() {
-  const { data, error } = useCache('portada', loaderPortada, { ttl: 60e3, persist: true })
+  const { data, error, recargar } = useCache('portada', loaderPortada, { ttl: 60e3, persist: true })
+  const nav = useNavigate()
+  const [edit, setEdit] = useState(null)      // id de la posición con el panel de edición abierto
+  const [alta, setAlta] = useState(false)
+  const cambio = () => { invalidar(['posiciones', 'inicio']); recargar() }
   const { data: qBtc } = useCache('quotes:BTC-USD', () => fetchQuotes(['BTC-USD']), { ttl: 5 * 60e3, persist: true })
   const guardado = (() => { try { return JSON.parse(localStorage.getItem('btp-portada') || '{}') } catch { return {} } })()
   const [agrupar, setAgrupar] = useState(guardado.agrupar || 'tesis')
@@ -99,7 +105,8 @@ export default function Portada() {
 
   if (!v) return <div className="pt"><p className="pt-estado">{error ? 'No se han podido cargar las posiciones: ' + String(error?.message || error) : 'Cargando posiciones…'}</p></div>
 
-  const fichaProps = { comp, setComp, per, setPer, simbolos: data.simbolos }
+  const fichaProps = { comp, setComp, per, setPer, simbolos: data.simbolos, onEditar: setEdit }
+  const enEdicion = edit != null ? v.P.find(x => x.id === edit) : null
 
   return (
     <div className="pt num">
@@ -107,7 +114,10 @@ export default function Portada() {
         <div><div className="pt-rot">Total{v.cierre ? ' · cierre del ' + fecha(v.cierre) : ''}</div><div className="pt-total">{usd(v.total)}</div></div>
         <div><div className="pt-rot">G/P abierto</div><div className={'pt-cifra ' + tono(v.abierto)}>{pct(v.abierto)}</div></div>
         <div><div className="pt-rot">Caja</div><div className="pt-cifra">{usd(v.caja)}</div></div>
-        <Link to="/gestion" className="pt-gestion" title="Cierre de semana, altas, capturas y edición de niveles">Gestión</Link>
+        <div className="pt-acciones">
+          <button type="button" className="pt-gestion" onClick={() => setAlta(true)}>Nueva posición</button>
+          <Link to="/gestion" className="pt-gestion" title="Cierre de semana con capturas, liquidez, Reparto y evolución">Cierre de semana</Link>
+        </div>
       </section>
 
       <section aria-label="Posiciones">
@@ -174,12 +184,20 @@ export default function Portada() {
           {!v.cal.length && <p className="pt-estado">Nada en el calendario para los próximos 14 días.</p>}
         </div>
       </section>
+
+      {enEdicion && (
+        <>
+          <div className="pos-panel-fondo" onClick={() => setEdit(null)} aria-hidden="true" />
+          <PanelDetalle p={{ ...enEdicion, valor: enEdicion.val, gpPct: enEdicion.gpp }} onClose={() => setEdit(null)} onChange={cambio} onCerrar={() => nav('/gestion')} />
+        </>
+      )}
+      {alta && <AltaDialog onClose={() => setAlta(false)} onDone={() => { setAlta(false); cambio() }} />}
     </div>
   )
 }
 
 // ─── Ficha de una posición o de un grupo: gráfica en % y, como mucho, un comparador ───
-function Ficha({ pos, grupo, agrupar, serieGrupo, comp, setComp, per, setPer, simbolos }) {
+function Ficha({ pos, grupo, agrupar, serieGrupo, comp, setComp, per, setPer, simbolos, onEditar }) {
   const y = pos ? yahooDe(pos.ticker, simbolos || []) : null
   const { data: hPos } = useCache('ph:' + y, () => fetchHistory(y, '1yd'), { ttl: 15 * 60e3, activo: !!y })
   const { data: hComp } = useCache('ph:' + comp, () => fetchHistory(comp, '1yd'), { ttl: 15 * 60e3, activo: !!comp })
@@ -256,7 +274,7 @@ function Ficha({ pos, grupo, agrupar, serieGrupo, comp, setComp, per, setPer, si
       </div>
       <dl className="pt-det">
         {det.map(([k, val]) => <div key={k}><dt>{k}</dt><dd>{val}</dd></div>)}
-        {pos && <Link to="/gestion" className="pt-enlace">Editar en Gestión</Link>}
+        {pos && <button type="button" className="pt-enlace" onClick={() => onEditar(pos.id)}>Editar niveles, tesis y notas</button>}
       </dl>
     </div>
   )
