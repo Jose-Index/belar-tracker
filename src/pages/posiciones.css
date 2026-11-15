@@ -393,3 +393,7 @@
 
 /* SL/TP en todos los bloques (01/10/2026) */
 .pos-tabla td.na-sl { text-align: center; font-size: 11px; letter-spacing: .02em; }
+
+/* Cierre de semana (BTP v4): guía de pasos y sin la gráfica por tesis, que ya está en la portada */
+.pos-guia { margin: 4px 0 12px; font-size: 13px; color: var(--texto-sec); max-width: 760px; flex-basis: 100%; }
+.pos-layout.embed .serie-bloque { display: none; }

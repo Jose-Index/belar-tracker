@@ -497,8 +497,9 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
     <div className={'pos-layout' + (embed ? ' embed' : '')}>
       <div>
         <div className="pos-head">
-          <Titulo>Posiciones <span className="pos-n num">{sorted.length}</span>
+          <Titulo>{embed ? 'Cierre de semana' : 'Posiciones'} <span className="pos-n num">{sorted.length}</span>
             {!embed && <a href="/sandbox" style={{ fontSize: 11.5, fontWeight: 500, marginLeft: 10, color: 'var(--texto-neutro)', textDecoration: 'none' }}>sandbox ↗</a>}</Titulo>
+          {embed && <p className="pos-guia">1 · Actualiza con las capturas de los tres brókers. 2 · Revisa lo que cambia y los cierres. 3 · Empieza el cierre y sella la semana. Lo que no cuadre, BTP te lo pregunta antes de guardar.</p>}
           <div className="pos-controls">
             {raw.lastClose && <span className="sello num">Último cierre: {raw.lastClose.date?.split('-').reverse().join('/')}</span>}
             <label>Orden:{' '}
@@ -512,11 +513,11 @@ export default function Posiciones({ embed = false, onCambio, seleccionInicial =
             </label>
             <button className="btn-sec" onClick={() => setAlta({})}>+ Posición</button>
             {!cierre && <button className="btn-sec" onClick={() => setIngesta(!ingesta)}>
-              {ingesta ? 'cerrar captura' : 'ACTUALIZAR POR CAPTURA'}</button>}
+              {ingesta ? 'Cerrar captura' : 'Actualizar por captura'}</button>}
             {!cierre
-              ? <button className="btn-cierre" onClick={entrarCierre}>MODO CIERRE SEMANA</button>
+              ? <button className="btn-cierre" onClick={entrarCierre}>Empezar cierre de semana</button>
               : <button className="btn-cierre on" onClick={commitCierre} disabled={busy}>
-                  {busy ? 'CERRANDO…' : 'CERRAR SEMANA'}
+                  {busy ? 'Cerrando…' : 'Sellar la semana'}
                 </button>}
             {cierre && <button className="btn-escape" onClick={salirSinCerrar}>salir sin cerrar</button>}
           </div>
