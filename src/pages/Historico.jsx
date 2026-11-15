@@ -1,7 +1,6 @@
 // Histórico semanal completo, conviviendo con su Evolución (decisión José 03/08).
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import Evolucion from '../components/Evolucion.jsx'
 import IngestaCierres from '../components/IngestaCierres.jsx'
 import { getSimbolos } from '../lib/quotes'
 import { useCache } from '../lib/cache'
@@ -56,7 +55,6 @@ export default function Historico() {
 
   return (
     <div>
-      <Evolucion />
 
       <div className="card historico">
         <h2>Cierres de posiciones{' '}

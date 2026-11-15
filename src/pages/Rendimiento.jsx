@@ -104,7 +104,12 @@ export default function Rendimiento() {
   const series = useMemo(() => {
     if (!data) return null
     const t = f => new Date(f + 'T00:00:00Z').getTime()
-    const out = { total: serieTWR(data.weeks, data.contribs).map(p => ({ t: t(p.fecha), v: p.idx })) }
+    // El total arranca en la primera semana en que los brókers entran en los cierres (el valor se multiplica ≥5 de una
+    // semana a otra): antes solo estaba la wallet, con importes mínimos que deformaban el acumulado.
+    const ws = data.weeks.filter(w => Number(w.total_value) > 0)
+    let desde = ''
+    for (let i = 1; i < ws.length; i++) if (Number(ws[i].total_value) >= 5 * Number(ws[i - 1].total_value)) desde = ws[i].week_end
+    const out = { total: serieTWR(data.weeks, data.contribs).filter(p => p.fecha >= desde).map(p => ({ t: t(p.fecha), v: p.idx })), desde }
     const d = serieTWRDesglose(data.weeks, data.contribs)
     for (const [k] of CUENTAS.slice(1)) out[k] = d.filter(r => r[k] != null).map(r => ({ t: t(r.fecha), v: r[k] }))
     return out
@@ -164,7 +169,7 @@ export default function Rendimiento() {
           </>
         ) : <p className="pt-estado">Sin cierres de semana suficientes para esta cuenta y este periodo.</p>}
         <div className="pt-control rd-comp"><span className="pt-mini">Comparar con</span>{chips(COMPARADORES, comp, setComp, 'Comparar con', true)}</div>
-        <p className="pt-pie">Rentabilidad por cierres de semana, sin contar las aportaciones (lo que mide es la gestión, no los ingresos de dinero). El comparador es el índice en su moneda, sin dividendos.</p>
+        <p className="pt-pie">Rentabilidad por cierres de semana, sin contar las aportaciones (lo que mide es la gestión, no los ingresos de dinero). El comparador es el índice en su moneda, sin dividendos.{series.desde ? ` El total cuenta desde el ${fecha(series.desde)}, primera semana con los brókers en los cierres.` : ''}</p>
       </section>
 
       <section aria-label="Por periodos" className="rd-bloque">
