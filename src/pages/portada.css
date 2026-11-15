@@ -153,3 +153,12 @@ button.rd-dato:hover { background: #FAFAFA; }
 @media (max-width: 900px) {
   .pt .pos-panel { top: auto; left: 0; width: 100% !important; max-height: 86vh; border-left: 0; border-top: 1px solid var(--pt-linea, #E4E4E4); box-shadow: 0 -8px 24px rgba(17, 17, 17, .1); padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
 }
+
+/* Fila de grupo más destacada (15/11/2026, pedido de José): banda gris con filete negro, nombre y cifras mayores */
+.pt .pt-gcab { background: #F2F2F2; border-top: 3px solid var(--texto) !important; padding: 16px 12px !important; margin: 0 -12px; width: calc(100% + 24px) !important; }
+.pt .pt-gcab:hover { background: #EAEAEA; }
+.pt .pt-gnombre { font-size: 16px; letter-spacing: .05em; }
+.pt .pt-gval { font-size: 17px; font-weight: 700; }
+.pt .pt-gpp { font-size: 20px; }
+.pt .pt-gn { color: var(--texto); }
+.pt-grupo + .pt-grupo { margin-top: 36px; }
