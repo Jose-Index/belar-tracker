@@ -49,6 +49,29 @@ function anoObjetivo(anuales, hoy) {
   const y = Number(hoy.slice(0, 4)), prev = anuales.find(a => Number(a.year) === y - 1)
   return Number(hoy.slice(5, 7)) <= 3 && !(prev && prev.legacy && prev.legacy.sellado) ? y - 1 : y
 }
+// Todo en euros: cada cierre de semana y cada aportación, al cambio de su semana. José aporta y mide en euros;
+// en dólares la cifra incluye lo que se mueva el cambio (2025: +18,9 % en € frente a casi +40 % en $).
+function enEuros(weeks, contribs) {
+  const K = ['etoro', 'xtb', 'ibkr', 'btc_usd']
+  const ws = weeks.filter(w => Number(w.eurusd) > 0).map(w => {
+    const fx = Number(w.eurusd), d = w.desglose || w.legacy?.data || {}
+    const de = {}
+    for (const k of K) if (d[k] != null) de[k] = Number(d[k]) / fx
+    return { ...w, total_value: Number(w.total_value) / fx, desglose: de, legacy: null }
+  })
+  const cs = contribs.map(c => {
+    let eur = c.importe_eur != null && c.importe_eur !== '' ? Number(c.importe_eur) : null
+    if (eur == null) { const fx = eurusdEn(weeks, c.fecha); eur = fx && c.importe_usd != null ? Number(c.importe_usd) / fx : 0 }
+    return { ...c, importe_usd: eur }
+  })
+  return { weeks: ws, contribs: cs }
+}
+// % de un año natural en una serie TWR [{ fecha, idx }]; null si no hay cierre del año anterior
+function pctAno(tw, ano, desde) {
+  const d0 = `${ano - 1}-12-31`, d1 = `${ano}-12-31`
+  const ini = [...tw].reverse().find(p => p.fecha <= d0 && p.fecha >= (desde || '')), fin = [...tw].reverse().find(p => p.fecha <= d1)
+  return ini && fin && fin.fecha > ini.fecha ? (fin.idx / ini.idx - 1) * 100 : null
+}
 function pctIndice(h, d0, d1) {
   const c = (h?.points || []).filter(x => x.v != null)
   if (!c.length) return null
@@ -62,6 +85,7 @@ export default function Rendimiento() {
   const [cuenta, setCuenta] = useState('total')
   const [per, setPer] = useState('todo')
   const [comp, setComp] = useState('')
+  const [moneda, setMoneda] = useState('eur')
   const { data: hComp } = useCache('ph2:' + comp, () => fetchHistory(comp, '3y'), { ttl: 15 * 60e3, activo: !!comp })
   const { data: hSp } = useCache('ph2:^GSPC', () => fetchHistory('^GSPC', '3y'), { ttl: 15 * 60e3 })
   const { data: hIbex } = useCache('ph2:^IBEX', () => fetchHistory('^IBEX', '3y'), { ttl: 15 * 60e3 })
@@ -71,14 +95,16 @@ export default function Rendimiento() {
   const curso = useMemo(() => {
     if (!data) return null
     const ano = anoObjetivo(data.anuales, hoy), d0 = `${ano - 1}-12-31`, d1 = `${ano}-12-31`
-    const tw = serieTWR(data.weeks, data.contribs).filter(p => p.fecha <= d1)
+    const E = enEuros(data.weeks, data.contribs)
+    const twE = serieTWR(E.weeks, E.contribs), twU = serieTWR(data.weeks, data.contribs)
+    const tw = twE.filter(p => p.fecha <= d1)
     const ini = [...tw].reverse().find(p => p.fecha <= d0), fin = tw[tw.length - 1]
     const semana = [...data.weeks].reverse().find(w => w.week_end <= d1 && Number(w.total_value) > 0)
     if (!fin || !semana) return null
     const base = ini || tw[0]
     const fx = eurusdEn(data.weeks, semana.week_end)
     return {
-      ano, hasta: fin.fecha, parcial: !ini, sellable: hoy >= d1,
+      ano, hasta: fin.fecha, parcial: !ini, sellable: hoy >= d1, twE, twU, usd: pctAno(twU, ano),
       fila: {
         year: ano, rentabilidad_pct: +((fin.idx / base.idx - 1) * 100).toFixed(2),
         sp500_pct: (v => (v == null ? null : +v.toFixed(2)))(pctIndice(hSp, d0, fin.fecha)),
@@ -93,7 +119,7 @@ export default function Rendimiento() {
     if (!curso || !curso.sellable) return
     setSello('guardando')
     const previa = data.anuales.find(a => Number(a.year) === curso.ano)
-    const legacy = { ...(previa?.legacy || {}), sellado: hoy, metodo: 'TWR por cierres de semana', hasta: curso.hasta }
+    const legacy = { ...(previa?.legacy || {}), sellado: hoy, metodo: 'TWR por cierres de semana, en euros', hasta: curso.hasta, usd_pct: curso.usd == null ? null : +curso.usd.toFixed(2) }
     const fila = { ...curso.fila, legacy }
     const q = previa ? supabase.from('yearly_results').update(fila).eq('id', previa.id) : supabase.from('yearly_results').insert(fila)
     const { error } = await q
@@ -106,14 +132,15 @@ export default function Rendimiento() {
     const t = f => new Date(f + 'T00:00:00Z').getTime()
     // El total arranca en la primera semana en que los brókers entran en los cierres (el valor se multiplica ≥5 de una
     // semana a otra): antes solo estaba la wallet, con importes mínimos que deformaban el acumulado.
+    const B = moneda === 'eur' ? enEuros(data.weeks, data.contribs) : data
     const ws = data.weeks.filter(w => Number(w.total_value) > 0)
     let desde = ''
     for (let i = 1; i < ws.length; i++) if (Number(ws[i].total_value) >= 5 * Number(ws[i - 1].total_value)) desde = ws[i].week_end
-    const out = { total: serieTWR(data.weeks, data.contribs).filter(p => p.fecha >= desde).map(p => ({ t: t(p.fecha), v: p.idx })), desde }
-    const d = serieTWRDesglose(data.weeks, data.contribs)
+    const out = { total: serieTWR(B.weeks, B.contribs).filter(p => p.fecha >= desde).map(p => ({ t: t(p.fecha), v: p.idx })), desde }
+    const d = serieTWRDesglose(B.weeks, B.contribs)
     for (const [k] of CUENTAS.slice(1)) out[k] = d.filter(r => r[k] != null).map(r => ({ t: t(r.fecha), v: r[k] }))
     return out
-  }, [data])
+  }, [data, moneda])
 
   const g = useMemo(() => {
     const s = series?.[cuenta] || []
@@ -153,6 +180,7 @@ export default function Rendimiento() {
         <div className="pt-controles">
           <div className="pt-control"><span className="pt-mini">Cuenta</span>{chips(CUENTAS, cuenta, setCuenta, 'Cuenta')}</div>
           <div className="pt-control"><span className="pt-mini">Periodo</span>{chips(PERIODOS, per, setPer, 'Periodo')}</div>
+          <div className="pt-control"><span className="pt-mini">Moneda</span>{chips([['eur', '€'], ['usd', '$']], moneda, setMoneda, 'Moneda')}</div>
         </div>
         <div className="pt-leyenda rd-leyenda">
           <span><i className="pt-cuadro mia" />{nombre(cuenta)} {g && <b className={'rd-grande ' + tono(g.fin)}>{pct(g.fin)}</b>}</span>
@@ -169,7 +197,7 @@ export default function Rendimiento() {
           </>
         ) : <p className="pt-estado">Sin cierres de semana suficientes para esta cuenta y este periodo.</p>}
         <div className="pt-control rd-comp"><span className="pt-mini">Comparar con</span>{chips(COMPARADORES, comp, setComp, 'Comparar con', true)}</div>
-        <p className="pt-pie">Rentabilidad por cierres de semana, sin contar las aportaciones (lo que mide es la gestión, no los ingresos de dinero). El comparador es el índice en su moneda, sin dividendos.{series.desde ? ` El total cuenta desde el ${fecha(series.desde)}, primera semana con los brókers en los cierres.` : ''}</p>
+        <p className="pt-pie">Rentabilidad en {moneda === 'eur' ? 'euros' : 'dólares'} por cierres de semana, sin contar las aportaciones (lo que mide es la gestión, no los ingresos de dinero). En dólares la cifra incluye lo que se mueva el cambio. El comparador es el índice en su moneda, sin dividendos.{series.desde ? ` El total cuenta desde el ${fecha(series.desde)}, primera semana con los brókers en los cierres.` : ''}</p>
       </section>
 
       <section aria-label="Por periodos" className="rd-bloque">
@@ -188,11 +216,12 @@ export default function Rendimiento() {
       <section aria-label="Por años" className="rd-bloque">
         <h2 className="pt-gnombre">Por años</h2>
         <div className="rd-tabla">
-          <div className="rd-fila rd-anos rd-cab"><span>Año</span><span className="r">Cartera</span><span className="r">S&P 500</span><span className="r">Ibex 35</span><span className="r">Cierre</span></div>
+          <div className="rd-fila rd-anos rd-cab"><span>Año</span><span className="r">Cartera €</span><span className="r">Cartera $</span><span className="r">S&P 500</span><span className="r">Ibex 35</span><span className="r">Cierre</span></div>
           {data.anuales.filter(a => !(curso && Number(a.year) === curso.ano && !(a.legacy && a.legacy.sellado))).concat(curso && !data.anuales.some(a => Number(a.year) === curso.ano && a.legacy && a.legacy.sellado) ? [{ ...curso.fila, enCurso: true }] : []).map(a => (
             <div key={a.year} className="rd-fila rd-anos rd-dato">
               <span className="rd-nombre">{a.year}{a.enCurso && <span className="pt-mini"> · hasta {fecha(curso.hasta)}</span>}</span>
               <span className={'r ' + tono(a.rentabilidad_pct)}>{pct(a.rentabilidad_pct == null ? null : Number(a.rentabilidad_pct))}</span>
+              {(u => <span className={'r ' + tono(u)}>{pct(u)}</span>)(a.legacy?.usd_pct != null ? Number(a.legacy.usd_pct) : curso ? pctAno(curso.twU, Number(a.year), series.desde) : null)}
               <span className={'r ' + tono(a.sp500_pct)}>{pct(a.sp500_pct == null ? null : Number(a.sp500_pct))}</span>
               <span className={'r ' + tono(a.ibex_pct)}>{pct(a.ibex_pct == null ? null : Number(a.ibex_pct))}</span>
               <span className="r">{a.valor_cierre_usd ? num(a.valor_cierre_usd) + ' $' : '—'}</span>
@@ -209,7 +238,7 @@ export default function Rendimiento() {
             {sello && sello !== 'ok' && sello !== 'guardando' && <span className="pt-pie pt-baja">No se pudo sellar: {sello}</span>}
           </div>
         )}
-        <p className="pt-pie">Cartera: rentabilidad sin contar las aportaciones, por cierres de semana{curso?.parcial ? ' (sin cierre del año anterior: cuenta desde el primer cierre disponible)' : ''}. Índices en su moneda, sin dividendos. Los años anteriores a 2026 conservan la cifra que ya tenían.</p>
+        <p className="pt-pie">Cartera: rentabilidad sin contar las aportaciones. La columna en euros es la que cuenta para ti; la de dólares sale de los cierres de semana y solo existe desde que los brókers están en ellos. Año en curso por cierres de semana{curso?.parcial ? ' (sin cierre del año anterior: cuenta desde el primer cierre disponible)' : ''}. Índices en su moneda, sin dividendos. 2024 y 2025 conservan en euros la cifra que ya tenían.</p>
       </section>
     </div>
   )

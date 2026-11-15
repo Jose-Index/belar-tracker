@@ -118,7 +118,7 @@ button.pt-fila { appearance: none; font: inherit; color: inherit; background: tr
 .rd-bloque h2 { margin: 0 0 16px; }
 .rd-tabla { border-top: 2px solid var(--texto); overflow-x: auto; }
 .rd-fila { display: grid; grid-template-columns: minmax(110px, 1.6fr) repeat(6, minmax(64px, 1fr)); gap: 12px; align-items: center; min-width: 560px; }
-.rd-fila.rd-anos { grid-template-columns: minmax(110px, 1.6fr) repeat(4, minmax(80px, 1fr)); }
+.rd-fila.rd-anos { grid-template-columns: minmax(110px, 1.6fr) repeat(5, minmax(72px, 1fr)); }
 .rd-cab { padding: 12px 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--texto-sec); }
 .rd-dato { border: 0; border-top: 1px solid var(--borde); min-height: 48px; font-size: 15px; background: transparent; color: inherit; font-family: inherit; text-align: left; width: 100%; padding: 0; }
 button.rd-dato { cursor: pointer; appearance: none; }

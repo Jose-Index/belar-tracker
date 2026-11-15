@@ -66,3 +66,11 @@ de posiciones cerradas; añadidas la Fed del 09/12, el cierre de año y la fecha
 - Botón "Sellar el cierre de AAAA": activo desde el 31/12. Guarda en `yearly_results` rentabilidad, índices, valor de cierre en $ y €, cambio, y marca `legacy.sellado`. En enero-marzo, si el año anterior no está sellado, el año que se ofrece es ese.
 - Se quita de la página la gráfica "Evolución" antigua (duplicaba la nueva). Siguen debajo las cajas de cifras, cuentas, cierres, histórico semanal y aportaciones.
 - La rentabilidad de 2026 depende de que `contributions` tenga las aportaciones de octubre y noviembre.
+
+## Rendimiento en euros (15/11/2026, noche)
+
+- La página mide en euros por defecto (selector Moneda € / $): cada cierre de semana y cada aportación se pasa a euros con el cambio de su semana.
+- Motivo: José aporta y mide en euros. 2025 fue +18,9 % en euros (cifra guardada, correcta) y casi +40 % en dólares, porque el dólar perdió un 13 % ese año. La cifra en dólares no era su rentabilidad.
+- "Por años" lleva dos columnas: Cartera € (guardada en 2024 y 2025; calculada en el año en curso) y Cartera $ (calculada).
+- El sellado de fin de año guarda la rentabilidad en euros en `rentabilidad_pct` y la de dólares en `legacy.usd_pct`.
+- El total cuenta desde el 07/12/2024, primera semana con los brókers en los cierres.
